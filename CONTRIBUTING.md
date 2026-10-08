@@ -1,0 +1,41 @@
+# Working together
+
+## Branches
+
+| Branch | Purpose | Pull request target |
+| --- | --- | --- |
+| `master` | Stable releases | — |
+| `develop` | Integrated work for the next release | `master` through a release pull request |
+| `feature/<name>` | New functionality | `develop` |
+| `fix/<name>` | Corrections during development | `develop` |
+| `migration/<name>` | Data or configuration migrations | `develop` |
+| `release/<version>` | Release preparation | `master`, then synchronize with `develop` |
+| `hotfix/<name>` | Urgent correction to a stable release | `master`, then synchronize with `develop` |
+| `backport/<name>` | An approved correction for an earlier maintained release | The agreed maintenance branch |
+
+Start feature, fix, migration and release branches from `develop`. Start hotfix branches from `master`. Use short, descriptive lowercase names separated by hyphens.
+
+## Before making changes
+
+Check the working tree, active branch and remote. Fetch remote changes before updating your branch. Use `git pull --ff-only` when an update is safe. Do not discard another person's work or rewrite shared history.
+
+Review the Jira story, its acceptance criteria and the current design before implementing it. If the sources disagree, clarify the decision with the team first.
+
+## Commits
+
+Keep each commit focused on one change. Use a short message in natural English, such as `Add login validation` or `Update setup instructions`.
+
+Add explicit file paths and review the staged diff before committing. Keep credentials, local configuration, logs, generated builds and temporary files out of Git.
+
+## Pull requests
+
+1. Publish your working branch and open a pull request against the appropriate target.
+2. Link the Jira story and explain what changed.
+3. Describe the checks you ran and any limitations.
+4. Request reviews from the team. At least two approvals from team members are required before merging into `master` or `develop`.
+5. Address review comments. New commits dismiss earlier approvals, so reviewers must review the updated changes.
+6. Resolve all review conversations before merging.
+
+Direct pushes, force pushes and branch deletion are blocked for `master` and `develop`, including for repository administrators.
+
+Build and test checks will be configured when the Android project is added. Until then, an approval does not imply that an Android build or test suite has run.
