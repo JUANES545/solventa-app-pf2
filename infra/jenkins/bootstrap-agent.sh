@@ -11,18 +11,20 @@ fi
 install -d -m 0700 -o jenkins-agent -g jenkins-agent /var/lib/jenkins-agent/.ssh
 install -d -m 0755 /opt/android-sdk/cmdline-tools
 
-tools_archive="$(mktemp --suffix=.zip)"
-tools_directory="$(mktemp -d)"
-trap 'rm -f "$tools_archive"; rm -rf "$tools_directory"' EXIT
-curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
-  https://dl.google.com/android/repository/commandlinetools-linux-12266719_latest.zip \
-  -o "$tools_archive"
-unzip -q "$tools_archive" -d "$tools_directory"
-if [ -e /opt/android-sdk/cmdline-tools/latest ]; then
-  printf '%s\n' 'Android tools already exist; refusing to replace them.' >&2
-  exit 1
+if [ ! -x /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager ]; then
+  if [ -e /opt/android-sdk/cmdline-tools/latest ]; then
+    printf '%s\n' 'Incomplete Android tools exist; refusing to overwrite them.' >&2
+    exit 1
+  fi
+  tools_archive="$(mktemp --suffix=.zip)"
+  tools_directory="$(mktemp -d)"
+  trap 'rm -f "$tools_archive"; rm -rf "$tools_directory"' EXIT
+  curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+    https://dl.google.com/android/repository/commandlinetools-linux-12266719_latest.zip \
+    -o "$tools_archive"
+  unzip -q "$tools_archive" -d "$tools_directory"
+  mv "$tools_directory/cmdline-tools" /opt/android-sdk/cmdline-tools/latest
 fi
-mv "$tools_directory/cmdline-tools" /opt/android-sdk/cmdline-tools/latest
 
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 export ANDROID_HOME=/opt/android-sdk
@@ -38,6 +40,7 @@ AllowAgentForwarding no
 AllowTcpForwarding no
 X11Forwarding no
 EOF
+install -d -m 0755 /run/sshd
 sshd -t
 systemctl restart ssh
 
