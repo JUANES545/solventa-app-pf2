@@ -1,0 +1,10 @@
+[Unit]
+Description=Check Solventa Android agent demand every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+Unit=jenkins-agent-lifecycle.service
+
+[Install]
+WantedBy=timers.target
