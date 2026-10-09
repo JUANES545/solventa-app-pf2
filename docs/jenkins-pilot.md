@@ -62,6 +62,8 @@ The lifecycle service starts the stopped agent for queued Solventa work and stop
 
 ## Acceptance checklist
 
+See [jenkins-github-integration.md](jenkins-github-integration.md) for the approved repository permissions, private credential steps and validation before enabling automatic agent lifecycle management.
+
 - Account still reports an active FREE plan after deployment.
 - Both hosts are SSM-managed and have no public inbound Jenkins or SSH access.
 - Agent can connect without disabling host-key verification.
