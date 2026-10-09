@@ -40,8 +40,10 @@ AllowAgentForwarding no
 AllowTcpForwarding no
 X11Forwarding no
 EOF
-install -d -m 0755 /run/sshd
+printf '%s\n' 'd /run/sshd 0755 root root -' > /etc/tmpfiles.d/jenkins-agent-sshd.conf
+systemd-tmpfiles --create /etc/tmpfiles.d/jenkins-agent-sshd.conf
 sshd -t
+systemctl enable ssh
 systemctl restart ssh
 
 cat > /usr/local/sbin/jenkins-agent-metadata-isolation <<'EOF'
