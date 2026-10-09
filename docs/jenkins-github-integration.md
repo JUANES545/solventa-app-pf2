@@ -38,6 +38,8 @@ After that policy is active, the administrator creates the local service account
 
 The file has `user` and `token` fields. It is never checked in, printed or returned by management commands. The lifecycle process uses it locally for queue/node reads only. No build, configure, connect-agent, credential-view or administrative permission is granted to this identity.
 
+`introduce-service-credential.py` is an interactive helper for the user's private Session Manager terminal. Run it as the lifecycle OS user. It hides input, writes atomically with mode 0600 and refuses non-interactive execution. Do not run it through management tools or paste the credential into shell arguments.
+
 ## Validation before timer activation
 
 1. Verify the administrator can still log in and administer Jenkins.
