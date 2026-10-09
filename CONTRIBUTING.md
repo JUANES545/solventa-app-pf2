@@ -38,4 +38,4 @@ Add explicit file paths and review the staged diff before committing. Keep crede
 
 Direct pushes, force pushes and branch deletion are blocked for `master` and `develop`, including for repository administrators.
 
-Build and test checks will be configured when the Android project is added. Until then, an approval does not imply that an Android build or test suite has run.
+GitHub Actions runs Android verification and device tests for pull requests. See [docs/android-setup.md](docs/android-setup.md) for commands, report locations and the scope of the initial tests. Passing checks do not replace review of the acceptance criteria or the design.
