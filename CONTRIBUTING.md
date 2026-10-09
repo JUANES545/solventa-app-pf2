@@ -32,7 +32,7 @@ Add explicit file paths and review the staged diff before committing. Keep crede
 1. Publish your working branch and open a pull request against the appropriate target.
 2. Link the Jira story and explain what changed.
 3. Describe the checks you ran and any limitations.
-4. Request reviews from the team. At least two approvals from team members are required before merging into `master` or `develop`.
+4. Request reviews from the team. At least one approval from a team member with write access is required before merging into `master` or `develop`.
 5. Address review comments. New commits dismiss earlier approvals, so reviewers must review the updated changes.
 6. Resolve all review conversations before merging.
 

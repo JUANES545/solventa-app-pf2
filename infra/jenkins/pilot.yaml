@@ -1,0 +1,240 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Private seven-day Jenkins pilot for Solventa Android
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  UbuntuAmiId:
+    Type: AWS::EC2::Image::Id
+  BootstrapCommit:
+    Type: String
+    AllowedPattern: '[0-9a-f]{40}'
+  ControllerBootstrapSha256:
+    Type: String
+    AllowedPattern: '[0-9a-f]{64}'
+  AgentBootstrapSha256:
+    Type: String
+    AllowedPattern: '[0-9a-f]{64}'
+  JenkinsVersion:
+    Type: String
+    AllowedPattern: '[0-9]+\.[0-9]+\.[0-9]+'
+  PilotStopAtUtc:
+    Type: String
+    Description: UTC timestamp seven days after launch, without timezone suffix
+    AllowedPattern: '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'
+
+Resources:
+  ControllerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Jenkins controller with no inbound network access
+      VpcId: !Ref VpcId
+      Tags:
+        - {Key: Project, Value: Solventa}
+        - {Key: Component, Value: JenkinsController}
+  AgentSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Android agent reachable only from the Jenkins controller
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref ControllerSecurityGroup
+          Description: Jenkins SSH agent connection inside the VPC
+      Tags:
+        - {Key: Project, Value: Solventa}
+        - {Key: Component, Value: JenkinsAgent}
+
+  ControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: FixedAgentLifecycle
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: '*'
+              - Effect: Allow
+                Action: [ec2:StartInstances, ec2:StopInstances]
+                Resource: !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                Condition:
+                  StringEquals:
+                    ec2:ResourceTag/Project: Solventa
+                    ec2:ResourceTag/Component: JenkinsAgent
+                    ec2:ResourceTag/PilotStack: !Ref AWS::StackName
+      Tags:
+        - {Key: Project, Value: Solventa}
+  AgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - {Key: Project, Value: Solventa}
+  ControllerProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref ControllerRole]
+  AgentProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref AgentRole]
+
+  AgentInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref UbuntuAmiId
+      InstanceType: c7i-flex.large
+      InstanceInitiatedShutdownBehavior: stop
+      IamInstanceProfile: !Ref AgentProfile
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: true
+          SubnetId: !Ref SubnetId
+          GroupSet: [!Ref AgentSecurityGroup]
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+        HttpEndpoint: enabled
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - {Key: Name, Value: solventa-jenkins-android-agent}
+        - {Key: Project, Value: Solventa}
+        - {Key: Component, Value: JenkinsAgent}
+        - {Key: Environment, Value: testing}
+        - {Key: Owner, Value: JUANES545}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - Key: PilotStack
+          Value: !Ref AWS::StackName
+      UserData:
+        Fn::Base64: !Sub |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            https://raw.githubusercontent.com/JUANES545/solventa-app-pf2/${BootstrapCommit}/infra/jenkins/bootstrap-agent.sh \
+            -o /root/bootstrap-agent.sh
+          printf '%s\n' '${AgentBootstrapSha256}  /root/bootstrap-agent.sh' | sha256sum --check -
+          bash /root/bootstrap-agent.sh
+
+  ControllerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref UbuntuAmiId
+      InstanceType: t3.small
+      InstanceInitiatedShutdownBehavior: stop
+      CreditSpecification:
+        CPUCredits: standard
+      IamInstanceProfile: !Ref ControllerProfile
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: true
+          SubnetId: !Ref SubnetId
+          GroupSet: [!Ref ControllerSecurityGroup]
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+        HttpEndpoint: enabled
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - {Key: Name, Value: solventa-jenkins-controller}
+        - {Key: Project, Value: Solventa}
+        - {Key: Component, Value: JenkinsController}
+        - {Key: Environment, Value: testing}
+        - {Key: Owner, Value: JUANES545}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - Key: PilotStack
+          Value: !Ref AWS::StackName
+      UserData:
+        Fn::Base64: !Sub |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          export JENKINS_VERSION='${JenkinsVersion}'
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            https://raw.githubusercontent.com/JUANES545/solventa-app-pf2/${BootstrapCommit}/infra/jenkins/bootstrap-controller.sh \
+            -o /root/bootstrap-controller.sh
+          printf '%s\n' '${ControllerBootstrapSha256}  /root/bootstrap-controller.sh' | sha256sum --check -
+          bash /root/bootstrap-controller.sh
+
+  PilotStopRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: scheduler.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule-group/default
+      Policies:
+        - PolicyName: StopOnlyPilotInstances
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ec2:StopInstances
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${ControllerInstance}
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${AgentInstance}
+      Tags:
+        - {Key: Project, Value: Solventa}
+  PilotStopSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Description: Stop Jenkins pilot compute after seven days
+      ScheduleExpression: !Sub at(${PilotStopAtUtc})
+      ScheduleExpressionTimezone: UTC
+      FlexibleTimeWindow: {Mode: 'OFF'}
+      State: ENABLED
+      Target:
+        Arn: !Sub arn:${AWS::Partition}:scheduler:::aws-sdk:ec2:stopInstances
+        RoleArn: !GetAtt PilotStopRole.Arn
+        Input: !Sub '{"InstanceIds":["${ControllerInstance}","${AgentInstance}"]}'
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 3
+
+Outputs:
+  ControllerInstanceId:
+    Value: !Ref ControllerInstance
+  AgentInstanceId:
+    Value: !Ref AgentInstance
+  AgentPrivateIp:
+    Value: !GetAtt AgentInstance.PrivateIp
+  StopAtUtc:
+    Value: !Ref PilotStopAtUtc

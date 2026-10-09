@@ -40,7 +40,7 @@ The initial tests validate build metadata and application launch only. They do n
 
 The workflow has read-only repository permissions and does not use signing credentials. Actions are pinned to commit hashes, and the Gradle distribution is checked against its published SHA-256 checksum.
 
-After a successful run confirms the check names, require `Android verification` and `Android UI tests` in branch protection for `develop` and `master`, while retaining two approvals and conversation resolution.
+`Android verification` and `Android UI tests` are required in branch protection for `develop` and `master`, along with one approval from a team member with write access and conversation resolution.
 
 ## Jira scope
 
