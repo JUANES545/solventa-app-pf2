@@ -57,7 +57,7 @@ After launch, verify EC2 status checks, encrypted disks, metadata settings, SSM 
 
 The lifecycle service starts the stopped agent for queued Solventa work and stops it after five minutes idle. Jenkins read failures must not be treated as inactivity. Both instances initially start for bootstrap; the agent schedules its first shutdown one minute after successful installation. Start it only for configuration and verification while integration is pending. On later starts, idle shutdown requires the configured lifecycle timer. The one-time pilot stop schedule does not prevent an administrator from manually restarting a host later; do not restart after the pilot deadline without approval.
 
-`create-pilot-job.groovy` can create a one-run validation job using the immutable `validationCommit` in the private agent configuration. It reads the public repository without a GitHub credential and does not report PR status or replace Multibranch Pipeline integration. Run it only while the agent is intentionally started. After validation, remove the initializer from the controller so future restarts do not schedule another attempt if the original build never started.
+`create-pilot-job.groovy` can create a validation job using the immutable `validationCommit` and numeric `validationAttempt` in the private agent configuration. Full checkout is required for a raw commit SHA. Each explicit attempt is scheduled once and recorded locally. It reads the public repository without a GitHub credential and does not report PR status or replace Multibranch Pipeline integration. Run it only while the agent is intentionally started. Remove the initializer after validation.
 
 ## Acceptance checklist
 
