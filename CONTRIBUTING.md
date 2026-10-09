@@ -11,9 +11,11 @@
 | `migration/<name>` | Data or configuration migrations | `develop` |
 | `release/<version>` | Release preparation | `master`, then synchronize with `develop` |
 | `hotfix/<name>` | Urgent correction to a stable release | `master`, then synchronize with `develop` |
-| `backport/<name>` | An approved correction for an earlier maintained release | The agreed maintenance branch |
+| `backport/release-pr-<number>` | Synchronize an integrated release back into development | `develop` |
 
 Start feature, fix, migration and release branches from `develop`. Start hotfix branches from `master`. Use short, descriptive lowercase names separated by hyphens.
+
+Merged origin `release/*` PRs into `master` create a backport PR through GitHub Actions after the workflow and repository setting are enabled. Backports still require review and passing checks; merge them with a merge commit to preserve ancestry. See [docs/release-backport.md](docs/release-backport.md). Hotfix synchronization remains separate work and is not included in this release-only automation.
 
 ## Before making changes
 
