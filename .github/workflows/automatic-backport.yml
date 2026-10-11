@@ -1,0 +1,60 @@
+name: Verified automatic backport
+
+on:
+  pull_request:
+    branches: [master]
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      source_pr:
+        description: Merged origin release PR number
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verified-backport-develop
+  cancel-in-progress: false
+
+jobs:
+  synchronize:
+    if: >-
+      vars.BACKPORT_AUTOMATION_ENABLED == 'true' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') ||
+       (github.event.pull_request.merged == true &&
+        startsWith(github.event.pull_request.head.ref, 'release/') &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Use trusted master automation only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Create repository-scoped short-lived App token
+        id: app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        with:
+          app-id: ${{ vars.BACKPORT_APP_ID }}
+          private-key: ${{ secrets.BACKPORT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-checks: read
+
+      - name: Verify and integrate exact synchronization
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          SOURCE_PR: ${{ inputs.source_pr || github.event.pull_request.number }}
+          BACKPORT_APP_ID: ${{ vars.BACKPORT_APP_ID }}
+          BACKPORT_APP_SLUG: ${{ vars.BACKPORT_APP_SLUG }}
+        with:
+          github-token: ${{ steps.app.outputs.token }}
+          script: |
+            const { automaticBackport } = require('./.github/scripts/verified-backport.cjs');
+            await automaticBackport({ github, context, core,
+              appId: Number(process.env.BACKPORT_APP_ID), appSlug: process.env.BACKPORT_APP_SLUG,
+              sourceId: Number(process.env.SOURCE_PR) });
