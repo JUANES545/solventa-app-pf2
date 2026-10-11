@@ -11,9 +11,11 @@
 | `migration/<name>` | Data or configuration migrations | `develop` |
 | `release/<version>` | Release preparation | `master`, then synchronize with `develop` |
 | `hotfix/<name>` | Urgent correction to a stable release | `master`, then synchronize with `develop` |
-| `backport/<name>` | An approved correction for an earlier maintained release | The agreed maintenance branch |
+| `backport/release-pr-<number>` | Synchronize an integrated release back into development | `develop` |
 
 Start feature, fix, migration and release branches from `develop`. Start hotfix branches from `master`. Use short, descriptive lowercase names separated by hyphens.
+
+Merged origin `release/*` PRs into `master` create a backport PR through GitHub Actions after the workflow and repository setting are enabled. Backports still require review and passing checks; merge them with a merge commit to preserve ancestry. See [docs/release-backport.md](docs/release-backport.md). Hotfix synchronization remains separate work and is not included in this release-only automation.
 
 ## Before making changes
 
@@ -32,10 +34,10 @@ Add explicit file paths and review the staged diff before committing. Keep crede
 1. Publish your working branch and open a pull request against the appropriate target.
 2. Link the Jira story and explain what changed.
 3. Describe the checks you ran and any limitations.
-4. Request reviews from the team. At least two approvals from team members are required before merging into `master` or `develop`.
+4. Request reviews from the team. At least one approval from a team member with write access is required before merging into `master` or `develop`.
 5. Address review comments. New commits dismiss earlier approvals, so reviewers must review the updated changes.
 6. Resolve all review conversations before merging.
 
 Direct pushes, force pushes and branch deletion are blocked for `master` and `develop`, including for repository administrators.
 
-Build and test checks will be configured when the Android project is added. Until then, an approval does not imply that an Android build or test suite has run.
+GitHub Actions runs Android verification and device tests for pull requests. Both Actions checks and `Solventa Android Jenkins` are required on develop and master. Request Jenkins with a new `/test-jenkins` conversation comment after publishing the final commits; repeat the request after further commits or updating the branch. See [docs/jenkins-on-demand.md](docs/jenkins-on-demand.md). Jenkins does not run automatically, and missing checks block merging even when a review is approved. See [docs/android-setup.md](docs/android-setup.md) for commands, report locations and the scope of the initial tests. Passing checks do not replace review of the acceptance criteria or the design.

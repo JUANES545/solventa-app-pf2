@@ -20,5 +20,5 @@ Describe anything reviewers should know before merging.
 - [ ] The diff contains only files related to this change.
 - [ ] No secrets, local configuration or generated files are included.
 - [ ] Required checks have passed, where configured.
-- [ ] At least two team members have approved the latest changes.
+- [ ] At least one team member with write access has approved the latest changes.
 - [ ] All review conversations have been resolved.
