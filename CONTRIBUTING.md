@@ -40,4 +40,4 @@ Add explicit file paths and review the staged diff before committing. Keep crede
 
 Direct pushes, force pushes and branch deletion are blocked for `master` and `develop`, including for repository administrators.
 
-GitHub Actions runs Android verification and device tests for pull requests. See [docs/android-setup.md](docs/android-setup.md) for commands, report locations and the scope of the initial tests. Passing checks do not replace review of the acceptance criteria or the design.
+GitHub Actions runs Android verification and device tests for pull requests. Both Actions checks and `Solventa Android Jenkins` are required on develop and master. Request Jenkins with a new `/test-jenkins` conversation comment after publishing the final commits; repeat the request after further commits or updating the branch. See [docs/jenkins-on-demand.md](docs/jenkins-on-demand.md). Jenkins does not run automatically, and missing checks block merging even when a review is approved. See [docs/android-setup.md](docs/android-setup.md) for commands, report locations and the scope of the initial tests. Passing checks do not replace review of the acceptance criteria or the design.

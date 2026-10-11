@@ -2,7 +2,9 @@
 
 ## Approved change
 
-Jenkins becomes optional, on-demand verification. GitHub Actions remains automatic and required. A collaborator with current write, maintain or administrator access requests Jenkins by posting a new PR conversation comment whose complete trimmed body is `/test-jenkins`.
+Jenkins is required, on-demand verification for PRs into develop and master. GitHub Actions remains automatic and required. A collaborator with current write, maintain or administrator access requests Jenkins by posting a new PR conversation comment whose complete trimmed body is `/test-jenkins`.
+
+Both branches require `Android verification` and `Android UI tests` from the GitHub Actions App (15368), and `Solventa Android Jenkins` from the Jenkins App (5247357), plus one approval. Missing or unsuccessful checks block merging, not submission of a review. If Jenkins or AWS is unavailable, merging remains blocked; do not bypass protections. A new head commit requires a new Jenkins request and current checks.
 
 Read-only visitors, bots, fork PRs and PRs targeting branches other than develop/master are not eligible. Review comments inside code diffs are not scanned. The same comment is processed once; edited comments and comments created before activation are ignored. Post a new comment after publishing new commits if another verification is desired. Existing success on an earlier SHA is not proof of validation of a later SHA.
 
@@ -10,7 +12,11 @@ The controller polls comments every minute with its existing GitHub App. It does
 
 Multibranch keeps discovering origin PRs but suppresses automatic builds from indexing and SCM events. An authorized comment schedules the job with the verified PR revision. Jenkins publishes its result on the PR head. No requested execution means no claim that Jenkins tests ran; GitHub Actions still verifies the change automatically.
 
-## Runtime deployment, pending AWS authorization
+## Verified runtime deployment
+
+On 2026-10-11, AWS identity was verified as account 396383602233 with an active FREE plan. The CloudFormation update changed only PilotStopSchedule.State to DISABLED without replacing resources. The local deadline was removed and the lifecycle timer remained active. PR-4 build 3 succeeded on b72e2c415ad4da770d6185c9da4d387d929be7ac after an authorized comment; GitHub published successful Jenkins checks. Automatic agent start and subsequent idle shutdown were observed. Integration fixes used supported Jenkins APIs and a standard build cause without weakening security class filters.
+
+The following procedure records the deployment steps; it is not a pending authorization request. Recheck live state and approval before future infrastructure changes.
 
 1. Reauthenticate AWS MCP and verify account identity and active FREE plan.
 2. Compare the deployed stack and current template. Disable the existing PilotStopSchedule through a reviewed CloudFormation update that changes only its enabled state. Preserve instances, IAM roles, stored data and security groups. Keep its timestamp parameter for update compatibility; the disabled schedule cannot stop the hosts at that date.
