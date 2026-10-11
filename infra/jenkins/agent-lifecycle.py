@@ -3,7 +3,6 @@
 
 import base64
 import argparse
-from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -13,9 +12,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.parse import quote, urlsplit
 
 
-def decide_action(instance_state, queued, busy, now, last_active, expired=False):
-    if expired:
-        return "stop" if instance_state in {"running", "pending"} else "none"
+def decide_action(instance_state, queued, busy, now, last_active):
     if instance_state == "stopped":
         return "start" if queued else "none"
     if instance_state != "running":
@@ -80,7 +77,6 @@ def run(dry_run=False):
     credentials_path = Path(os.environ["JENKINS_READ_CREDENTIALS_FILE"])
     state_path = Path(os.environ["LIFECYCLE_STATE_FILE"])
     now = int(time.time())
-    deadline = datetime.strptime(os.environ["PILOT_STOP_AT_UTC"], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
     ec2 = boto3.client(
         "ec2",
         region_name=region,
@@ -88,11 +84,6 @@ def run(dry_run=False):
     )
     instance = ec2.describe_instances(InstanceIds=[instance_id])["Reservations"][0]["Instances"][0]
     instance_state = instance["State"]["Name"]
-    if now >= deadline:
-        execute_action(ec2, instance_id, decide_action(instance_state, False, False, now, now, expired=True), dry_run=dry_run)
-        print("Pilot expired; the agent will not be started.")
-        return
-
     if credentials_path.stat().st_mode & 0o077:
         raise ValueError("The lifecycle credential file must not be accessible to group or others")
     credentials = json.loads(credentials_path.read_text())
