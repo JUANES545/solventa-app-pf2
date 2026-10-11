@@ -2,7 +2,7 @@
 
 ## Current change under review
 
-The owner approved continued operation without the seven-day cutoff and Jenkins requests through `/test-jenkins` comments. See [jenkins-on-demand.md](jenkins-on-demand.md). The updated files remove the local lifecycle deadline and disable the schedule in the template. Deployment is pending renewal of AWS MCP authorization; until verified, the existing server still has its original deadline and automatic builds. Historical seven-day budget and setup details below describe the initial rollout, not an unlimited free service.
+The owner approved continued operation without the seven-day cutoff and Jenkins requests through `/test-jenkins` comments. Deployment was verified on 2026-10-11: the local lifecycle deadline was removed, the calendar schedule disabled without resource replacement, and automatic Multibranch builds suppressed. Jenkins is now a required check on develop and master alongside Actions and one review approval. A real requested build succeeded and the agent subsequently stopped automatically after inactivity. See [jenkins-on-demand.md](jenkins-on-demand.md). Historical seven-day budget and setup details below describe the initial rollout, not current deployment instructions or an unlimited free service.
 
 ## Scope
 
