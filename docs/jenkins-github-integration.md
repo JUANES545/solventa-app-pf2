@@ -1,5 +1,7 @@
 # Private GitHub integration
 
+The on-demand change described in [jenkins-on-demand.md](jenkins-on-demand.md) is prepared but not yet deployed. It keeps the approved credential and repository boundary and requests Jenkins through new authorized PR comments instead of every source change. Existing runtime behavior must not be considered changed until AWS deployment and live tests pass.
+
 ## Approved scope
 
 Use a GitHub App installed only on `JUANES545/solventa-app-pf2`:

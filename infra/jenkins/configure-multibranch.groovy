@@ -5,6 +5,10 @@ import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import io.jenkins.plugins.checks.github.status.GitHubSCMSourceStatusChecksTrait
 import jenkins.branch.BranchSource
+import jenkins.branch.BranchProperty
+import jenkins.branch.DefaultBranchPropertyStrategy
+import jenkins.branch.NoTriggerBranchProperty
+import jenkins.branch.NoTriggerMultiBranchQueueDecisionHandler.SuppressionStrategy
 import jenkins.model.Jenkins
 import jenkins.scm.impl.trait.WildcardSCMHeadFilterTrait
 import org.jenkinsci.plugins.github_branch_source.GitHubSCMSource
@@ -48,7 +52,12 @@ if (configFile.isFile()) {
     factory.setScriptPath('Jenkinsfile')
     project.setProjectFactory(factory)
     project.sourcesList.clear()
-    project.sourcesList.add(new BranchSource(source))
+    def branchSource = new BranchSource(source)
+    def noAutomaticBuild = new NoTriggerBranchProperty()
+    noAutomaticBuild.setStrategy(SuppressionStrategy.INDEXING)
+    noAutomaticBuild.setTriggeredBranchesRegex('^$')
+    branchSource.setStrategy(new DefaultBranchPropertyStrategy([noAutomaticBuild] as BranchProperty[]))
+    project.sourcesList.add(branchSource)
     project.setDescription(description)
     project.addTrigger(new PeriodicFolderTrigger('10m'))
     project.save()

@@ -220,7 +220,7 @@ Resources:
       ScheduleExpression: !Sub at(${PilotStopAtUtc})
       ScheduleExpressionTimezone: UTC
       FlexibleTimeWindow: {Mode: 'OFF'}
-      State: ENABLED
+      State: DISABLED
       Target:
         Arn: !Sub arn:${AWS::Partition}:scheduler:::aws-sdk:ec2:stopInstances
         RoleArn: !GetAtt PilotStopRole.Arn
@@ -228,6 +228,12 @@ Resources:
         RetryPolicy:
           MaximumEventAgeInSeconds: 3600
           MaximumRetryAttempts: 3
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: The owner removed the seven-day cutoff; preserve this resource disabled for a non-destructive update.
+        must:
+          - Do not replace or stop instances when disabling the calendar cutoff.
+          - Preserve the FREE account plan and idle agent shutdown.
 
 Outputs:
   ControllerInstanceId:

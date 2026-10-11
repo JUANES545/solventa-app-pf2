@@ -1,5 +1,9 @@
 # Jenkins pilot on AWS
 
+## Current change under review
+
+The owner approved continued operation without the seven-day cutoff and Jenkins requests through `/test-jenkins` comments. See [jenkins-on-demand.md](jenkins-on-demand.md). The updated files remove the local lifecycle deadline and disable the schedule in the template. Deployment is pending renewal of AWS MCP authorization; until verified, the existing server still has its original deadline and automatic builds. Historical seven-day budget and setup details below describe the initial rollout, not an unlimited free service.
+
 ## Scope
 
 This is a seven-day pilot in `us-east-2` for `solventa-app-pf2`. GitHub Actions remains the required CI. Jenkins initially adds unit tests, Android Lint and a debug build; it does not run an emulator, sign APKs or publish releases. The tests currently cover build configuration, not business functionality.
