@@ -8,13 +8,20 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+  checks: read
 
 concurrency:
   group: backport-validation-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  backport_policy:
+    uses: ./.github/workflows/backport-preflight.yml
+
   test:
+    needs: backport_policy
+    if: needs.backport_policy.outputs.skip_tests != 'true'
     name: Backport logic tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -30,4 +37,4 @@ jobs:
           node-version: '22'
 
       - name: Run backport tests without network access
-        run: node --test .github/scripts/backport.test.cjs
+        run: node --test .github/scripts/*.test.cjs

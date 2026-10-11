@@ -2,6 +2,8 @@
 
 ## Scope
 
+The dedicated-App automatic mode is prepared separately and remains disabled until installation, protected-rule migration and real validation. See [automatic-backport.md](automatic-backport.md). The procedure below remains the active legacy mode while BACKPORT_AUTOMATION_ENABLED is not true.
+
 After an origin `release/*` pull request is merged into `master`, GitHub Actions creates a branch named `backport/release-pr-<number>` at that pull request's exact integrated SHA and opens a PR into `develop`. It does not approve, merge, resolve conflicts, publish an APK or deploy infrastructure.
 
 This implements the team's release synchronization request and supports SOL-146 and the Week 1 versioning evidence. It is separate from the CI and release-publication pipelines.
