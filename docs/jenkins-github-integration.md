@@ -52,6 +52,6 @@ The file has `user` and `token` fields. It is never checked in, printed or retur
 6. Run a real PR, verify a GitHub check on its exact head SHA, and retain the build result and reports.
 7. After completion, verify the agent stops after five idle minutes. Verify a later PR can start it again.
 
-Redirects are not followed on authenticated lifecycle requests. Incomplete queue/node responses fail closed instead of being treated as inactivity. The lifecycle uses bounded AWS retries and timeouts and refuses to start the agent after the pilot deadline.
+Redirects are not followed on authenticated lifecycle requests. Incomplete queue/node responses fail closed instead of being treated as inactivity. The lifecycle uses bounded AWS retries and timeouts. The owner-approved on-demand deployment removed the pilot deadline while retaining idle shutdown; see [jenkins-on-demand.md](jenkins-on-demand.md).
 
-The seven-day stop schedule and active FREE account plan must remain unchanged. The fixed one-run pilot job is retained as evidence; it is not a replacement for PR discovery and status reporting.
+The seven-day stop schedule was disabled with owner approval; the account must remain on its active FREE plan. The fixed one-run pilot job is retained as evidence; it is not a replacement for PR discovery and status reporting.
