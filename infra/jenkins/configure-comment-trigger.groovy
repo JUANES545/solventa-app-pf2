@@ -76,8 +76,9 @@ Timer.get().scheduleWithFixedDelay({
                     project.scheduleBuild2(0)
                     return
                 }
-                def source = project.getSCMSource(job.branch.sourceId)
-                def revision = source.fetch(job.branch.head, null)
+                def branch = project.getProjectFactory().getBranch(job)
+                def source = project.getSCMSource(branch.sourceId)
+                def revision = source.fetch(branch.head, null)
                 if (!(revision instanceof PullRequestSCMRevision) || revision.pullHash != pull.head.sha) return
                 def request = job.scheduleBuild2(0,
                     new CauseAction(new SolventaCommentCause(id, user.login, revision.pullHash)),
