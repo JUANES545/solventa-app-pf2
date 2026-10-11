@@ -58,7 +58,7 @@ Timer.get().scheduleWithFixedDelay({
         repository.getPullRequests(GHIssueState.OPEN).each { pull ->
             boolean origin = pull.head.repository?.fullName == 'JUANES545/solventa-app-pf2'
             if (!origin || !(pull.base.ref in ['develop', 'master'])) return
-            def comments = pull.listComments().toList().sort { it.id }
+            def comments = new ArrayList(pull.listComments().toList()).sort { it.id }
             comments.each { comment ->
                 long id = comment.id
                 if (processed.contains(id) || !policy.isCommand(comment.body)) return
@@ -93,6 +93,7 @@ Timer.get().scheduleWithFixedDelay({
     } catch (Exception failure) {
         // Exception messages can contain sensitive request details; log the type only.
         logger.warning('Comment scan failed: ' + failure.class.name)
+        logger.warning('Comment scan location: ' + failure.stackTrace.take(5).collect { frame -> frame.className + ':' + frame.lineNumber }.join(', '))
     } finally {
         if (connection != null) Connector.release(connection)
         systemContext.close()
