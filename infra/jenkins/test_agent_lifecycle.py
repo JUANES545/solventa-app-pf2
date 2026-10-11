@@ -98,11 +98,11 @@ class AgentLifecycleTest(unittest.TestCase):
     def test_stopping_agent_is_left_alone(self):
         self.assertEqual("none", lifecycle.decide_action("stopping", True, False, 1000, 0))
 
-    def test_expiration_stops_agent_even_with_queued_work(self):
-        self.assertEqual("stop", lifecycle.decide_action("running", True, True, 1000, 0, expired=True))
+    def test_future_work_starts_agent_without_a_calendar_deadline(self):
+        self.assertEqual("start", lifecycle.decide_action("stopped", True, False, 9999999999, 0))
 
-    def test_expiration_does_not_restart_agent(self):
-        self.assertEqual("none", lifecycle.decide_action("stopped", True, False, 1000, 0, expired=True))
+    def test_future_busy_agent_is_not_stopped(self):
+        self.assertEqual("none", lifecycle.decide_action("running", False, True, 9999999999, 0))
 
 
 if __name__ == "__main__":
