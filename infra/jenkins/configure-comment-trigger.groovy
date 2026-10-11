@@ -13,22 +13,6 @@ import org.kohsuke.github.GHIssueState
 import java.util.concurrent.TimeUnit
 import java.util.logging.Logger
 
-class SolventaCommentCause extends Cause {
-    final long commentId
-    final String requester
-    final String headSha
-
-    SolventaCommentCause(long commentId, String requester, String headSha) {
-        this.commentId = commentId
-        this.requester = requester
-        this.headSha = headSha
-    }
-
-    @Override String getShortDescription() {
-        "Requested by ${requester} through PR comment ${commentId} for ${headSha}"
-    }
-}
-
 def controller = Jenkins.get()
 def approvalFile = new File(controller.rootDir, 'pilot-github-approved.json')
 if (!approvalFile.isFile()) return
@@ -81,7 +65,7 @@ Timer.get().scheduleWithFixedDelay({
                 def revision = source.fetch(branch.head, null)
                 if (!(revision instanceof PullRequestSCMRevision) || revision.pullHash != pull.head.sha) return
                 def request = job.scheduleBuild2(0,
-                    new CauseAction(new SolventaCommentCause(id, user.login, revision.pullHash)),
+                    new CauseAction(new Cause.RemoteCause('github-comment', "Requested by ${user.login} through PR comment ${id} for ${revision.pullHash}")),
                     new SCMRevisionAction(source, revision))
                 if (request != null) {
                     processed.add(id)
