@@ -15,6 +15,7 @@ concurrency:
 jobs:
   backport:
     if: >-
+      vars.BACKPORT_AUTOMATION_ENABLED != 'true' &&
       github.event.pull_request.merged == true &&
       startsWith(github.event.pull_request.head.ref, 'release/') &&
       github.event.pull_request.head.repo.full_name == github.repository
