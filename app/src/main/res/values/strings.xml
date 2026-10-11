@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Solventa</string>
+    <string name="login_title">Protección siempre contigo</string>
+    <string name="login_subtitle">Accede de forma rápida y segura a tus pólizas</string>
+    <string name="email">Correo electrónico</string>
+    <string name="password">Contraseña</string>
+    <string name="sign_in">Ingresar</string>
+    <string name="biometric_sign_in">Ingresar con huella o rostro</string>
+    <string name="forgot_password">Olvidé mi contraseña</string>
+    <string name="create_account">Crear cuenta</string>
 </resources>
