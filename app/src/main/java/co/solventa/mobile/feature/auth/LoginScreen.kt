@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -53,7 +56,11 @@ import co.solventa.mobile.SolventaApp
 import co.solventa.mobile.core.ui.SolventaBrandMark
 
 @Composable
-fun LoginScreen() {
+fun LoginScreen(
+    loading: Boolean = false,
+    error: AuthError? = null,
+    onLogin: (String, String) -> Unit = { _, _ -> },
+) {
     // Credentials are transient UI state, never saved across activity recreation.
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -97,6 +104,7 @@ fun LoginScreen() {
                         placeholder = { Text(label) },
                         modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
                         singleLine = true,
+                        enabled = !loading,
                         shape = RoundedCornerShape(12.dp),
                         colors = loginFieldColors(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
@@ -112,27 +120,52 @@ fun LoginScreen() {
                         modifier = Modifier.fillMaxWidth().focusRequester(passwordFocus)
                             .semantics { contentDescription = label },
                         singleLine = true,
+                        enabled = !loading,
                         shape = RoundedCornerShape(12.dp),
                         colors = loginFieldColors(),
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                        keyboardActions = KeyboardActions(onDone = {
+                            focusManager.clearFocus()
+                            if (!loading) onLogin(email, password)
+                        }),
                     )
                 }
                 Spacer(Modifier.height(28.dp))
-                // Design-only controls: no auth, navigation, or simulated results.
-                Button(onClick = {}, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                error?.let {
+                    val message = when (it) {
+                        AuthError.REQUIRED -> R.string.auth_required
+                        AuthError.EMAIL -> R.string.auth_email
+                        AuthError.PASSWORD -> R.string.auth_password
+                        AuthError.INVALID_CREDENTIALS -> R.string.auth_invalid
+                        AuthError.EXPIRED -> R.string.auth_expired
+                        AuthError.RATE_LIMIT -> R.string.auth_rate_limit
+                        AuthError.STORAGE -> R.string.auth_storage
+                        AuthError.UNAVAILABLE -> R.string.auth_unavailable
+                        AuthError.LOGOUT_REMOTE -> R.string.auth_logout_remote
+                    }
+                    Text(stringResource(message), color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    Spacer(Modifier.height(12.dp))
+                }
+                Button(onClick = { focusManager.clearFocus(); onLogin(email, password) },
+                    enabled = !loading,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                     shape = RoundedCornerShape(12.dp)) {
-                    Text(stringResource(R.string.sign_in), style = MaterialTheme.typography.titleMedium)
+                    if (loading) {
+                        CircularProgressIndicator(Modifier.width(20.dp).height(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(stringResource(if (loading) R.string.signing_in else R.string.sign_in), style = MaterialTheme.typography.titleMedium)
                 }
                 Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                     shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)) {
                     Text(stringResource(R.string.biometric_sign_in), textAlign = TextAlign.Center)
                 }
                 Spacer(Modifier.height(16.dp))
-                TextButton(onClick = {}) { Text(stringResource(R.string.forgot_password)) }
-                TextButton(onClick = {}) { Text(stringResource(R.string.create_account)) }
+                TextButton(onClick = {}, enabled = false) { Text(stringResource(R.string.forgot_password)) }
+                TextButton(onClick = {}, enabled = false) { Text(stringResource(R.string.create_account)) }
             }
         }
     }
