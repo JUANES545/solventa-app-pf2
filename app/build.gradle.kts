@@ -42,6 +42,11 @@ android {
     lint {
         abortOnError = true
     }
+    buildTypes.create("preview") {
+        initWith(buildTypes.getByName("release"))
+        signingConfig = signingConfigs.getByName("debug")
+        matchingFallbacks += "release"
+    }
 }
 
 dependencies {
