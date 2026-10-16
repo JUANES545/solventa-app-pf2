@@ -153,7 +153,8 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                     shape = RoundedCornerShape(12.dp)) {
                     if (loading) {
-                        CircularProgressIndicator(Modifier.width(20.dp).height(20.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(Modifier.width(20.dp).height(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
                     }
                     Text(stringResource(if (loading) R.string.signing_in else R.string.sign_in), style = MaterialTheme.typography.titleMedium)
