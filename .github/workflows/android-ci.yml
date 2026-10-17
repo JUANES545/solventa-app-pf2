@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: android-ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   backport_policy:
@@ -49,6 +49,20 @@ jobs:
       - name: Verify Android project
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
 
+      - name: Test preview deployment request policy
+        run: python3 -m unittest discover -s .github/scripts -p 'test_deploy_appetize.py'
+
+      - name: Build preview APK
+        run: ./gradlew --no-daemon assemblePreview
+
+      - name: Retain validated preview APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-preview-apk
+          path: app/build/outputs/apk/preview/app-preview.apk
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload verification reports
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -61,6 +75,51 @@ jobs:
             app/build/test-results/testDebugUnitTest/
           if-no-files-found: warn
           retention-days: 14
+
+  deploy_preview:
+    name: Publicar preview Android
+    needs: [verify, instrumentation]
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      vars.APPETIZE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: appetize-stable-preview
+      cancel-in-progress: false
+    steps:
+      - name: Ignore superseded master builds
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current="$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)"
+          if [ "$current" = "$GITHUB_SHA" ]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Preview omitted: master has newer changes.'
+          fi
+
+      - name: Check out the validated commit
+        if: steps.current.outputs.publish == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Download this run's preview APK
+        if: steps.current.outputs.publish == 'true'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: android-preview-apk
+          path: preview
+
+      - name: Update the existing Appetize preview
+        if: steps.current.outputs.publish == 'true'
+        env:
+          APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+          APPETIZE_PUBLIC_KEY: ${{ vars.APPETIZE_PUBLIC_KEY }}
+        run: python3 .github/scripts/deploy_appetize.py preview/app-preview.apk
 
   instrumentation:
     name: Android UI tests

@@ -13,6 +13,9 @@ Actions se ejecuta automáticamente. Un colaborador solicita Jenkins con un come
 Los reportes HTML/XML se conservan en Jenkins privado. No se exige un porcentaje mínimo nuevo.
 Consulta [la guía de CI](docs/ci.md) para ver alcance, nombres y lectura de resultados.
 
+La [preview compartida con Appetize](docs/appetize-preview.md) es una publicación separada:
+solo desde `master`, tras CI y configuración privada; integrar a `develop` no la activa.
+
 
 ## Requisitos previos
 
