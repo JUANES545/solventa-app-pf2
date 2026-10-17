@@ -13,7 +13,7 @@ function fixture() {
     head: { ref: 'backport/release-pr-6', sha: RELEASE, repo: { full_name: full } },
     base: { ref: 'develop', sha: BASE, repo: { full_name: full } },
     user: { type: 'Bot', login: 'backport-app[bot]' }, performed_via_github_app: { id: 99 } };
-  const checks = ['Android verification', 'Android UI tests', 'Solventa Android Jenkins'].map((name, index) =>
+  const checks = ['Android verification', 'Android UI tests', 'CI / Validación (Jenkins)'].map((name, index) =>
     ({ name, app: { id: index === 2 ? 5247357 : 15368 }, head_sha: HEAD, status: 'completed', conclusion: 'success' }));
   const reviews = [{ user: { id: 2, type: 'User' }, state: 'APPROVED', commit_id: HEAD }];
   let diverged = false, merged = false;
@@ -46,6 +46,7 @@ for (const [name, mutate] of [
   ['draft', f => { f.pull.draft = true; }],
   ['failed release check', f => { f.checks[0].conclusion = 'failure'; }],
   ['wrong check publisher', f => { f.checks[2].app.id = 99; }],
+  ['obsolete Jenkins name', f => { f.checks[2].name = 'Solventa Android Jenkins'; }],
   ['stale check', f => { f.checks[0].head_sha = BASE; }],
   ['ambiguous check', f => { f.checks.push(f.checks[0]); }],
   ['no review', f => { f.reviews.length = 0; }],
