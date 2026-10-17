@@ -43,6 +43,7 @@ if (configFile.isFile()) {
     def checks = new GitHubSCMSourceStatusChecksTrait()
     checks.setName('Solventa Android Jenkins')
     checks.setSuppressLogs(true)
+    checks.setSkipNotifications(true)
     source.setTraits([
         new OriginPullRequestDiscoveryTrait(1),
         new WildcardSCMHeadFilterTrait('PR-*', ''),

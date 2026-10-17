@@ -19,6 +19,14 @@ sin red ni credenciales. Requiere Python 3.10+ (ya disponible en el agente compa
 
 ### Migración administrativa pendiente
 
+**Operación 2026-10-17:** ya se aplicó `skipNotifications=true` en el controlador para los
+tres proyectos, conservando sus checks obligatorios y copias privadas de configuración.
+El bootstrap Android conserva ahora ese valor al reiniciar. La política y el scanner
+corregidos se instalaron, compilaron y recargaron con un reinicio autorizado del servicio,
+esperando a que terminaran los builds y la cola. La App visible se renombró a **Solventa CI Android**
+(slug `solventa-ci-android`), conservando ID `5247357` e instalación. No confundir esta
+operación con validación de un build del último SHA; no se integró el PR ni se cambiaron protecciones.
+
 El scanner ahora difiere solicitudes de un PR que ya esté en cola o ejecutándose,
 sin consumir su comentario. Evita que Jenkins agrupe solicitudes con revisiones distintas
 y valide solo la anterior. Los tests de `infra/jenkins/test-comment-policy.groovy` cubren
@@ -34,7 +42,7 @@ inicializador encima del timer existente; programar una recarga controlada, sin 
 4. `infra/jenkins/configure-reporting.groovy` desactiva solo el status legado
    `continuous-integration/jenkins/pr-merge`; ejecutar como administrador del controlador
    después de verificar que no sea requerido. No ejecutarlo desde el pipeline ni reiniciar Jenkins.
-5. Renombrar la App visible a **Solventa CI Android**, conservando ID, instalación y credenciales.
+5. App visible **Solventa CI Android**: cambio ya aplicado; no recrear la App ni sus credenciales.
 
 La configuración del controlador y el nombre de la App no cambian por integrar este PR.
 Los nombres futuros de Actions (`CI / Calidad (Actions)`, `CI / Interfaz Android`) requieren
