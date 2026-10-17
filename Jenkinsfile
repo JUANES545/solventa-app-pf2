@@ -18,23 +18,16 @@ pipeline {
     stages {
         stage('Código') {
             steps {
+                deleteDir()
                 checkout scm
             }
         }
         stage('Pruebas unitarias y cobertura') {
             steps {
+                publishChecks name: 'Cobertura', status: 'IN_PROGRESS', conclusion: 'NONE', title: 'Generando cobertura JVM', summary: 'Pruebas JVM; no incluye instrumentación Android.', detailsURL: "https://github.com/JUANES545/solventa-app-pf2/pull/${env.CHANGE_ID}/checks"
+                sh 'python3 -m unittest discover -s scripts -p test_coverage_summary.py'
                 sh './gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -Dfile.encoding=UTF-8" -Pkotlin.compiler.execution.strategy=in-process jacocoDebugUnitTestReport'
                 sh 'test -s app/build/reports/coverage/unit/coverage.xml'
-                sh '''
-                    python3 - <<'PY'
-import xml.etree.ElementTree as E
-counter = E.parse('app/build/reports/coverage/unit/coverage.xml').getroot().find("counter[@type='LINE']")
-assert counter is not None, 'Missing coverage counter'
-covered, missed = int(counter.get('covered')), int(counter.get('missed'))
-assert covered + missed > 0, 'No application lines measured'
-print(f'Cobertura JVM de líneas: {100 * covered / (covered + missed):.2f}% ({covered}/{covered + missed})')
-PY
-                '''
             }
         }
         stage('Android Lint') {
@@ -52,12 +45,41 @@ PY
     post {
         always {
             script {
-                if (fileExists('app/build/test-results/testDebugUnitTest')) {
-                    junit testResults: 'app/build/test-results/testDebugUnitTest/*.xml', allowEmptyResults: false
+                try {
+                    if (fileExists('app/build/test-results/testDebugUnitTest')) {
+                        junit testResults: 'app/build/test-results/testDebugUnitTest/*.xml', allowEmptyResults: false, skipPublishingChecks: true
+                    }
+                    def result = sh(returnStatus: true, script: '''python3 scripts/coverage_summary.py \
+                        --coverage 'App=app/build/reports/coverage/unit/coverage.xml' \
+                        --tests 'app/build/test-results/testDebugUnitTest/*.xml' \
+                        --scope 'Pruebas JVM. No incluye instrumentación, UI en dispositivo ni dependencias externas.'
+                    ''')
+                    def summary = readFile(file: 'reports/coverage-summary.md', encoding: 'UTF-8')
+                    summary += "\nRevisión compilada (puede incluir merge con destino): `${env.GIT_COMMIT}`.\n"
+                    publishChecks name: 'Cobertura', title: summary.readLines()[0], summary: summary,
+                        detailsURL: "https://github.com/JUANES545/solventa-app-pf2/pull/${env.CHANGE_ID}/checks",
+                        conclusion: result == 0 ? 'SUCCESS' : (currentBuild.currentResult == 'SUCCESS' ? 'FAILURE' : 'NEUTRAL')
+                    if (result != 0 && currentBuild.currentResult == 'SUCCESS') {
+                        error('Faltan reportes válidos de cobertura o pruebas')
+                    }
+                } finally {
+                    archiveArtifacts artifacts: 'app/build/reports/**,app/build/test-results/**,reports/coverage-summary.md', allowEmptyArchive: true
                 }
             }
-            archiveArtifacts artifacts: 'app/build/reports/**,app/build/test-results/**', allowEmptyArchive: true
-            deleteDir()
+        }
+        cleanup {
+            script {
+                try {
+                    // Mantener el check antiguo obligatorio hasta migrar las protecciones.
+                    publishChecks name: 'CI / Validación (Jenkins)',
+                        conclusion: currentBuild.currentResult == 'SUCCESS' ? 'SUCCESS' : 'FAILURE',
+                        title: currentBuild.currentResult == 'SUCCESS' ? 'Unitarias, lint y compilación correctos' : 'Validación incompleta o fallida',
+                        summary: 'Validación solicitada con `/test-jenkins`. Cobertura JVM en el check **Cobertura**. El check anterior se conserva temporalmente por las protecciones.',
+                        detailsURL: "https://github.com/JUANES545/solventa-app-pf2/pull/${env.CHANGE_ID}/checks"
+                } finally {
+                    deleteDir()
+                }
+            }
         }
     }
 }
