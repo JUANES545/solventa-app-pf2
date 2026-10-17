@@ -1,0 +1,82 @@
+name: Appetize · Despliegue reutilizable
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      public_key:
+        required: true
+        type: string
+    secrets:
+      appetize_token:
+        required: true
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  prepare:
+    name: Seleccionar última entrega
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.select.outputs.publish }}
+      url: ${{ steps.select.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Omitir una demo superada antes de registrar despliegue
+        id: select
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          PUBLIC_KEY: ${{ inputs.public_key }}
+        with:
+          script: |
+            const { preparePreview } = require('./.github/scripts/release_android.cjs');
+            const result = await preparePreview({ github, context, version: process.env.RELEASE_VERSION, publicKey: process.env.PUBLIC_KEY });
+            core.setOutput('publish', result.publish);
+            core.setOutput('url', result.url || '');
+            if (!result.publish) await core.summary.addRaw('Demo omitida: existe una entrega más reciente. No se registró un despliegue exitoso.').write();
+
+  deploy:
+    name: Actualizar Appetize
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+    environment:
+      name: appetize
+      url: ${{ needs.prepare.outputs.url }}
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Recuperar el APK original y comprobar su huella y procedencia
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        with:
+          script: |
+            const { downloadRelease } = require('./.github/scripts/release_android.cjs');
+            await downloadRelease({ github, context, version: process.env.RELEASE_VERSION, directory: 'preview' });
+      - name: Actualizar la misma app sin iniciar streaming
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          APPETIZE_API_TOKEN: ${{ secrets.appetize_token }}
+          APPETIZE_PUBLIC_KEY: ${{ inputs.public_key }}
+        with:
+          script: |
+            const { deployPreview } = require('./.github/scripts/release_android.cjs');
+            await deployPreview({ github, context, directory: 'preview', publicKey: process.env.APPETIZE_PUBLIC_KEY });

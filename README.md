@@ -1,5 +1,14 @@
 # Solventa Android — Proyecto Final II
 
+[![CI de master](https://github.com/JUANES545/solventa-app-pf2/actions/workflows/android-ci.yml/badge.svg?branch=master&event=push)](https://github.com/JUANES545/solventa-app-pf2/actions/workflows/android-ci.yml?query=branch%3Amaster)
+
+**▶ [Ver la demo y su último despliegue](https://github.com/JUANES545/solventa-app-pf2/deployments)**
+ · **⬇ [Descargar la última entrega de pruebas](https://github.com/JUANES545/solventa-app-pf2/releases/latest)**
+
+La demo se abre desde el despliegue exitoso de **Appetize**. Si todavía no existe uno,
+la primera publicación está pendiente. Las nuevas releases adjuntan la APK y su SHA-256;
+la versión histórica `0.1.0` no contiene APK. El badge muestra CI, no minutos disponibles.
+
 Aplicación Android de Solventa, desarrollada por el Grupo 2 para MISW4501 en la Universidad de los Andes.
 
 ## Comprobaciones y cobertura

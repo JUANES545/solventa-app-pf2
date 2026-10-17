@@ -1,4 +1,6 @@
 import importlib.util
+import hashlib
+import json
 from contextlib import redirect_stdout
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -114,6 +116,42 @@ class PreviewRequestTests(unittest.TestCase):
         self.assertIsNone(deploy.NoRedirect().redirect_request(
             request, None, 302, "Found", {}, "https://other.example/",
         ))
+
+    def test_retry_uses_the_original_release_commit_and_exposes_only_the_public_url(self):
+        metadata = Path(self.directory.name) / "release.json"
+        metadata.write_text(json.dumps({"commit": "b" * 40, "version": "0.2.0",
+                                       "sha256": hashlib.sha256(self.apk.read_bytes()).hexdigest()}))
+        outputs = Path(self.directory.name) / "outputs"
+        with redirect_stdout(StringIO()), \
+                patch.dict(deploy.os.environ, self.env | {"GITHUB_OUTPUT": str(outputs)}, clear=True), \
+                patch.object(deploy.sys, "argv", ["deploy_appetize.py", str(self.apk), str(metadata)]), \
+                patch.object(deploy, "build_opener") as opener:
+            opener.return_value.open.return_value = BytesIO(b'{"publicKey":"test-public-key"}')
+            deploy.main()
+            request = opener.return_value.open.call_args.args[0]
+        self.assertIn(b"master " + b"b" * 40, request.data)
+        self.assertIn("b" * 40, self.summary.read_text())
+        self.assertIn("0.2.0", self.summary.read_text())
+        self.assertEqual(outputs.read_text(), "url=https://appetize.io/app/test-public-key\n")
+
+    def test_wrong_release_checksum_is_rejected_before_any_upload(self):
+        metadata = Path(self.directory.name) / "release.json"
+        metadata.write_text(json.dumps({"commit": "b" * 40, "version": "0.2.0", "sha256": "0" * 64}))
+        with patch.dict(deploy.os.environ, self.env, clear=True), \
+                patch.object(deploy.sys, "argv", ["deploy_appetize.py", str(self.apk), str(metadata)]), \
+                patch.object(deploy, "build_opener") as opener:
+            with self.assertRaisesRegex(ValueError, "checksum"):
+                deploy.main()
+            opener.assert_not_called()
+        self.assertFalse(self.summary.exists())
+
+    def test_extra_arguments_cannot_silently_skip_release_metadata(self):
+        with patch.dict(deploy.os.environ, self.env, clear=True), \
+                patch.object(deploy.sys, "argv", ["deploy_appetize.py", str(self.apk), "release.json", "extra"]), \
+                patch.object(deploy, "build_opener") as opener:
+            with self.assertRaisesRegex(ValueError, "optional published release metadata"):
+                deploy.main()
+            opener.assert_not_called()
 
 
 if __name__ == "__main__":
