@@ -28,7 +28,7 @@ Only the App ID, installation ID and Jenkins credential ID may be shared for con
 
 ## Multibranch source
 
-`infra/jenkins/configure-multibranch.groovy` reads a non-secret approval file in Jenkins home and checks only the credential's ID/type. It configures project `solventa-android`, origin PR discovery, merge-based builds and check name `Solventa Android Jenkins`. The GitHub Checks plugin publishes against the PR head, even when the workspace contains the merge revision. Logs are suppressed in the published check.
+`infra/jenkins/configure-multibranch.groovy` reads a non-secret approval file in Jenkins home and checks only the credential's ID/type. It configures project `solventa-android`, origin PR discovery, merge-based builds and check name `CI / Validación (Jenkins)`. The GitHub Checks plugin publishes against the PR head, even when the workspace contains the merge revision. Logs are suppressed in the published check.
 
 The initializer does not integrate a PR, modify GitHub branch protection or read the credential's private-key value. The first scan is started only after the credential and lifecycle prerequisites have been validated. Existing unrelated projects are not overwritten.
 

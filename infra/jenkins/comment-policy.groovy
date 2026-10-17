@@ -1,4 +1,8 @@
 class SolventaCommentPolicy {
+    static boolean canSchedule(boolean queued, boolean building) {
+        !queued && !building
+    }
+
     static boolean isCommand(String body) {
         body != null && body.trim() == '/test-jenkins'
     }
