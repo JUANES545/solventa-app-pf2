@@ -19,6 +19,13 @@ sin red ni credenciales. Requiere Python 3.10+ (ya disponible en el agente compa
 
 ### Migración administrativa pendiente
 
+El scanner ahora difiere solicitudes de un PR que ya esté en cola o ejecutándose,
+sin consumir su comentario. Evita que Jenkins agrupe solicitudes con revisiones distintas
+y valide solo la anterior. Los tests de `infra/jenkins/test-comment-policy.groovy` cubren
+los estados ocupado/libre. Este ajuste del scanner requiere despliegue administrativo:
+integrar el PR no reemplaza los temporizadores ya cargados. No ejecutar otra copia del
+inicializador encima del timer existente; programar una recarga controlada, sin builds activos.
+
 1. Verificar ambos checks en el mismo SHA y que provengan de la App `5247357`.
 2. Sustituir el contexto obligatorio antiguo por `CI / Validación (Jenkins)` en develop/master,
    preservando todos los demás checks, revisión, actualización estricta y restricciones.
