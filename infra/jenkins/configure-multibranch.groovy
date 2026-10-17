@@ -41,8 +41,9 @@ if (configFile.isFile()) {
     source.setId('solventa-android-github')
     source.setCredentialsId(credentialId)
     def checks = new GitHubSCMSourceStatusChecksTrait()
-    checks.setName('Solventa Android Jenkins')
+    checks.setName('CI / Validación (Jenkins)')
     checks.setSuppressLogs(true)
+    checks.setSkipNotifications(true)
     source.setTraits([
         new OriginPullRequestDiscoveryTrait(1),
         new WildcardSCMHeadFilterTrait('PR-*', ''),
@@ -65,7 +66,7 @@ if (configFile.isFile()) {
         project: name,
         repository: config.owner + '/' + config.repository,
         credentialId: credentialId,
-        checksName: 'Solventa Android Jenkins',
+        checksName: 'CI / Validación (Jenkins)',
         forkDiscovery: false,
         scanScheduled: false,
     ])

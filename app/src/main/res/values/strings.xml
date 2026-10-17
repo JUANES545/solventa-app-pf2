@@ -9,4 +9,17 @@
     <string name="biometric_sign_in">Ingresar con huella o rostro</string>
     <string name="forgot_password">Olvidé mi contraseña</string>
     <string name="create_account">Crear cuenta</string>
+    <string name="signing_in">Ingresando…</string>
+    <string name="sign_out">Cerrar sesión</string>
+    <string name="session_greeting">Hola, %1$s</string>
+    <string name="session_confirmed">Accediste con tu cuenta de Solventa.</string>
+    <string name="auth_required">Ingresa tu correo y contraseña.</string>
+    <string name="auth_email">Ingresa un correo válido.</string>
+    <string name="auth_password">La contraseña debe tener entre 8 y 128 caracteres.</string>
+    <string name="auth_invalid">No fue posible iniciar sesión. Revisa tus credenciales.</string>
+    <string name="auth_expired">Tu sesión expiró. Ingresa nuevamente.</string>
+    <string name="auth_rate_limit">Demasiados intentos. Espera antes de volver a ingresar.</string>
+    <string name="auth_unavailable">No fue posible contactar el servicio. Revisa tu conexión e intenta nuevamente.</string>
+    <string name="auth_storage">No se pudo acceder al almacenamiento seguro. Intenta nuevamente.</string>
+    <string name="auth_logout_remote">La sesión se eliminó del dispositivo, pero no pudimos confirmar el cierre remoto.</string>
 </resources>

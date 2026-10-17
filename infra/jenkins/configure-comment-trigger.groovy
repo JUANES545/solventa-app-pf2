@@ -60,6 +60,8 @@ Timer.get().scheduleWithFixedDelay({
                     project.scheduleBuild2(0)
                     return
                 }
+                // Jenkins puede agrupar solicitudes en cola y conservar la revisión anterior.
+                if (!policy.canSchedule(job.isInQueue(), job.isBuilding())) return
                 def branch = project.getProjectFactory().getBranch(job)
                 def source = project.getSCMSource(branch.sourceId)
                 def revision = source.fetch(branch.head, null)

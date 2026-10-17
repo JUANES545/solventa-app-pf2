@@ -2,6 +2,11 @@ def policy = new GroovyClassLoader().parseClass(new File(args[0]))
 def base = [id: 12L, body: '/test-jenkins', createdAt: 1000L, updatedAt: 1000L,
             human: true, permission: 'WRITE', open: true, origin: true, target: 'develop']
 assert policy.eligible(base, 900L, [])
+assert policy.canSchedule(false, false)
+for (busy in [[true, false], [false, true], [true, true]]) {
+    assert !policy.canSchedule(busy[0], busy[1])
+    assert policy.eligible(base, 900L, []) // La solicitud sigue pendiente, no consumida.
+}
 assert policy.eligible(base + [body: ' /test-jenkins\n'], 900L, [])
 assert !policy.eligible(base, 1001L, [])
 assert !policy.eligible(base, 900L, [12L])

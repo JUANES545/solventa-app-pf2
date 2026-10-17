@@ -14,7 +14,7 @@ Activation requires a reviewed migration of develop's classic protection to equi
 
 1. Save the complete existing protection privately for comparison/recovery.
 2. Create active develop rulesets preserving PR-only changes, blocked force pushes/deletion and resolved review conversations. No admin/write-role bypasses.
-3. Place one approval (stale reviews dismissed) and the existing strict required checks in an additional develop ruleset: Android verification (15368), Android UI tests (15368), Solventa Android Jenkins (5247357).
+3. Place one approval (stale reviews dismissed) and the existing strict required checks in an additional develop ruleset: Android verification (15368), Android UI tests (15368), CI / Validación (Jenkins) (5247357).
 4. Only this additional ruleset grants the dedicated App `Integration` bypass in `pull_request` mode. The non-bypass PR/force-push/deletion rules still apply to the App.
 5. Compare effective protections before removing the redundant classic develop rule. Never disable all protection as an intermediate step. Master must remain unchanged.
 6. Verify effective normal-PR protections and denied direct pushes. Do not perform destructive test pushes.

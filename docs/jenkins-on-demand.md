@@ -4,7 +4,7 @@
 
 Jenkins is required, on-demand verification for PRs into develop and master. GitHub Actions remains automatic and required. A collaborator with current write, maintain or administrator access requests Jenkins by posting a new PR conversation comment whose complete trimmed body is `/test-jenkins`.
 
-Both branches require `Android verification` and `Android UI tests` from the GitHub Actions App (15368), and `Solventa Android Jenkins` from the Jenkins App (5247357), plus one approval. Missing or unsuccessful checks block merging, not submission of a review. If Jenkins or AWS is unavailable, merging remains blocked; do not bypass protections. A new head commit requires a new Jenkins request and current checks.
+Both branches require `Android verification` and `Android UI tests` from the GitHub Actions App (15368), and `CI / Validación (Jenkins)` from the Jenkins App (5247357), plus one approval. Missing or unsuccessful checks block merging, not submission of a review. If Jenkins or AWS is unavailable, merging remains blocked; do not bypass protections. A new head commit requires a new Jenkins request and current checks.
 
 Read-only visitors, bots, fork PRs and PRs targeting branches other than develop/master are not eligible. Review comments inside code diffs are not scanned. The same comment is processed once; edited comments and comments created before activation are ignored. Post a new comment after publishing new commits if another verification is desired. Existing success on an earlier SHA is not proof of validation of a later SHA.
 

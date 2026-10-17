@@ -5,7 +5,7 @@ const shaPattern = /^[0-9a-f]{40}$/;
 const requiredChecks = [
   ['Android verification', 15368],
   ['Android UI tests', 15368],
-  ['Solventa Android Jenkins', 5247357],
+  ['CI / Validación (Jenkins)', 5247357],
 ];
 
 function sourceNumber(branch) {
@@ -88,8 +88,8 @@ async function automaticBackport({ github, context, core, appId, appSlug, source
       if (current !== source.merge_commit_sha) throw new Error('Existing branch was not overwritten');
     }
     const { data: created } = await github.rest.pulls.create({ owner, repo, head: branch, base: 'develop',
-      title: `Backport ${source.head.ref} to develop`,
-      body: `Synchronize approved release ${source.html_url}.\n\nExact integrated SHA: ${source.merge_commit_sha}.\n\nOnly exact, non-divergent synchronization qualifies for automatic integration. Release check evidence is reused, not rerun or fabricated.`, draft: false });
+      title: `Sincroniza ${source.head.ref} con develop`,
+      body: `Sincroniza la entrega aprobada ${source.html_url}.\n\nSHA integrado exacto: ${source.merge_commit_sha}.\n\nSolo la sincronización exacta y sin divergencias permite integración automática. Se reutiliza la evidencia validada de la entrega; no se repite ni se fabrica.`, draft: false });
     pulls = [created];
   }
   // Fresh API reads immediately before merging; do not trust event payloads or PR text.
@@ -97,8 +97,8 @@ async function automaticBackport({ github, context, core, appId, appSlug, source
   if (pull.mergeable !== true) throw new Error('Mergeability is unknown or conflicting; rerun after GitHub computes it');
   await verifyPull({ github, owner, repo, pull, appId, appSlug });
   const { data: merged } = await github.rest.pulls.merge({ owner, repo, pull_number: pull.number, sha: source.merge_commit_sha,
-    merge_method: 'merge', commit_title: `Synchronize release PR #${source.number} into develop [skip ci]`,
-    commit_message: `Exact release synchronization from ${source.html_url}; validated release evidence reused.` });
+    merge_method: 'merge', commit_title: `Sincroniza la entrega del PR #${source.number} con develop [skip ci]`,
+    commit_message: `Sincronización exacta desde ${source.html_url}; se reutiliza la evidencia validada de la entrega.` });
   if (!merged.merged) throw new Error('GitHub did not merge the backport');
   // Detect a base race: GitHub's merge API pins head, not base. Do not claim validation on unexpected content.
   const releaseCommit = (await github.rest.git.getCommit({ owner, repo, commit_sha: source.merge_commit_sha })).data;
