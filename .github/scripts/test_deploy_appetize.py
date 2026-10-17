@@ -1,5 +1,6 @@
 import importlib.util
-from io import BytesIO
+from contextlib import redirect_stdout
+from io import BytesIO, StringIO
 from pathlib import Path
 import tempfile
 import unittest
@@ -64,7 +65,8 @@ class PreviewRequestTests(unittest.TestCase):
                 deploy.main()
 
     def test_success_writes_only_the_confirmed_app_url_and_commit(self):
-        with patch.dict(deploy.os.environ, self.env, clear=True), \
+        output = StringIO()
+        with redirect_stdout(output), patch.dict(deploy.os.environ, self.env, clear=True), \
                 patch.object(deploy.sys, "argv", ["deploy_appetize.py", str(self.apk)]), \
                 patch.object(deploy, "build_opener") as opener:
             opener.return_value.open.return_value = BytesIO(b'{"publicKey":"test-public-key"}')
@@ -73,6 +75,7 @@ class PreviewRequestTests(unittest.TestCase):
         self.assertIn("https://appetize.io/app/test-public-key", summary)
         self.assertIn("a" * 40, summary)
         self.assertNotIn("test-token", summary)
+        self.assertNotIn("test-token", output.getvalue())
 
     def test_wrong_app_identity_cannot_publish_a_summary(self):
         with patch.dict(deploy.os.environ, self.env, clear=True), \
