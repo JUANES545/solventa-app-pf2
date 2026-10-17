@@ -1,4 +1,4 @@
-name: Android CI
+name: CI · Actions
 
 on:
   pull_request:
@@ -6,6 +6,12 @@ on:
   push:
     branches: [develop, master]
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'En master: versión publicada para reintentar Appetize sin recompilar (ej. 0.2.0)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -13,8 +19,8 @@ permissions:
   checks: read
 
 concurrency:
-  group: android-ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: android-ci-${{ github.ref == 'refs/heads/master' && github.sha || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   backport_policy:
@@ -22,7 +28,7 @@ jobs:
 
   verify:
     needs: backport_policy
-    if: needs.backport_policy.outputs.skip_tests != 'true'
+    if: needs.backport_policy.outputs.skip_tests != 'true' && inputs.release_version == ''
     name: Android verification
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -46,8 +52,38 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
 
+      - name: Set up Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+
+      - name: Probar políticas de release
+        run: node --test .github/scripts/release_android.test.cjs
+
+      - name: Validar versión de la entrega
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const { validateVersion } = require('./.github/scripts/release_android.cjs');
+            const version = await validateVersion({ github, context });
+            core.info(`Versión preparada: ${version.name} (código ${version.code})`);
+
       - name: Verify Android project
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+
+      - name: Test preview deployment request policy
+        run: python3 -m unittest discover -s .github/scripts -p 'test_deploy_appetize.py'
+
+      - name: Build preview APK
+        run: ./gradlew --no-daemon assemblePreview
+
+      - name: Retain validated preview APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-preview-apk
+          path: app/build/outputs/apk/preview/app-preview.apk
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload verification reports
         if: ${{ always() }}
@@ -61,6 +97,65 @@ jobs:
             app/build/test-results/testDebugUnitTest/
           if-no-files-found: warn
           retention-days: 14
+
+  publish_release:
+    name: Publicar entrega Android
+    needs: [verify, instrumentation]
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      inputs.release_version == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Check out the validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Download this run's preview APK
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: android-preview-apk
+          path: preview
+
+      - name: Crear tag, APK y release sin sobrescribir entregas
+        id: release
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const { publishRelease } = require('./.github/scripts/release_android.cjs');
+            const release = await publishRelease({ github, context, apk: 'preview/app-preview.apk' });
+            core.setOutput('version', release.version);
+            await core.summary.addHeading(`Entrega Android ${release.version}`)
+              .addLink('Descargar APK y checksum', `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/releases/tag/${release.version}`)
+              .addRaw(`\n\nCommit: \`${release.commit}\`\n\nSHA-256: \`${release.sha256}\`\n`).write();
+
+  deploy_preview:
+    name: Publicar preview Android
+    needs: publish_release
+    if: >-
+      always() && github.ref == 'refs/heads/master' && vars.APPETIZE_ENABLED == 'true' &&
+      (needs.publish_release.result == 'success' ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_version != ''))
+    permissions:
+      contents: read
+      deployments: write
+    concurrency:
+      group: appetize-stable-preview
+      cancel-in-progress: false
+    uses: ./.github/workflows/appetize-deploy.yml
+    with:
+      version: ${{ inputs.release_version || needs.publish_release.outputs.version }}
+      public_key: ${{ vars.APPETIZE_PUBLIC_KEY }}
+    secrets:
+      appetize_token: ${{ secrets.APPETIZE_API_TOKEN }}
 
   instrumentation:
     name: Android UI tests

@@ -1,6 +1,29 @@
 # Solventa Android — Proyecto Final II
 
+[![CI de master](https://github.com/JUANES545/solventa-app-pf2/actions/workflows/android-ci.yml/badge.svg?branch=master&event=push)](https://github.com/JUANES545/solventa-app-pf2/actions/workflows/android-ci.yml?query=branch%3Amaster)
+
+**▶ [Ver la demo y su último despliegue](https://github.com/JUANES545/solventa-app-pf2/deployments)**
+ · **⬇ [Descargar la última entrega de pruebas](https://github.com/JUANES545/solventa-app-pf2/releases/latest)**
+
+La demo se abre desde el despliegue exitoso de **Appetize**. Si todavía no existe uno,
+la primera publicación está pendiente. Las nuevas releases adjuntan la APK y su SHA-256;
+la versión histórica `0.1.0` no contiene APK. El badge muestra CI, no minutos disponibles.
+
 Aplicación Android de Solventa, desarrollada por el Grupo 2 para MISW4501 en la Universidad de los Andes.
+
+## Comprobaciones y cobertura
+
+En cada [pull request](https://github.com/JUANES545/solventa-app-pf2/pulls), abre **Checks → Cobertura**
+para ver líneas, ramas, pruebas y revisión compilada. El reporte corresponde a ese commit;
+no es un porcentaje fijo de la portada. En Android mide pruebas JVM, no instrumentación.
+
+Actions se ejecuta automáticamente. Un colaborador solicita Jenkins con un comentario nuevo
+`/test-jenkins`; después de subir cambios debe solicitarlo para la revisión nueva.
+Los reportes HTML/XML se conservan en Jenkins privado. No se exige un porcentaje mínimo nuevo.
+Consulta [la guía de CI](docs/ci.md) para ver alcance, nombres y lectura de resultados.
+
+La [preview compartida con Appetize](docs/appetize-preview.md) es una publicación separada:
+solo desde `master`, tras CI y configuración privada; integrar a `develop` no la activa.
 
 
 ## Requisitos previos
@@ -55,7 +78,7 @@ Como mínimo, la validación deberá confirmar:
 
 - `master` contiene versiones estables.
 - `develop` contiene el trabajo integrado para la siguiente versión.
-- Los cambios a cualquiera de estas ramas requieren pull request y al menos dos aprobaciones de integrantes del equipo.
+- Los cambios a cualquiera de estas ramas requieren pull request, al menos una aprobación y las comprobaciones exigidas por sus protecciones.
 
 ## Referencias
 
