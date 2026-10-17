@@ -16,14 +16,25 @@ pipeline {
     }
 
     stages {
-        stage('Checkout') {
+        stage('Código') {
             steps {
                 checkout scm
             }
         }
-        stage('Unit tests') {
+        stage('Pruebas unitarias y cobertura') {
             steps {
-                sh './gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -Dfile.encoding=UTF-8" -Pkotlin.compiler.execution.strategy=in-process testDebugUnitTest'
+                sh './gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -Dfile.encoding=UTF-8" -Pkotlin.compiler.execution.strategy=in-process jacocoDebugUnitTestReport'
+                sh 'test -s app/build/reports/coverage/unit/coverage.xml'
+                sh '''
+                    python3 - <<'PY'
+import xml.etree.ElementTree as E
+counter = E.parse('app/build/reports/coverage/unit/coverage.xml').getroot().find("counter[@type='LINE']")
+assert counter is not None, 'Missing coverage counter'
+covered, missed = int(counter.get('covered')), int(counter.get('missed'))
+assert covered + missed > 0, 'No application lines measured'
+print(f'Cobertura JVM de líneas: {100 * covered / (covered + missed):.2f}% ({covered}/{covered + missed})')
+PY
+                '''
             }
         }
         stage('Android Lint') {
@@ -31,7 +42,7 @@ pipeline {
                 sh './gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -Dfile.encoding=UTF-8" -Pkotlin.compiler.execution.strategy=in-process lintDebug'
             }
         }
-        stage('Build debug app') {
+        stage('Compilación debug') {
             steps {
                 sh './gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -Dfile.encoding=UTF-8" -Pkotlin.compiler.execution.strategy=in-process assembleDebug'
             }

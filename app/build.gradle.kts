@@ -1,11 +1,42 @@
 import java.util.Properties
+import org.gradle.testing.jacoco.tasks.JacocoReport
 
 plugins {
+    jacoco
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+}
+
+jacoco {
+    toolVersion = "0.8.13"
+}
+
+tasks.register<JacocoReport>("jacocoDebugUnitTestReport") {
+    dependsOn("testDebugUnitTest")
+    executionData(fileTree(layout.buildDirectory) {
+        include("jacoco/testDebugUnitTest.exec", "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec")
+    })
+    sourceDirectories.setFrom(files("src/main/java", "src/main/kotlin"))
+    val generated = listOf(
+        "**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*",
+        "**/Hilt_*.*", "**/*_Factory.*", "**/*_MembersInjector.*",
+        "**/*_HiltModules*.*", "**/*_HiltComponents*.*", "**/*_GeneratedInjector.*",
+        "**/hilt_aggregated_deps/**", "**/dagger/hilt/internal/**",
+    )
+    classDirectories.setFrom(files(
+        fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) { exclude(generated) },
+        fileTree(layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes")) { exclude(generated) },
+    ))
+    reports {
+        xml.required.set(true)
+        xml.outputLocation.set(layout.buildDirectory.file("reports/coverage/unit/coverage.xml"))
+        html.required.set(true)
+        html.outputLocation.set(layout.buildDirectory.dir("reports/coverage/unit/html"))
+        csv.required.set(false)
+    }
 }
 
 val appVersion = Properties().apply {
@@ -41,6 +72,12 @@ android {
     }
     lint {
         abortOnError = true
+    }
+    buildTypes.getByName("debug") {
+        enableUnitTestCoverage = true
+    }
+    testCoverage {
+        jacocoVersion = "0.8.13"
     }
 }
 
