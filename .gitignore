@@ -16,6 +16,7 @@ local.properties
 !.env.example
 
 # Generated packages and logs
+/reports/
 *.apk
 *.aab
 *.log
