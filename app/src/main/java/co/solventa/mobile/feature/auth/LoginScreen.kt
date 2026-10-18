@@ -60,9 +60,11 @@ fun LoginScreen(
     loading: Boolean = false,
     error: AuthError? = null,
     onLogin: (String, String) -> Unit = { _, _ -> },
+    initialEmail: String = "",
+    onCreateAccount: () -> Unit = {},
 ) {
     // Credentials are transient UI state, never saved across activity recreation.
-    var email by remember { mutableStateOf("") }
+    var email by remember(initialEmail) { mutableStateOf(initialEmail) }
     var password by remember { mutableStateOf("") }
     val passwordFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -97,7 +99,7 @@ fun LoginScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(32.dp))
 
-                LoginField(stringResource(R.string.email)) { label ->
+                AuthField(stringResource(R.string.email)) { label ->
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
@@ -106,13 +108,13 @@ fun LoginScreen(
                         singleLine = true,
                         enabled = !loading,
                         shape = RoundedCornerShape(12.dp),
-                        colors = loginFieldColors(),
+                        colors = authFieldColors(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                         keyboardActions = KeyboardActions(onNext = { passwordFocus.requestFocus() }),
                     )
                 }
                 Spacer(Modifier.height(20.dp))
-                LoginField(stringResource(R.string.password)) { label ->
+                AuthField(stringResource(R.string.password)) { label ->
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
@@ -122,7 +124,7 @@ fun LoginScreen(
                         singleLine = true,
                         enabled = !loading,
                         shape = RoundedCornerShape(12.dp),
-                        colors = loginFieldColors(),
+                        colors = authFieldColors(),
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = {
@@ -133,17 +135,7 @@ fun LoginScreen(
                 }
                 Spacer(Modifier.height(28.dp))
                 error?.let {
-                    val message = when (it) {
-                        AuthError.REQUIRED -> R.string.auth_required
-                        AuthError.EMAIL -> R.string.auth_email
-                        AuthError.PASSWORD -> R.string.auth_password
-                        AuthError.INVALID_CREDENTIALS -> R.string.auth_invalid
-                        AuthError.EXPIRED -> R.string.auth_expired
-                        AuthError.RATE_LIMIT -> R.string.auth_rate_limit
-                        AuthError.STORAGE -> R.string.auth_storage
-                        AuthError.UNAVAILABLE -> R.string.auth_unavailable
-                        AuthError.LOGOUT_REMOTE -> R.string.auth_logout_remote
-                    }
+                    val message = authErrorMessage(it)
                     Text(stringResource(message), color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     Spacer(Modifier.height(12.dp))
@@ -166,14 +158,16 @@ fun LoginScreen(
                 }
                 Spacer(Modifier.height(16.dp))
                 TextButton(onClick = {}, enabled = false) { Text(stringResource(R.string.forgot_password)) }
-                TextButton(onClick = {}, enabled = false) { Text(stringResource(R.string.create_account)) }
+                TextButton(onClick = { focusManager.clearFocus(); onCreateAccount() }, enabled = !loading) {
+                    Text(stringResource(R.string.create_account))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun LoginField(label: String, field: @Composable (String) -> Unit) {
+internal fun AuthField(label: String, field: @Composable (String) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
         field(label)
@@ -181,10 +175,26 @@ private fun LoginField(label: String, field: @Composable (String) -> Unit) {
 }
 
 @Composable
-private fun loginFieldColors() = OutlinedTextFieldDefaults.colors(
+internal fun authFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = MaterialTheme.colorScheme.surface,
     unfocusedContainerColor = MaterialTheme.colorScheme.surface,
 )
+
+internal fun authErrorMessage(error: AuthError) = when (error) {
+    AuthError.REQUIRED -> R.string.auth_required
+    AuthError.NAME -> R.string.auth_name
+    AuthError.EMAIL -> R.string.auth_email
+    AuthError.PASSWORD -> R.string.auth_password
+    AuthError.PASSWORD_MISMATCH -> R.string.auth_password_mismatch
+    AuthError.EMAIL_EXISTS -> R.string.auth_email_exists
+    AuthError.INVALID_REQUEST -> R.string.auth_request
+    AuthError.INVALID_CREDENTIALS -> R.string.auth_invalid
+    AuthError.EXPIRED -> R.string.auth_expired
+    AuthError.RATE_LIMIT -> R.string.auth_rate_limit
+    AuthError.STORAGE -> R.string.auth_storage
+    AuthError.UNAVAILABLE -> R.string.auth_unavailable
+    AuthError.LOGOUT_REMOTE -> R.string.auth_logout_remote
+}
 
 @Preview(widthDp = 390, heightDp = 844, showBackground = true)
 @Preview(widthDp = 320, heightDp = 568, fontScale = 1.5f, showBackground = true)

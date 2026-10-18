@@ -14,11 +14,12 @@ data class AuthGrant(
     val refreshExpiresAt: Long,
 )
 
-enum class AuthError { REQUIRED, EMAIL, PASSWORD, INVALID_CREDENTIALS, EXPIRED, RATE_LIMIT, UNAVAILABLE, STORAGE, LOGOUT_REMOTE }
+enum class AuthError { REQUIRED, NAME, EMAIL, PASSWORD, PASSWORD_MISMATCH, EMAIL_EXISTS, INVALID_REQUEST, INVALID_CREDENTIALS, EXPIRED, RATE_LIMIT, UNAVAILABLE, STORAGE, LOGOUT_REMOTE }
 class AuthProblem(val reason: AuthError) : Exception()
 class AuthHttpError(val status: Int) : Exception()
 
 interface AuthApi {
+    fun register(name: String, email: String, password: String): AuthUser
     fun login(email: String, password: String): AuthGrant
     fun refresh(token: String): AuthGrant
     fun current(token: String): AuthUser
@@ -36,7 +37,14 @@ fun validateLogin(email: String, password: String) {
     if (email.trim().length > 254 || !email.trim().matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))) {
         throw AuthProblem(AuthError.EMAIL)
     }
-    if (password.length !in 8..128) throw AuthProblem(AuthError.PASSWORD)
+    if (password.codePointCount(0, password.length) !in 8..128) throw AuthProblem(AuthError.PASSWORD)
+}
+
+fun validateRegistration(name: String, email: String, password: String, confirmation: String) {
+    val trimmedName = name.trim()
+    if (trimmedName.codePointCount(0, trimmedName.length) !in 1..120) throw AuthProblem(AuthError.NAME)
+    validateLogin(email, password)
+    if (password != confirmation) throw AuthProblem(AuthError.PASSWORD_MISMATCH)
 }
 
 class AuthRepository(
@@ -45,6 +53,16 @@ class AuthRepository(
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val mutex = Mutex()
+
+    suspend fun register(name: String, email: String, password: String, confirmation: String): AuthUser = withContext(Dispatchers.IO) {
+        validateRegistration(name, email, password, confirmation)
+        mutex.withLock {
+            val user = api.register(name.trim(), email.trim(), password)
+            // A new account must not restore a previously cached identity on the next resume.
+            store.clear()
+            user
+        }
+    }
 
     suspend fun login(email: String, password: String): AuthUser = withContext(Dispatchers.IO) {
         validateLogin(email, password)

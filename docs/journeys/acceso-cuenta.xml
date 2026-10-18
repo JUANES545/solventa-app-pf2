@@ -1,0 +1,25 @@
+<journey name="SOL-332 — Registro, acceso y cuenta Android">
+  <description>Physical-device journey against the deployed mobile BFF. Use isolated credentials in memory; never include credentials or tokens in reports.</description>
+  <actions>
+    <action>Open Solventa on the connected physical device.</action>
+    <action>Tap Crear cuenta.</action>
+    <action>Verify the registration form is displayed.</action>
+    <action>Submit the empty form.</action>
+    <action>Verify the required-name validation is displayed.</action>
+    <action>Enter an isolated name, email, password and matching confirmation using the keyboard Next actions.</action>
+    <action>Submit using the keyboard Done action.</action>
+    <action>Verify Tu cuenta está lista is displayed without opening the authenticated account.</action>
+    <action>Tap Ir a iniciar sesión.</action>
+    <action>Verify the email is prepared and the password is empty.</action>
+    <action>Enter the isolated password and submit the login.</action>
+    <action>Verify Mi cuenta displays the authenticated user.</action>
+    <action>Close the application process and open Solventa again.</action>
+    <action>Verify the same account is restored without entering credentials.</action>
+    <action>Tap Cerrar sesión.</action>
+    <action>Verify the login is displayed and protected account information is no longer visible.</action>
+    <action>Open Crear cuenta and submit the same isolated account again.</action>
+    <action>Verify the existing-email error is displayed without registering or authenticating the user.</action>
+    <action>Return to login and clear the isolated email.</action>
+    <action>Verify the application is left on the login screen without credentials.</action>
+  </actions>
+</journey>
