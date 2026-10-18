@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const timers = require('node:timers/promises');
 const { verifyPull, automaticBackport, sourceNumber } = require('./verified-backport.cjs');
 const HEAD = 'a'.repeat(40), RELEASE = 'b'.repeat(40), BASE = 'c'.repeat(40);
 
@@ -73,9 +74,46 @@ test('automatic merge uses verified PR and never calls review APIs', async () =>
   await automaticBackport({ ...f, sourceId: 6, context: { repo: { owner: f.owner, repo: f.repo } }, core: { info: () => {} } });
   assert.equal(f.wasMerged(), true);
 });
-test('unknown mergeability does not merge', async () => {
+test('unknown mergeability stops after bounded retries without merging', async t => {
+  const wait = t.mock.method(timers, 'setTimeout', async () => {});
   const f = fixture(); f.pull.mergeable = null;
+  const get = t.mock.method(f.github.rest.pulls, 'get');
   await assert.rejects(automaticBackport({ ...f, sourceId: 6, context: { repo: { owner: f.owner, repo: f.repo } }, core: { info: () => {} } }));
+  assert.equal(f.wasMerged(), false);
+  assert.equal(get.mock.calls.filter(call => call.arguments[0].pull_number === 7).length, 5);
+  assert.equal(wait.mock.callCount(), 4);
+});
+test('new PR waits for GitHub to compute mergeability and then integrates normally', async t => {
+  const wait = t.mock.method(timers, 'setTimeout', async () => {});
+  const f = fixture();
+  const get = f.github.rest.pulls.get;
+  let reads = 0;
+  t.mock.method(f.github.rest.pulls, 'get', async args => {
+    if (args.pull_number !== 7) return get(args);
+    return { data: { ...f.pull, mergeable: ++reads < 3 ? null : true } };
+  });
+  await automaticBackport({ ...f, sourceId: 6, context: { repo: { owner: f.owner, repo: f.repo } }, core: { info: () => {} } });
+  assert.equal(f.wasMerged(), true);
+  assert.equal(reads, 3);
+  assert.equal(wait.mock.callCount(), 2);
+});
+test('real conflicts are not retried or bypassed', async t => {
+  const wait = t.mock.method(timers, 'setTimeout', async () => {});
+  const f = fixture(); f.pull.mergeable = false;
+  await assert.rejects(automaticBackport({ ...f, sourceId: 6, context: { repo: { owner: f.owner, repo: f.repo } }, core: { info: () => {} } }), /conflicts/);
+  assert.equal(f.wasMerged(), false);
+  assert.equal(wait.mock.callCount(), 0);
+});
+test('changed commits during the wait still fail identity and SHA verification', async t => {
+  t.mock.method(timers, 'setTimeout', async () => {});
+  const f = fixture();
+  const get = f.github.rest.pulls.get;
+  let reads = 0;
+  t.mock.method(f.github.rest.pulls, 'get', async args => {
+    if (args.pull_number !== 7) return get(args);
+    return { data: { ...f.pull, mergeable: ++reads < 2 ? null : true, head: { ...f.pull.head, sha: HEAD } } };
+  });
+  await assert.rejects(automaticBackport({ ...f, sourceId: 6, context: { repo: { owner: f.owner, repo: f.repo } }, core: { info: () => {} } }), /different commits/);
   assert.equal(f.wasMerged(), false);
 });
 test('merge workflow binds configured identity to the App authenticated by its private key', () => {
