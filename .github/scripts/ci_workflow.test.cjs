@@ -19,7 +19,7 @@ test('CI no crea workflows ni jobs separados de backport para PRs normales', () 
   }
   assert.equal(workflow.includes('backport_policy:'), false);
   assert.match(verification, /name: Android verification/);
-  assert.match(verification, /run: node --test \.github\/scripts\/\*\.test\.cjs/);
+  assert.match(verification, /node --test \.github\/scripts\/\*\.test\.cjs/);
 });
 
 test('solo candidatos a backport leen la política, siempre desde la base confiable', () => {
@@ -33,12 +33,25 @@ test('solo candidatos a backport leen la política, siempre desde la base confia
 
 test('reutilizar evidencia omite todos los pasos de compilación y las pruebas UI', () => {
   for (const step of steps.slice(2)) {
+    if (step.startsWith('Publicar resumen de validación\n')) {
+      assert.ok(step.includes('if: always()'));
+      assert.ok(step.includes('run: python3 scripts/ci_summary.py verification'));
+      continue;
+    }
     assert.ok(step.includes('if: ' + skip) || step.includes('if: always() && ' + skip), step.split('\n')[0]);
   }
   assert.ok(verification.includes('skip_tests: ${{ steps.policy.outputs.skip_tests }}'));
   const instrumentation = workflow.split('\n  instrumentation:\n')[1];
   assert.ok(instrumentation.includes("if: needs.verify.outputs.skip_tests != 'true'"));
   assert.match(instrumentation, /needs: verify/);
+});
+
+test('ambos jobs publican resúmenes aun cuando falla una comprobación', () => {
+  for (const kind of ['verification', 'instrumentation']) {
+    assert.ok(workflow.includes(`run: python3 scripts/ci_summary.py ${kind}`));
+  }
+  assert.equal((workflow.match(/CI_STEPS: \$\{\{ toJSON\(steps\) \}\}/g) || []).length, 2);
+  assert.ok(workflow.includes("python3 -m unittest discover -s scripts -p 'test_*summary.py'"));
 });
 
 async function runPolicy(failure) {
