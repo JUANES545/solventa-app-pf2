@@ -5,6 +5,8 @@ Tu acceso a Solventa desde Android.
 <a href="https://appetize.io/app/b_gtzqvlruilrgvlrll4wschl6wy"><img src="docs/assets/abrir-solventa.svg" alt="Abrir Solventa" width="260" height="72"></a>
 <a href="https://github.com/JUANES545/solventa-app-pf2/releases/latest"><img src="docs/assets/descargar-solventa.svg" alt="Descargar la última versión de Solventa para Android" width="260" height="72"></a>
 
+[📊 Cobertura de código](https://github.com/Migue765/backend-solventa/wiki/Cobertura-de-codigo)
+
 Aplicación Android de Solventa, desarrollada por el Grupo 2 para MISW4501 en la Universidad de los Andes.
 
 
