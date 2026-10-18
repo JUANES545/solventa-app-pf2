@@ -6,7 +6,8 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const childProcess = require('node:child_process');
 
-const APK = 'solventa-preview.apk';
+const APK = 'Solventa.apk';
+const LEGACY_APK = 'solventa-preview.apk';
 const METADATA = 'release.json';
 const SUMS = 'SHA256SUMS';
 const shaPattern = /^[0-9a-f]{40}$/;
@@ -53,6 +54,33 @@ function trustedMaster(context) {
   }
 }
 
+async function publicationSource({ github, context }) {
+  if (context.eventName !== 'workflow_run') {
+    trustedMaster(context);
+    return { sha: context.sha };
+  }
+  const event = context.payload?.workflow_run;
+  if (!Number.isSafeInteger(event?.id) || event.id <= 0) throw new Error('Ejecución de CI inválida');
+  const run = (await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: event.id })).data;
+  const workflow = (await github.rest.actions.getWorkflow({ ...context.repo, workflow_id: 'android-ci.yml' })).data;
+  if (run.id !== event.id || run.workflow_id !== workflow.id || run.name !== 'CI · Validación' || run.event !== 'push' || run.head_branch !== 'master' ||
+      run.head_repository?.full_name !== `${context.repo.owner}/${context.repo.repo}` || run.status !== 'completed' ||
+      run.conclusion !== 'success' || !shaPattern.test(run.head_sha || '') || run.head_sha !== event.head_sha) {
+    throw new Error('Solo CI exitoso de un push confiable a master puede publicar');
+  }
+  const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun,
+    { ...context.repo, run_id: run.id, filter: 'latest', per_page: 100 });
+  for (const name of ['Android verification', 'Android UI tests']) {
+    const matches = jobs.filter(job => job.name === name);
+    if (matches.length !== 1 || matches[0].status !== 'completed' || matches[0].conclusion !== 'success') {
+      throw new Error(`CI incompleto: ${name}`);
+    }
+  }
+  const ancestry = (await github.rest.repos.compareCommitsWithBasehead({ ...context.repo, basehead: `${run.head_sha}...master` })).data;
+  if (ancestry.behind_by !== 0 || !['ahead', 'identical'].includes(ancestry.status)) throw new Error('El commit validado no pertenece a master');
+  return { sha: run.head_sha, runId: run.id };
+}
+
 async function tagCommit(github, repo, version) {
   const ref = await optional(() => github.rest.git.getRef({ ...repo, ref: `tags/${version}` }));
   if (!ref) return null;
@@ -88,21 +116,22 @@ function downloadAssets(repo, version, directory, names) {
 }
 
 async function publishRelease({ github, context, apk, properties = 'version.properties' }) {
-  trustedMaster(context);
+  const { sha } = await publicationSource({ github, context });
   const version = versionFromText(fs.readFileSync(properties, 'utf8'));
   const bytes = fs.readFileSync(apk);
-  const metadata = { version: version.name, version_code: version.code, commit: context.sha, sha256: hash(bytes) };
-  const files = new Map([[APK, bytes], [METADATA, Buffer.from(JSON.stringify(metadata, null, 2) + '\n')],
-    [SUMS, Buffer.from(`${metadata.sha256}  ${APK}\n`)]]);
+  const metadata = { version: version.name, version_code: version.code, commit: sha, sha256: hash(bytes) };
   const existingTag = await tagCommit(github, context.repo, version.name);
-  if (existingTag && existingTag !== context.sha) throw new Error('No se sobrescribe un tag de otro commit');
-  if (!existingTag) await github.rest.git.createRef({ ...context.repo, ref: `refs/tags/${version.name}`, sha: context.sha });
+  if (existingTag && existingTag !== sha) throw new Error('No se sobrescribe un tag de otro commit');
+  if (!existingTag) await github.rest.git.createRef({ ...context.repo, ref: `refs/tags/${version.name}`, sha });
   let release = await optional(() => github.rest.repos.getReleaseByTag({ ...context.repo, tag: version.name }));
   if (!release) {
     release = (await github.rest.repos.createRelease({ ...context.repo, tag_name: version.name,
-      target_commitish: context.sha, name: `Solventa Android ${version.name}`, draft: true, prerelease: false,
-      body: `APK de demostración firmada para pruebas; no es distribución de Play Store.\n\nCommit validado: \`${context.sha}\`.\n\nLa demo de Appetize muestra la última versión desplegada, no una copia histórica de esta entrega.` })).data;
+      target_commitish: sha, name: `Solventa ${version.name}`, draft: true, prerelease: false,
+      body: `[Descargar para Android](https://github.com/${context.repo.owner}/${context.repo.repo}/releases/download/${version.name}/${APK}) · [Abrir Solventa](https://appetize.io/app/b_gtzqvlruilrgvlrll4wschl6wy)` })).data;
   }
+  const apkName = release.assets.some(asset => asset.name === LEGACY_APK) && !release.assets.some(asset => asset.name === APK) ? LEGACY_APK : APK;
+  const files = new Map([[apkName, bytes], [METADATA, Buffer.from(JSON.stringify(metadata, null, 2) + '\n')],
+    [SUMS, Buffer.from(`${metadata.sha256}  ${apkName}\n`)]]);
   for (const [name, data] of files) {
     let existing = release.assets.find(asset => asset.name === name);
     // GitHub puede dejar un asset vacío "starter" tras un error 502 de subida.
@@ -127,11 +156,11 @@ async function publishRelease({ github, context, apk, properties = 'version.prop
     }
   }
   if (release.draft) await github.rest.repos.updateRelease({ ...context.repo, release_id: release.id, draft: false, make_latest: 'legacy' });
-  return { version: version.name, commit: context.sha, sha256: metadata.sha256 };
+  return { version: version.name, commit: sha, sha256: metadata.sha256 };
 }
 
-async function preparePreview({ github, context, version, publicKey }) {
-  trustedMaster(context);
+async function prepareDeployment({ github, context, version, publicKey }) {
+  await publicationSource({ github, context });
   if (!versionPattern.test(version || '') || !/^[A-Za-z0-9_-]{6,128}$/.test(publicKey || '')) throw new Error('Versión o destino de Appetize inválido');
   const release = (await github.rest.repos.getReleaseByTag({ ...context.repo, tag: version })).data;
   if (release.draft || release.prerelease) throw new Error('La entrega debe estar publicada');
@@ -141,11 +170,13 @@ async function preparePreview({ github, context, version, publicKey }) {
 }
 
 async function downloadRelease({ github, context, version, directory }) {
-  trustedMaster(context);
+  await publicationSource({ github, context });
   if (!versionPattern.test(version || '')) throw new Error('Versión inválida');
   const release = (await github.rest.repos.getReleaseByTag({ ...context.repo, tag: version })).data;
   if (release.draft || release.prerelease) throw new Error('La entrega debe estar publicada');
-  downloadAssets(context.repo, version, directory, [APK, METADATA, SUMS]);
+  const apkName = release.assets.some(asset => asset.name === APK) ? APK : LEGACY_APK;
+  if (!release.assets.some(asset => asset.name === apkName)) throw new Error('La entrega no contiene su APK');
+  downloadAssets(context.repo, version, directory, [apkName, METADATA, SUMS]);
   const metadata = JSON.parse(fs.readFileSync(path.join(directory, METADATA), 'utf8'));
   if (metadata.version !== version || !shaPattern.test(metadata.commit || '') ||
       !/^[0-9a-f]{64}$/.test(metadata.sha256 || '') || !Number.isSafeInteger(metadata.version_code) ||
@@ -155,22 +186,23 @@ async function downloadRelease({ github, context, version, directory }) {
   if (await tagCommit(github, context.repo, version) !== metadata.commit) throw new Error('El tag no coincide con la entrega');
   const ancestry = (await github.rest.repos.compareCommitsWithBasehead({ ...context.repo, basehead: `${metadata.commit}...master` })).data;
   if (ancestry.behind_by !== 0 || !['ahead', 'identical'].includes(ancestry.status)) throw new Error('La entrega no pertenece a master');
-  const bytes = fs.readFileSync(path.join(directory, APK));
-  if (hash(bytes) !== metadata.sha256 || fs.readFileSync(path.join(directory, SUMS), 'utf8') !== `${metadata.sha256}  ${APK}\n`) {
+  const bytes = fs.readFileSync(path.join(directory, apkName));
+  if (hash(bytes) !== metadata.sha256 || fs.readFileSync(path.join(directory, SUMS), 'utf8') !== `${metadata.sha256}  ${apkName}\n`) {
     throw new Error('La huella del APK no coincide con la entrega');
   }
+  if (apkName !== APK) fs.renameSync(path.join(directory, apkName), path.join(directory, APK));
   return metadata;
 }
 
-async function deployPreview({ github, context, directory, publicKey }) {
-  trustedMaster(context);
+async function deployApp({ github, context, directory, publicKey }) {
+  await publicationSource({ github, context });
   if (!/^[A-Za-z0-9_-]{6,128}$/.test(publicKey || '')) throw new Error('Destino de Appetize inválido');
   const metadata = JSON.parse(fs.readFileSync(path.join(directory, METADATA), 'utf8'));
   if (!shaPattern.test(metadata.commit || '') || !versionPattern.test(metadata.version || '')) throw new Error('Metadatos de despliegue inválidos');
   const url = `https://appetize.io/app/${publicKey}`;
   const logUrl = `${context.serverUrl || 'https://github.com'}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
   const deployment = (await github.rest.repos.createDeployment({ ...context.repo, ref: metadata.commit,
-    environment: 'appetize', description: `Android ${metadata.version}`, auto_merge: false, required_contexts: [],
+    environment: 'Solventa App', description: `Solventa ${metadata.version}`, auto_merge: false, required_contexts: [],
     production_environment: false })).data;
   if (!Number.isSafeInteger(deployment.id)) throw new Error('GitHub no confirmó el despliegue');
   const status = state => github.rest.repos.createDeploymentStatus({ ...context.repo, deployment_id: deployment.id,
@@ -188,4 +220,4 @@ async function deployPreview({ github, context, directory, publicKey }) {
   return { url, commit: metadata.commit, version: metadata.version };
 }
 
-module.exports = { versionFromText, assertIncrease, validateVersion, publishRelease, preparePreview, downloadRelease, deployPreview };
+module.exports = { versionFromText, assertIncrease, validateVersion, publicationSource, publishRelease, prepareDeployment, downloadRelease, deployApp };

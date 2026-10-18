@@ -50,7 +50,7 @@ App publicadora; un check antiguo o de otra App no satisface esa verificación. 
 activa la automatización de backport ni modifica sus condiciones de seguridad.
 
 La configuración del controlador y el nombre de la App no cambian por integrar este PR.
-Los nombres futuros de Actions (`CI / Calidad (Actions)`, `CI / Interfaz Android`) requieren
+Los nombres futuros de jobs de Actions (`CI / Calidad (Actions)`, `CI / Interfaz Android`) requieren
 la misma migración coordinada. La política de backport se verifica dentro de
 `Android verification`, solo para ramas candidatas; no crea checks separados en PRs normales.
 
@@ -93,3 +93,8 @@ El agente tiene un ejecutor compartido: esperar en cola no equivale a una prueba
 
 Appetize, releases y despliegue de backend son procesos de publicación separados. Un check
 verde no demuestra que haya una nueva versión publicada o un servicio disponible en AWS.
+
+En Android, `android-ci.yml` contiene solo verificación y pruebas UI. El workflow
+`android-publish.yml` publica después del CI exitoso de master, recuperando el mismo APK
+por ID de ejecución. Los PRs no muestran jobs de publicación omitidos. Los reintentos de
+una versión publicada se solicitan en **CD · Publicación**, no en CI.

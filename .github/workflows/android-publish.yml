@@ -1,0 +1,94 @@
+name: CD · Publicación
+
+on:
+  workflow_run:
+    workflows: ['CI · Validación']
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Versión publicada que se actualizará en Solventa App (sin recompilar)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: android-publicacion-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish_release:
+    name: Publicar versión
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Obtener código del commit validado
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Verificar ejecución de origen y pruebas completas
+        id: source
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const { publicationSource } = require('./.github/scripts/release_android.cjs');
+            const source = await publicationSource({ github, context });
+            core.setOutput('run_id', source.runId);
+
+      - name: Recuperar el APK de esa ejecución de CI
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: android-apk
+          path: distribution
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Crear versión sin sobrescribir entregas
+        id: release
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const { publishRelease } = require('./.github/scripts/release_android.cjs');
+            const release = await publishRelease({ github, context, apk: 'distribution/Solventa.apk' });
+            core.setOutput('version', release.version);
+            await core.summary.addHeading(`Solventa ${release.version}`)
+              .addLink('Descargar versión', `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/releases/tag/${release.version}`)
+              .addRaw(`\n\nCommit: \`${release.commit}\`\n\nSHA-256: \`${release.sha256}\`\n`).write();
+
+  deploy_app:
+    name: Solventa App
+    needs: publish_release
+    if: >-
+      always() && vars.APPETIZE_ENABLED == 'true' &&
+      (needs.publish_release.result == 'success' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'))
+    permissions:
+      contents: read
+      actions: read
+      deployments: write
+    concurrency:
+      group: appetize-stable-preview
+      cancel-in-progress: false
+    uses: ./.github/workflows/appetize-deploy.yml
+    with:
+      version: ${{ inputs.release_version || needs.publish_release.outputs.version }}
+      public_key: ${{ vars.APPETIZE_PUBLIC_KEY }}
+    secrets:
+      appetize_token: ${{ secrets.APPETIZE_API_TOKEN }}

@@ -16,12 +16,16 @@ function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'solventa-cd-test-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const properties = path.join(directory, 'version.properties');
-  const apk = path.join(directory, 'app-preview.apk');
+  const apk = path.join(directory, 'Solventa.apk');
   fs.writeFileSync(properties, 'VERSION_CODE=2\nVERSION_NAME=0.2.0\n');
   fs.writeFileSync(apk, 'APK de pruebas');
   const context = { repo: { owner: 'test-owner', repo: 'test-repo' }, ref: 'refs/heads/master', eventName: 'push', sha: SHA, runId: 123 };
-  const state = { tag: null, release: null, latest: '0.2.0', calls: [], assets: new Map(), ancestry: { status: 'identical', behind_by: 0 } };
+  const state = { tag: null, release: null, latest: '0.2.0', calls: [], assets: new Map(), ancestry: { status: 'identical', behind_by: 0 },
+    run: { id: 456, workflow_id: 10, name: 'CI · Validación', event: 'push', head_branch: 'master', head_sha: SHA,
+      head_repository: { full_name: 'test-owner/test-repo' }, status: 'completed', conclusion: 'success' },
+    jobs: ['Android verification', 'Android UI tests'].map(name => ({ name, status: 'completed', conclusion: 'success' })) };
   const github = { rest: {
+    actions: { getWorkflowRun: async () => ({ data: state.run }), getWorkflow: async () => ({ data: { id: 10 } }), listJobsForWorkflowRun: () => {} },
     git: {
       getRef: async () => { if (!state.tag) throw missing(); return { data: { object: { type: 'commit', sha: state.tag } } }; },
       createRef: async args => { state.calls.push(['tag', args]); state.tag = args.sha; },
@@ -43,7 +47,7 @@ function fixture(t) {
       createDeployment: async args => { state.calls.push(['deployment', args]); return { data: { id: 10 } }; },
       createDeploymentStatus: async args => { state.calls.push(['deployment-status', args]); },
     },
-  } };
+  }, paginate: async () => state.jobs };
   t.mock.method(childProcess, 'execFileSync', (command, args) => {
     if (command === 'python3') { state.calls.push(['appetize', args]); return; }
     assert.equal(command, 'gh');
@@ -103,11 +107,14 @@ test('release publicada contiene APK y metadatos del SHA exacto sin reconstruir'
   const metadata = await policy.publishRelease(f);
   assert.equal(metadata.commit, SHA);
   assert.equal(f.state.tag, SHA);
-  assert.deepEqual([...f.state.assets.keys()], ['solventa-preview.apk', 'release.json', 'SHA256SUMS']);
-  assert.equal(f.state.assets.get('solventa-preview.apk').toString(), 'APK de pruebas');
+  assert.deepEqual([...f.state.assets.keys()], ['Solventa.apk', 'release.json', 'SHA256SUMS']);
+  assert.equal(f.state.assets.get('Solventa.apk').toString(), 'APK de pruebas');
   const creation = f.state.calls.find(call => call[0] === 'release')[1];
   assert.equal(creation.target_commitish, SHA);
   assert.equal(creation.draft, true);
+  assert.equal(creation.name, 'Solventa 0.2.0');
+  assert.match(creation.body, /Descargar para Android/);
+  assert.doesNotMatch(creation.body, /demo|pruebas|Play Store|Commit/i);
   const publication = f.state.calls.find(call => call[0] === 'publish')[1];
   assert.equal(publication.make_latest, 'legacy');
   assert.equal(f.state.release.draft, false);
@@ -149,7 +156,7 @@ test('release parcial conserva sus assets y reanuda solo los que faltan', async 
   assert.equal(f.state.release.draft, true);
   f.github.rest.repos.uploadReleaseAsset = upload;
   await policy.publishRelease(f);
-  assert.equal(f.state.calls.filter(call => call[0] === 'asset' && call[1] === 'solventa-preview.apk').length, 1);
+  assert.equal(f.state.calls.filter(call => call[0] === 'asset' && call[1] === 'Solventa.apk').length, 1);
   assert.equal(f.state.release.draft, false);
 });
 
@@ -163,7 +170,7 @@ test('asset sin digest se descarga para comprobarlo, no se reemplaza', async t =
 
 test('solo un starter vacío de un borrador se limpia para reanudar la subida', async t => {
   const f = fixture(t);
-  f.state.release = { id: 1, draft: true, assets: [{ id: 99, name: 'solventa-preview.apk', state: 'starter', size: 0 }] };
+  f.state.release = { id: 1, draft: true, assets: [{ id: 99, name: 'Solventa.apk', state: 'starter', size: 0 }] };
   await policy.publishRelease(f);
   assert.ok(f.state.calls.some(call => call[0] === 'delete-empty' && call[1] === 99));
   assert.equal(f.state.release.draft, false);
@@ -171,7 +178,7 @@ test('solo un starter vacío de un borrador se limpia para reanudar la subida', 
 
 test('un asset de una release pública no se borra aunque parezca incompleto', async t => {
   const f = fixture(t);
-  f.state.release = { id: 1, draft: false, assets: [{ id: 99, name: 'solventa-preview.apk', state: 'starter', size: 0, digest: 'sha256:' + '0'.repeat(64) }] };
+  f.state.release = { id: 1, draft: false, assets: [{ id: 99, name: 'Solventa.apk', state: 'starter', size: 0, digest: 'sha256:' + '0'.repeat(64) }] };
   await assert.rejects(policy.publishRelease(f), /diferente/);
   assert.equal(f.state.calls.filter(call => call[0] === 'delete-empty').length, 0);
 });
@@ -181,8 +188,8 @@ test('recuperación descarga el APK original y valida tag, huella y pertenencia 
   const directory = path.join(f.directory, 'recovery');
   const metadata = await policy.downloadRelease({ ...f, version: '0.2.0', directory });
   assert.equal(metadata.commit, SHA);
-  assert.equal(fs.readFileSync(path.join(directory, 'solventa-preview.apk'), 'utf8'), 'APK de pruebas');
-  f.state.assets.set('solventa-preview.apk', Buffer.from('corrupto'));
+  assert.equal(fs.readFileSync(path.join(directory, 'Solventa.apk'), 'utf8'), 'APK de pruebas');
+  f.state.assets.set('Solventa.apk', Buffer.from('corrupto'));
   await assert.rejects(policy.downloadRelease({ ...f, version: '0.2.0', directory: path.join(f.directory, 'bad') }), /huella/);
 });
 
@@ -194,19 +201,19 @@ test('recuperación no admite borradores ni commits fuera de master', async t =>
   await assert.rejects(policy.downloadRelease({ ...f, version: '0.2.0', directory: path.join(f.directory, 'diverged') }), /master/);
 });
 
-test('solo la última release se prepara para la demo, sin despliegue falso de una antigua', async t => {
+test('solo la última release se prepara para la app, sin despliegue falso de una antigua', async t => {
   const f = fixture(t); await policy.publishRelease(f);
-  assert.deepEqual(await policy.preparePreview({ ...f, version: '0.2.0', publicKey: 'test-public-key' }),
+  assert.deepEqual(await policy.prepareDeployment({ ...f, version: '0.2.0', publicKey: 'test-public-key' }),
     { publish: true, version: '0.2.0', url: 'https://appetize.io/app/test-public-key' });
   f.state.latest = '0.3.0';
-  assert.deepEqual(await policy.preparePreview({ ...f, version: '0.2.0', publicKey: 'test-public-key' }), { publish: false });
+  assert.deepEqual(await policy.prepareDeployment({ ...f, version: '0.2.0', publicKey: 'test-public-key' }), { publish: false });
 });
 
 test('una versión inexistente o borrador no se presenta como despliegue omitido exitoso', async t => {
   const f = fixture(t);
-  await assert.rejects(policy.preparePreview({ ...f, version: '0.2.0', publicKey: 'test-public-key' }), /No existe/);
+  await assert.rejects(policy.prepareDeployment({ ...f, version: '0.2.0', publicKey: 'test-public-key' }), /No existe/);
   await policy.publishRelease(f); f.state.release.draft = true;
-  await assert.rejects(policy.preparePreview({ ...f, version: '0.2.0', publicKey: 'test-public-key' }), /publicada/);
+  await assert.rejects(policy.prepareDeployment({ ...f, version: '0.2.0', publicKey: 'test-public-key' }), /publicada/);
 });
 
 test('ningún PR, develop o tag puede publicar una release', async t => {
@@ -222,10 +229,11 @@ test('despliegue registra el SHA de la APK original, no el código del workflow 
   const directory = path.join(f.directory, 'deploy');
   await policy.downloadRelease({ ...f, version: '0.2.0', directory });
   f.context.sha = BASE;
-  const result = await policy.deployPreview({ ...f, directory, publicKey: 'test-public-key' });
+  const result = await policy.deployApp({ ...f, directory, publicKey: 'test-public-key' });
   const deployment = f.state.calls.find(call => call[0] === 'deployment')[1];
   assert.equal(deployment.ref, SHA);
   assert.equal(deployment.auto_merge, false);
+  assert.equal(deployment.environment, 'Solventa App');
   assert.deepEqual(f.state.calls.filter(call => call[0] === 'deployment-status').map(call => call[1].state), ['in_progress', 'success']);
   assert.equal(result.commit, SHA);
 });
@@ -235,7 +243,55 @@ test('fallo de Appetize registra failure y conserva la release publicada', async
   const directory = path.join(f.directory, 'deploy');
   await policy.downloadRelease({ ...f, version: '0.2.0', directory });
   t.mock.method(childProcess, 'execFileSync', () => { throw new Error('Appetize rechazó la subida'); });
-  await assert.rejects(policy.deployPreview({ ...f, directory, publicKey: 'test-public-key' }), /rechazó/);
+  await assert.rejects(policy.deployApp({ ...f, directory, publicKey: 'test-public-key' }), /rechazó/);
   assert.deepEqual(f.state.calls.filter(call => call[0] === 'deployment-status').map(call => call[1].state), ['in_progress', 'failure']);
   assert.equal(f.state.release.draft, false);
+});
+
+test('CD publica el SHA de CI, no el SHA de la rama predeterminada del workflow_run', async t => {
+  const f = fixture(t);
+  f.context.eventName = 'workflow_run'; f.context.ref = 'refs/heads/develop'; f.context.sha = BASE;
+  f.context.payload = { workflow_run: { id: 456, head_sha: SHA } };
+  assert.deepEqual(await policy.publicationSource(f), { sha: SHA, runId: 456 });
+  const release = await policy.publishRelease(f);
+  assert.equal(release.commit, SHA);
+  assert.equal(f.state.tag, SHA);
+});
+
+for (const [name, mutate] of [
+  ['CI de PR', f => { f.state.run.event = 'pull_request'; }],
+  ['fork', f => { f.state.run.head_repository.full_name = 'other/repo'; }],
+  ['develop', f => { f.state.run.head_branch = 'develop'; }],
+  ['CI fallido', f => { f.state.run.conclusion = 'failure'; }],
+  ['CI incompleto', f => { f.state.run.status = 'in_progress'; }],
+  ['otro workflow', f => { f.state.run.workflow_id = 11; }],
+  ['CI anterior a la separación', f => { f.state.run.name = 'CI · Actions'; }],
+  ['SHA distinto', f => { f.state.run.head_sha = BASE; }],
+  ['UI omitida', f => { f.state.jobs[1].conclusion = 'skipped'; }],
+  ['UI ausente', f => { f.state.jobs.pop(); }],
+  ['check ambiguo', f => { f.state.jobs.push(f.state.jobs[0]); }],
+  ['commit fuera de master', f => { f.state.ancestry = { status: 'diverged', behind_by: 1 }; }],
+]) test(`${name} no autoriza CD`, async t => {
+  const f = fixture(t);
+  f.context.eventName = 'workflow_run';
+  f.context.payload = { workflow_run: { id: 456, head_sha: SHA } };
+  mutate(f);
+  await assert.rejects(policy.publishRelease(f));
+  assert.equal(f.state.calls.length, 0);
+});
+
+test('las releases anteriores mantienen su APK y sus checksums, sin romper recuperación', async t => {
+  const f = fixture(t); await policy.publishRelease(f);
+  const legacy = 'solventa-preview.apk';
+  f.state.assets.set(legacy, f.state.assets.get('Solventa.apk'));
+  f.state.assets.delete('Solventa.apk');
+  f.state.assets.set('SHA256SUMS', Buffer.from(f.state.assets.get('SHA256SUMS').toString().replace('Solventa.apk', legacy)));
+  f.state.release.assets = [...f.state.assets].map(([name, data]) => ({ name, digest: digest(data) }));
+  const calls = f.state.calls.length;
+  await policy.publishRelease(f);
+  assert.equal(f.state.calls.length, calls);
+  const directory = path.join(f.directory, 'legacy');
+  await policy.downloadRelease({ ...f, version: '0.2.0', directory });
+  assert.equal(fs.readFileSync(path.join(directory, 'Solventa.apk'), 'utf8'), 'APK de pruebas');
+  assert.equal(fs.existsSync(path.join(directory, legacy)), false);
 });

@@ -7,7 +7,8 @@ const path = require('node:path');
 
 const workflows = path.join(__dirname, '../workflows');
 const workflow = fs.readFileSync(path.join(workflows, 'android-ci.yml'), 'utf8');
-const verification = workflow.split('\n  verify:\n')[1].split('\n  publish_release:\n')[0];
+const publication = fs.readFileSync(path.join(workflows, 'android-publish.yml'), 'utf8');
+const verification = workflow.split('\n  verify:\n')[1].split('\n  instrumentation:\n')[0];
 const steps = verification.split('\n      - name: ').slice(1);
 const candidate = "github.event_name == 'pull_request' && vars.BACKPORT_AUTOMATION_ENABLED == 'true' && startsWith(github.head_ref, 'backport/release-pr-')";
 const skip = "steps.policy.outputs.skip_tests != 'true'";
@@ -78,3 +79,34 @@ for (const failure of ['api', 'unverified']) {
     assert.ok(result.messages[0].includes('se ejecuta CI normal'));
   });
 }
+
+test('CI no contiene jobs de publicación ni permisos de escritura', () => {
+  assert.doesNotMatch(workflow, /publish_release:|deploy_app:|deploy_preview:|contents: write|deployments: write/);
+  assert.match(workflow, /name: android-apk/);
+  assert.match(workflow, /path: distribution\/Solventa\.apk/);
+});
+
+test('CD solo escucha CI de master y recupera el artefacto de la ejecución verificada', () => {
+  assert.match(workflow, /^name: CI · Validación/m);
+  assert.doesNotMatch(publication, /^  pull_request:/m);
+  assert.match(publication, /workflow_run:/);
+  assert.match(publication, /workflows: \['CI · Validación'\]/);
+  assert.match(publication, /branches: \[master\]/);
+  assert.ok(publication.includes("github.event.workflow_run.event == 'push'"));
+  assert.ok(publication.includes('github.event.workflow_run.head_repository.full_name == github.repository'));
+  assert.ok(publication.includes('run-id: ${{ steps.source.outputs.run_id }}'));
+  assert.ok(publication.includes('await publicationSource({ github, context })'));
+  assert.ok(publication.includes("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'"));
+  assert.doesNotMatch(publication, /gradlew|assemblePreview/);
+});
+
+test('la portada enlaza directamente a la app y a la última versión con imágenes accesibles', () => {
+  const readme = fs.readFileSync(path.join(__dirname, '../../README.md'), 'utf8');
+  assert.ok(readme.includes('href="https://appetize.io/app/b_gtzqvlruilrgvlrll4wschl6wy"'));
+  assert.ok(readme.includes('href="https://github.com/JUANES545/solventa-app-pf2/releases/latest"'));
+  assert.doesNotMatch(readme, /demo|preview|versión de pruebas|Proyecto Final|docs\/ci|\/deployments/i);
+  for (const image of ['abrir-solventa', 'descargar-solventa']) {
+    assert.ok(readme.includes(`src="docs/assets/${image}.svg" alt="`));
+    assert.ok(fs.existsSync(path.join(__dirname, `../../docs/assets/${image}.svg`)));
+  }
+});
