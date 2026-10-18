@@ -15,7 +15,7 @@ deploy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(deploy)
 
 
-class PreviewRequestTests(unittest.TestCase):
+class AppPublicationTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
@@ -39,6 +39,7 @@ class PreviewRequestTests(unittest.TestCase):
         self.assertNotIn(b"test-token", request.data)
         self.assertIn(b"AndroidManifest.xml", request.data)
         self.assertIn(b"master " + b"a" * 40, request.data)
+        self.assertIn(b'filename="Solventa.apk"', request.data)
 
     def test_rejects_missing_or_path_like_app_keys(self):
         for key in ("", "../apps", "https://other.example", "test/key"):
@@ -75,7 +76,7 @@ class PreviewRequestTests(unittest.TestCase):
             deploy.main()
         summary = self.summary.read_text(encoding="utf-8")
         self.assertIn("https://appetize.io/app/test-public-key", summary)
-        self.assertIn("a" * 40, summary)
+        self.assertIn("Abrir Solventa", summary)
         self.assertNotIn("test-token", summary)
         self.assertNotIn("test-token", output.getvalue())
 
@@ -130,7 +131,6 @@ class PreviewRequestTests(unittest.TestCase):
             deploy.main()
             request = opener.return_value.open.call_args.args[0]
         self.assertIn(b"master " + b"b" * 40, request.data)
-        self.assertIn("b" * 40, self.summary.read_text())
         self.assertIn("0.2.0", self.summary.read_text())
         self.assertEqual(outputs.read_text(), "url=https://appetize.io/app/test-public-key\n")
 
@@ -143,6 +143,22 @@ class PreviewRequestTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "checksum"):
                 deploy.main()
             opener.assert_not_called()
+        self.assertFalse(self.summary.exists())
+
+    def test_workflow_run_requires_successful_push_from_the_same_master(self):
+        event = Path(self.directory.name) / "event.json"
+        run = {"event": "push", "head_branch": "master", "head_sha": "b" * 40,
+               "status": "completed", "conclusion": "success", "head_repository": {"full_name": "owner/repo"}}
+        env = self.env | {"GITHUB_EVENT_NAME": "workflow_run", "GITHUB_REF": "refs/heads/develop",
+                          "GITHUB_REPOSITORY": "owner/repo", "GITHUB_EVENT_PATH": str(event)}
+        event.write_text(json.dumps({"workflow_run": run}))
+        with patch.dict(deploy.os.environ, env, clear=True):
+            self.assertEqual(deploy.source_commit(), "b" * 40)
+            for change in ({"event": "pull_request"}, {"head_branch": "develop"}, {"conclusion": "failure"},
+                           {"head_repository": {"full_name": "fork/repo"}}, {"status": "in_progress"}):
+                event.write_text(json.dumps({"workflow_run": run | change}))
+                with self.assertRaises(ValueError):
+                    deploy.source_commit()
         self.assertFalse(self.summary.exists())
 
     def test_extra_arguments_cannot_silently_skip_release_metadata(self):

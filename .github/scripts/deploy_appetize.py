@@ -1,4 +1,4 @@
-"""Update one existing Appetize preview without logging provider responses or secrets."""
+"""Publish Solventa without logging provider responses or secrets."""
 
 import json
 import hashlib
@@ -38,7 +38,7 @@ def upload_request(apk, public_key, token, sha, version=None):
     parts = []
     for name, value in fields.items():
         parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
-    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="solventa-preview.apk"\r\nContent-Type: application/vnd.android.package-archive\r\n\r\n'.encode())
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="Solventa.apk"\r\nContent-Type: application/vnd.android.package-archive\r\n\r\n'.encode())
     parts.extend([Path(apk).read_bytes(), f"\r\n--{boundary}--\r\n".encode()])
     return Request(
         "https://api.appetize.io/v1/apps/" + public_key,
@@ -47,13 +47,28 @@ def upload_request(apk, public_key, token, sha, version=None):
     )
 
 
-def main():
+def source_commit():
+    if os.environ.get("GITHUB_EVENT_NAME") == "workflow_run":
+        event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+        run = event.get("workflow_run", {})
+        if (run.get("event") != "push" or run.get("head_branch") != "master"
+                or run.get("conclusion") != "success" or run.get("status") != "completed"
+                or not os.environ.get("GITHUB_REPOSITORY")
+                or run.get("head_repository", {}).get("full_name") != os.environ["GITHUB_REPOSITORY"]
+                or not re.fullmatch(r"[a-f0-9]{40}", run.get("head_sha", ""))):
+            raise ValueError("Only successful CI from trusted master may publish")
+        return run["head_sha"]
     if os.environ.get("GITHUB_REF") != "refs/heads/master" or os.environ.get("GITHUB_EVENT_NAME") not in ("push", "workflow_dispatch"):
-        raise ValueError("Only trusted master runs may publish a preview")
+        raise ValueError("Only trusted master runs may publish")
+    return os.environ.get("GITHUB_SHA", "")
+
+
+def main():
+    sha = source_commit()
     if len(sys.argv) not in (2, 3):
         raise ValueError("Expected an APK and optional published release metadata")
     public_key = os.environ.get("APPETIZE_PUBLIC_KEY", "")
-    sha, version = os.environ.get("GITHUB_SHA", ""), None
+    version = None
     if len(sys.argv) == 3:
         metadata = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
         sha, version = metadata["commit"], metadata["version"]
@@ -70,16 +85,16 @@ def main():
         # Provider bodies may contain private app metadata: report only the status.
         raise RuntimeError(f"Appetize upload failed (HTTP {error.code})") from None
     if not isinstance(result, dict) or result.get("publicKey") != public_key:
-        raise ValueError("Provider returned a different app; preview identity not confirmed")
+        raise ValueError("Provider returned a different app; identity not confirmed")
     url = "https://appetize.io/app/" + public_key
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
-        summary.write(f"## Preview Android\n\n[Abre la app]({url})\n\nCommit de la app: `{sha}`\n")
+        summary.write(f"## Solventa\n\n[Abrir Solventa]({url})\n")
         if version is not None:
             summary.write(f"\nVersión: `{version}`\n")
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
             output.write(f"url={url}\n")
-    print("Existing preview updated successfully. The shared URL is in the run summary.")
+    print("Solventa publicada correctamente.")
 
 
 if __name__ == "__main__":

@@ -1,71 +1,48 @@
-# Solventa Android — Proyecto Final II
+# Solventa
 
-[![CI de master](https://github.com/JUANES545/solventa-app-pf2/actions/workflows/android-ci.yml/badge.svg?branch=master&event=push)](https://github.com/JUANES545/solventa-app-pf2/actions/workflows/android-ci.yml?query=branch%3Amaster)
+Tu acceso a Solventa desde Android.
 
-**▶ [Ver la demo y su último despliegue](https://github.com/JUANES545/solventa-app-pf2/deployments)**
- · **⬇ [Descargar la última entrega de pruebas](https://github.com/JUANES545/solventa-app-pf2/releases/latest)**
+<a href="https://appetize.io/app/b_gtzqvlruilrgvlrll4wschl6wy"><img src="docs/assets/abrir-solventa.svg" alt="Abrir Solventa" width="260" height="72"></a>
+<a href="https://github.com/JUANES545/solventa-app-pf2/releases/latest"><img src="docs/assets/descargar-solventa.svg" alt="Descargar la última versión de Solventa para Android" width="260" height="72"></a>
 
-La demo se abre desde el despliegue exitoso de **Appetize**. Si todavía no existe uno,
-la primera publicación está pendiente. Las nuevas releases adjuntan la APK y su SHA-256;
-la versión histórica `0.1.0` no contiene APK. El badge muestra CI, no minutos disponibles.
+## Desarrollo
 
-Aplicación Android de Solventa, desarrollada por el Grupo 2 para MISW4501 en la Universidad de los Andes.
+<details>
+<summary>Preparar el proyecto y ejecutar las pruebas</summary>
 
-## Comprobaciones y cobertura
+### Requisitos
 
-En cada [pull request](https://github.com/JUANES545/solventa-app-pf2/pulls), abre **Checks → Cobertura**
-para ver líneas, ramas, pruebas y revisión compilada. El reporte corresponde a ese commit;
-no es un porcentaje fijo de la portada. En Android mide pruebas JVM, no instrumentación.
+- Android Studio y JDK 17.
+- Android SDK 35.
+- Emulador Android o dispositivo físico.
 
-Actions se ejecuta automáticamente. Un colaborador solicita Jenkins con un comentario nuevo
-`/test-jenkins`; después de subir cambios debe solicitarlo para la revisión nueva.
-Los reportes HTML/XML se conservan en Jenkins privado. No se exige un porcentaje mínimo nuevo.
-Consulta [la guía de CI](docs/ci.md) para ver alcance, nombres y lectura de resultados.
-
-La [preview compartida con Appetize](docs/appetize-preview.md) es una publicación separada:
-solo desde `master`, tras CI y configuración privada; integrar a `develop` no la activa.
-
-
-## Requisitos previos
-
-- Git
-- Android Studio
-- JDK compatible con la versión de Gradle seleccionada
-- Android SDK y componentes requeridos por el proyecto
-- Emulador Android o dispositivo físico para ejecutar la aplicación
-
-
-## Instalación del repositorio
+### Instalación
 
 ```bash
 git clone https://github.com/JUANES545/solventa-app-pf2.git
+cd solventa-app-pf2
 ```
 
-Abre el repositorio en Android Studio una vez que se haya agregado el proyecto Android.
+Abre el proyecto en Android Studio y sincroniza Gradle.
 
-## Preparación del entorno Android
+### Compilación y pruebas
 
+```bash
+./gradlew assembleDebug lintDebug testDebugUnitTest
+./gradlew connectedDebugAndroidTest
+```
 
-1. Abre el proyecto desde Android Studio.
-2. Instala los componentes de Android SDK que solicite la configuración del proyecto.
-3. Configura el JDK requerido por el Gradle Wrapper del proyecto.
-4. Sincroniza Gradle.
-5. Resuelve los errores de sincronización antes de ejecutar la aplicación.
-6. Selecciona un emulador o dispositivo físico.
+El segundo comando requiere un emulador o dispositivo conectado. En Windows, usa `gradlew.bat`.
 
+### Ramas
 
+- `master`: versiones publicadas.
+- `develop`: integración de la siguiente versión.
 
-## Ejecución y pruebas
+Los cambios se revisan mediante pull requests. Las sincronizaciones exactas de versiones
+aprobadas se integran mediante la automatización de backport.
 
-Una vez que el proyecto Android esté incorporado, documenta y valida los comandos reales de compilación, pruebas y ejecución.
-
-Como mínimo, la validación deberá confirmar:
-
-1. Gradle sincroniza sin errores.
-2. La aplicación compila.
-3. La aplicación inicia en un emulador o dispositivo.
-4. Las pruebas disponibles se ejecutan correctamente.
-
+</details>
 
 ## Equipo
 
@@ -73,31 +50,3 @@ Como mínimo, la validación deberá confirmar:
 - Miguel Gómez — `Migue765`
 - Jazmin Córdoba — `JazminCorAndes`
 - Natalia Arandio — `nataliaarandio`
-
-## Colaboración y Git
-
-- `master` contiene versiones estables.
-- `develop` contiene el trabajo integrado para la siguiente versión.
-- Los cambios a cualquiera de estas ramas requieren pull request, al menos una aprobación y las comprobaciones exigidas por sus protecciones.
-
-## Referencias
-
-- [Backlog de Jira](https://proyectointegradorgrupo2.atlassian.net/jira/software/projects/SOL/boards/2/backlog)
-- [Historia de configuración del repositorio: SOL-146](https://proyectointegradorgrupo2.atlassian.net/browse/SOL-146)
-- [Documentación del proyecto](https://github.com/Migue765/proyecto-final-uniandes)
-- [Wiki del proyecto](https://github.com/Migue765/proyecto-final-uniandes/wiki)
-- [Repositorio Android anterior, solo como referencia](https://github.com/JUANES545/solventa-app)
-
-El repositorio anterior es una referencia; el caso del curso, los criterios de aceptación aprobados en Jira y el Figma vigente son la fuente de verdad para el alcance actual.
-
-## Solución de problemas
-
-### Android Studio no puede sincronizar Gradle
-- Confirma que el proyecto Android y el Gradle Wrapper ya estén incluidos.
-- Comprueba la versión de JDK requerida por el proyecto.
-- Revisa los mensajes de sincronización y los componentes de SDK faltantes.
-
-### No se puede ejecutar la aplicación
-- Confirma que el proyecto base ya haya sido agregado.
-- Comprueba que haya un emulador iniciado o un dispositivo conectado.
-- Documenta el error concreto y la solución verificada para que el resto del equipo pueda reproducirla.
