@@ -9,10 +9,10 @@ from pathlib import Path
 def ratio(covered: int, total: int) -> str:
     if not 0 <= covered <= total:
         raise ValueError("Invalid coverage counters")
-    return f"{100 * covered / total:.2f}% ({covered}/{total})" if total else "—"
+    return f"{100 * covered / total:.2f}%" if total else "—"
 
 
-def counters(path: Path) -> tuple[str, str]:
+def counters(path: Path) -> tuple[tuple[int, int], tuple[int, int]]:
     root = ET.parse(path).getroot()
     values = []
     for kind, metric in (("LINE", "lines"), ("BRANCH", "branches")):
@@ -29,26 +29,17 @@ def counters(path: Path) -> tuple[str, str]:
             raise ValueError("Unknown coverage format")
         if kind == "LINE" and total == 0:
             raise ValueError("No application lines measured")
-        values.append(ratio(covered, total))
+        ratio(covered, total)
+        values.append((covered, total))
     return values[0], values[1]
 
 
-def summarize(sources: list[str], tests: list[str], scope: str) -> tuple[str, bool]:
-    rows = []
-    problems = []
-    for source in sources:
-        label, filename = source.split("=", 1)
-        try:
-            lines, branches = counters(Path(filename))
-            rows.append(f"| {label} | {lines} | {branches} |")
-        except (OSError, ET.ParseError, KeyError, ValueError):
-            rows.append(f"| {label} | No disponible | No disponible |")
-            problems.append(f"Reporte ausente o inválido: {label}.")
-
+def junit_counts(patterns: list[str]) -> tuple[int, int, int, list[str]]:
     cases: list[ET.Element] = []
     seen: set[str] = set()
-    for pattern in tests:
-        paths = glob.glob(pattern)
+    problems = []
+    for pattern in patterns:
+        paths = glob.glob(pattern, recursive=True)
         if not paths:
             problems.append(f"JUnit ausente: `{pattern}`.")
         for filename in paths:
@@ -63,23 +54,56 @@ def summarize(sources: list[str], tests: list[str], scope: str) -> tuple[str, bo
             except (OSError, ET.ParseError, ValueError):
                 problems.append(f"JUnit inválido: `{filename}`.")
     failed = sum(c.find("failure") is not None or c.find("error") is not None for c in cases)
-    skipped = sum(c.find("skipped") is not None for c in cases)
-    title = "Cobertura incompleta" if problems else "Cobertura generada"
-    if len(rows) == 1 and not problems:
-        title += f": líneas {rows[0].split('|')[2].strip()}"
+    skipped = sum(c.find("skipped") is not None and c.find("failure") is None and c.find("error") is None for c in cases)
+    return len(cases) - failed - skipped, failed, skipped, problems
+
+
+def summarize(sources: list[str], tests: list[str], scope: str) -> tuple[str, bool]:
+    rows = []
+    problems = []
+    line_results = []
+    for source in sources:
+        label, filename = source.split("=", 1)
+        try:
+            lines, branches = counters(Path(filename))
+            line_results.append(ratio(*lines))
+            for metric, (covered, total) in (("Líneas", lines), ("Ramas", branches)):
+                if not total:
+                    progress = "⚪ No aplica"
+                elif covered * 100 >= total * 80:
+                    progress = "🟢 Objetivo alcanzado"
+                else:
+                    difference = 80 - 100 * covered / total
+                    distance = "< 0.01" if difference < 0.01 else f"{difference:.2f}"
+                    progress = f"🟠 A {distance} pp del objetivo"
+                rows.append(f"| {label} | {metric} | **{ratio(covered, total)}** | {covered} / {total} | {total - covered} | {progress} |")
+        except (OSError, ET.ParseError, KeyError, ValueError):
+            rows.append(f"| {label} | — | No disponible | — | — | 🔴 Revisar informe |")
+            problems.append(f"Reporte ausente o inválido: {label}.")
+
+    passed, failed, skipped, junit_problems = junit_counts(tests)
+    problems.extend(junit_problems)
+    title = "Cobertura incompleta" if problems else "Cobertura JVM"
+    if len(line_results) == 1 and not problems:
+        title += f": {line_results[0]} en líneas"
     summary = [
         title,
         "",
-        f"**Alcance:** {scope}",
+        "> 🎯 **Objetivo recomendado: 80 % en líneas y ramas.** Referencia de mejora; no bloquea la integración.",
         "",
-        "| Módulo | Líneas | Ramas |",
-        "| --- | --- | --- |",
+        "| Módulo | Métrica | Cobertura | Cubiertas / total | Pendientes | Frente al objetivo |",
+        "| --- | --- | ---: | ---: | ---: | --- |",
         *rows,
         "",
-        f"**Pruebas:** {len(cases) - failed - skipped} correctas, {failed} fallidas, "
-        f"{skipped} omitidas ({len(cases)} casos JUnit).",
+        "### Pruebas JVM",
         "",
-        "Sin umbral mínimo. Un reporte generado no certifica calidad funcional ni despliegue.",
+        "| ✅ Correctas | ❌ Fallidas | ⏭️ Omitidas | Total |",
+        "| ---: | ---: | ---: | ---: |",
+        f"| {passed} | {failed} | {skipped} | {passed + failed + skipped} |",
+        "",
+        f"**Alcance:** {scope}",
+        "",
+        "Los indicadores comparan cada métrica con el objetivo. **pp** = puntos porcentuales.",
     ]
     if problems:
         summary.extend(["", "**Reporte parcial; no usar como cobertura completa.**", *problems])
