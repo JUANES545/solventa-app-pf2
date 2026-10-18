@@ -6,7 +6,7 @@
   conteo JUnit actual y alcance JVM. Su enlace abre la pestaña Checks de GitHub, no localhost.
 - **CI / Validación (Jenkins)**: check principal obligatorio, publicado automáticamente
   por el controlador. El Jenkinsfile ya no publica un alias duplicado.
-- El workflow del PR define **CI · Actions**; GitHub puede mostrar todavía el nombre de
+- El workflow del PR define **CI · Validación**; GitHub puede mostrar todavía el nombre de
   la rama predeterminada hasta integrarlo. Sus jobs obligatorios no cambian.
 - JUnit sigue disponible dentro de Jenkins, sin publicar el redundante
   `Tests / Declarative: Post Actions`. Cada build limpia su workspace antes del checkout.
@@ -15,7 +15,7 @@
   Una cobertura generada no significa que todas las pruebas o el pipeline hayan pasado.
 
 Los resúmenes se construyen desde XML, no desde porcentajes escritos manualmente.
-`python3 -m unittest discover -s scripts -p test_coverage_summary.py` prueba el publicador
+`python3 -m unittest discover -s scripts -p 'test_*summary.py'` prueba los resúmenes
 sin red ni credenciales. Requiere Python 3.10+ (ya disponible en el agente compartido).
 
 ### Configuración administrativa verificada
@@ -31,7 +31,8 @@ y su metadato conservan el nombre nuevo tras un reinicio. No se cambió capacida
 Se preservaron una aprobación, revisión obsoleta descartada, conversaciones resueltas,
 actualización estricta, prohibición de bypass y bloqueo de force-push/borrado.
 
-`Cobertura` sigue informativa y sin mínimo nuevo. Una prueba de interfaz fallida sigue
+`Cobertura` sigue informativa con un **objetivo recomendado del 80 % en líneas y ramas**.
+Es una referencia de mejora, no un requisito nuevo de integración. Una prueba de interfaz fallida sigue
 bloqueando el PR: no se elimina, flexibiliza ni sustituye por el porcentaje de cobertura.
 
 El scanner ahora difiere solicitudes de un PR que ya esté en cola o ejecutándose,
@@ -72,6 +73,19 @@ compilación e instrumentación repetidas. Un candidato no válido ejecuta CI no
 
 ## Leer Jenkins
 
+### Resúmenes de validación y cobertura
+
+Cada job de Actions añade un resumen a la ejecución con los resultados reales de sus pasos,
+conteos JUnit y revisión validada. Verificación incluye el conteo de errores y advertencias
+de lint; interfaz utiliza únicamente los reportes del emulador. Los pasos omitidos, fallos
+e informes ausentes se identifican explícitamente, sin inventar resultados correctos.
+
+Cobertura desglosa líneas y ramas, elementos cubiertos, pendientes y distancia al objetivo
+recomendado del 80 %. 🟢 indica objetivo alcanzado; 🟠, mejora pendiente; ⚪, métrica no
+aplicable; 🔴, informe que requiere revisión. Los colores llevan texto para no depender
+solo de la percepción visual. La tabla de pruebas y los enlaces a HTML/JUnit completan el
+detalle. No se cambian conclusiones de checks ni protecciones por estar debajo del objetivo.
+
 Etapas: Código → Pruebas unitarias y cobertura → Android Lint → Compilación debug.
 Los resultados JUnit aparecen en **Tests** y los reportes en **Artifacts**:
 
@@ -79,7 +93,7 @@ Los resultados JUnit aparecen en **Tests** y los reportes en **Artifacts**:
 - `app/build/reports/coverage/unit/html/index.html`: cobertura por archivo/línea.
   Descargar la carpeta HTML completa si Jenkins restringe su visualización.
 - Reportes de lint y pruebas existentes se conservan. Un fallo no se convierte en éxito
-  para publicar cobertura; no se añade un porcentaje mínimo nuevo.
+  para publicar cobertura; el objetivo del 80 % es una recomendación, no un requisito obligatorio.
 
 Comando local: `./gradlew jacocoDebugUnitTestReport`. Mide el código de la app mediante
 las pruebas JVM; excluye clases generadas de recursos/Hilt, no clases reales de negocio.
@@ -97,4 +111,4 @@ verde no demuestra que haya una nueva versión publicada o un servicio disponibl
 En Android, `android-ci.yml` contiene solo verificación y pruebas UI. El workflow
 `android-publish.yml` publica después del CI exitoso de master, recuperando el mismo APK
 por ID de ejecución. Los PRs no muestran jobs de publicación omitidos. Los reintentos de
-una versión publicada se solicitan en **CD · Publicación**, no en CI.
+  una versión publicada se solicitan en **CD · Publicación**, no en CI.

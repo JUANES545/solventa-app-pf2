@@ -83,10 +83,14 @@ jobs:
           node-version: '22'
 
       - name: Probar scripts de automatización
+        id: automation
         if: steps.policy.outputs.skip_tests != 'true'
-        run: node --test .github/scripts/*.test.cjs
+        run: |
+          node --test .github/scripts/*.test.cjs
+          python3 -m unittest discover -s scripts -p 'test_*summary.py'
 
       - name: Validar versión de la entrega
+        id: version
         if: steps.policy.outputs.skip_tests != 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
@@ -96,14 +100,17 @@ jobs:
             core.info(`Versión preparada: ${version.name} (código ${version.code})`);
 
       - name: Verify Android project
+        id: android
         if: steps.policy.outputs.skip_tests != 'true'
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
 
       - name: Validar publicación de Solventa
+        id: publication
         if: steps.policy.outputs.skip_tests != 'true'
         run: python3 -m unittest discover -s .github/scripts -p 'test_deploy_appetize.py'
 
       - name: Compilar Solventa
+        id: package
         if: steps.policy.outputs.skip_tests != 'true'
         run: |
           ./gradlew --no-daemon assemblePreview
@@ -111,6 +118,7 @@ jobs:
           cp app/build/outputs/apk/preview/app-preview.apk distribution/Solventa.apk
 
       - name: Conservar APK validado
+        id: apk
         if: steps.policy.outputs.skip_tests != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -120,6 +128,7 @@ jobs:
           retention-days: 7
 
       - name: Upload verification reports
+        id: reports
         if: always() && steps.policy.outputs.skip_tests != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -131,6 +140,12 @@ jobs:
             app/build/test-results/testDebugUnitTest/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Publicar resumen de validación
+        if: always()
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
+        run: python3 scripts/ci_summary.py verification
 
   instrumentation:
     name: Android UI tests
@@ -164,6 +179,7 @@ jobs:
           sudo chmod 666 /dev/kvm
 
       - name: Run tests on Android 35
+        id: device
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 35
@@ -175,6 +191,7 @@ jobs:
           script: ./gradlew --no-daemon connectedDebugAndroidTest
 
       - name: Upload device test reports
+        id: reports
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -184,3 +201,9 @@ jobs:
             app/build/outputs/androidTest-results/connected/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Publicar resumen de interfaz
+        if: always()
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
+        run: python3 scripts/ci_summary.py instrumentation
