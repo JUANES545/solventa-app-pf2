@@ -1,4 +1,4 @@
-# Verified automatic backports — activation pending
+# Verified automatic backports
 
 The team approved a dedicated GitHub App for automatic release synchronization. This replaces manual review and repeated application tests only for an exact, already-approved release whose history contains current develop. Other PRs retain all checks and review requirements. This does not implement login, publish releases or change AWS.
 
@@ -26,8 +26,9 @@ GitHub grants bypass to an actor, not to a source branch. The App technically ca
 - Only merged origin release/* PRs into master qualify; hotfixes are not included.
 - Verify merge SHA belongs to current master, source-head required checks are successful from the expected Apps, and a human approval belongs to that source head.
 - Dedicated-App PR creator, App ID, repository, deterministic branch, target and head SHA must match API evidence. Existing PRs created by github-actions[bot] (including PR #7) are not silently adopted or auto-merged.
+- App identity uses the authenticated `app-slug` output from token creation, matched against configuration. Users API confirms that the PR author has the real Bot ID and login for that App. Do not rely on `performed_via_github_app`: it is absent from PR responses and can be null in Issues API.
 - Current develop must be an ancestor of the release merge. Divergent branches, human-added commits and conflicts require the existing manual flow. This constraint makes omission of repeated tests justified; combining different changes is not an already-validated tree.
-- Actions runs a small API policy check, not the application tests, for verified App backports. No fabricated successful test results. Merge commit includes [skip ci] to avoid the redundant push workflow. Other branches retain normal CI.
+- Inside `Android verification`, Actions runs a small API policy step only for candidate backport branches, loading trusted policy from the base commit before checking out any PR code. Verified App backports reuse release evidence instead of repeating application tests. Other branches run normal CI, including automation unit tests in that same job; no separate backport checks are created. Merge commit includes [skip ci] to avoid the redundant push workflow.
 - Jenkins already suppresses automatic builds. Do not request /test-jenkins on exact automatic backports; they merge via App bypass without Jenkins checks. Existing comments are not cancelled or deleted.
 - A new PR may have unknown mergeability briefly; the workflow fails visibly and can be rerun from master with the source PR number. Do not weaken verification for convenience.
 
@@ -39,8 +40,17 @@ The GitHub merge API pins the PR head SHA but has no base-SHA precondition. The 
 
 1. Review this implementation through an ordinary PR with Actions, Jenkins and approval; ship the workflow/policy to master through a reviewed release.
 2. Install/configure the App and private secret, verify identity without exposing token/key values, then perform the reviewed ruleset migration.
-3. Ensure backport preflight policy also exists in develop before setting BACKPORT_AUTOMATION_ENABLED=true. The legacy workflow is disabled only while this variable is true.
+3. Ensure the trusted backport policy also exists in develop before setting BACKPORT_AUTOMATION_ENABLED=true. The legacy workflow is disabled only while this variable is true.
 4. Test a real approved subsequent release, confirming correct source/head/tree, App identity, skipped application tests, merge commit and unchanged normal-PR/master rules.
 5. Record actual results. Prepared code and mocked tests do not prove a working installation, bypass or automatic merge. Repeated runs must not reopen closed PRs or overwrite refs.
 
 Rollback: set BACKPORT_AUTOMATION_ENABLED=false to retain the legacy PR-creation workflow for future releases. Existing closed/open PRs are not altered automatically. Remove the App bypass if deactivating its credentials; retain normal protection.
+
+## Activation status — 2026-10-18
+
+`BACKPORT_AUTOMATION_ENABLED=true`. Develop uses rulesets 25324691 (PR-only, resolved
+conversations, no force pushes/deletion, no bypass) and 25324708 (one approval and strict
+Android/Jenkins checks, bypass only for App 5277097 in pull-request mode). Master is unchanged.
+App authentication, rejection of a legacy-bot PR and idempotent recovery were verified with
+real Actions runs. The first new App-created automatic merge still needs observation on a
+real release; no release was manufactured for this test.

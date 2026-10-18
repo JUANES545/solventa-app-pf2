@@ -1,4 +1,4 @@
-name: Appetize · Despliegue reutilizable
+name: Solventa App
 
 on:
   workflow_call:
@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   deployments: write
 
 jobs:
@@ -24,14 +25,16 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
     outputs:
       publish: ${{ steps.select.outputs.publish }}
       url: ${{ steps.select.outputs.url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
-      - name: Omitir una demo superada antes de registrar despliegue
+      - name: Seleccionar versión vigente
         id: select
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         env:
@@ -39,28 +42,30 @@ jobs:
           PUBLIC_KEY: ${{ inputs.public_key }}
         with:
           script: |
-            const { preparePreview } = require('./.github/scripts/release_android.cjs');
-            const result = await preparePreview({ github, context, version: process.env.RELEASE_VERSION, publicKey: process.env.PUBLIC_KEY });
+            const { prepareDeployment } = require('./.github/scripts/release_android.cjs');
+            const result = await prepareDeployment({ github, context, version: process.env.RELEASE_VERSION, publicKey: process.env.PUBLIC_KEY });
             core.setOutput('publish', result.publish);
             core.setOutput('url', result.url || '');
-            if (!result.publish) await core.summary.addRaw('Demo omitida: existe una entrega más reciente. No se registró un despliegue exitoso.').write();
+            if (!result.publish) await core.summary.addRaw('Publicación omitida: existe una versión más reciente.').write();
 
   deploy:
-    name: Actualizar Appetize
+    name: Publicar Solventa
     needs: prepare
     if: needs.prepare.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
       deployments: write
     environment:
-      name: appetize
+      name: Solventa App
       url: ${{ needs.prepare.outputs.url }}
       deployment: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - name: Recuperar el APK original y comprobar su huella y procedencia
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
@@ -70,7 +75,7 @@ jobs:
         with:
           script: |
             const { downloadRelease } = require('./.github/scripts/release_android.cjs');
-            await downloadRelease({ github, context, version: process.env.RELEASE_VERSION, directory: 'preview' });
+            await downloadRelease({ github, context, version: process.env.RELEASE_VERSION, directory: 'distribution' });
       - name: Actualizar la misma app sin iniciar streaming
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         env:
@@ -78,5 +83,5 @@ jobs:
           APPETIZE_PUBLIC_KEY: ${{ inputs.public_key }}
         with:
           script: |
-            const { deployPreview } = require('./.github/scripts/release_android.cjs');
-            await deployPreview({ github, context, directory: 'preview', publicKey: process.env.APPETIZE_PUBLIC_KEY });
+            const { deployApp } = require('./.github/scripts/release_android.cjs');
+            await deployApp({ github, context, directory: 'distribution', publicKey: process.env.APPETIZE_PUBLIC_KEY });

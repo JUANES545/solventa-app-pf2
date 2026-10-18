@@ -24,8 +24,8 @@ pipeline {
         }
         stage('Pruebas unitarias y cobertura') {
             steps {
-                publishChecks name: 'Cobertura', status: 'IN_PROGRESS', conclusion: 'NONE', title: 'Generando cobertura JVM', summary: 'Pruebas JVM; no incluye instrumentación Android.', detailsURL: "https://github.com/JUANES545/solventa-app-pf2/pull/${env.CHANGE_ID}/checks"
-                sh 'python3 -m unittest discover -s scripts -p test_coverage_summary.py'
+                publishChecks name: 'Cobertura', status: 'IN_PROGRESS', conclusion: 'NONE', title: 'Analizando cobertura JVM', summary: 'Objetivo recomendado: 80 % en líneas y ramas. Medición de pruebas JVM.', detailsURL: "https://github.com/JUANES545/solventa-app-pf2/pull/${env.CHANGE_ID}/checks"
+                sh "python3 -m unittest discover -s scripts -p 'test_*summary.py'"
                 sh './gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -Dfile.encoding=UTF-8" -Pkotlin.compiler.execution.strategy=in-process jacocoDebugUnitTestReport'
                 sh 'test -s app/build/reports/coverage/unit/coverage.xml'
             }
@@ -56,7 +56,8 @@ pipeline {
                     ''')
                     def summary = readFile(file: 'reports/coverage-summary.md', encoding: 'UTF-8')
                     def revision = sh(returnStdout: true, script: 'git rev-parse HEAD').trim()
-                    summary += "\nRevisión compilada (puede incluir merge con destino): `${revision}`.\n"
+                    summary += "\n**Revisión compilada:** [`${revision}`](https://github.com/JUANES545/solventa-app-pf2/commit/${revision}).\n"
+                    summary += "\n[Informe HTML de cobertura](${env.BUILD_URL}artifact/app/build/reports/coverage/unit/html/index.html) · [Pruebas JUnit](${env.BUILD_URL}testReport/)\n"
                     publishChecks name: 'Cobertura', title: summary.readLines()[0], summary: summary,
                         detailsURL: "https://github.com/JUANES545/solventa-app-pf2/pull/${env.CHANGE_ID}/checks",
                         conclusion: result == 0 ? 'SUCCESS' : (currentBuild.currentResult == 'SUCCESS' ? 'FAILURE' : 'NEUTRAL')

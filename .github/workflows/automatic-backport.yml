@@ -50,10 +50,12 @@ jobs:
         env:
           SOURCE_PR: ${{ inputs.source_pr || github.event.pull_request.number }}
           BACKPORT_APP_ID: ${{ vars.BACKPORT_APP_ID }}
-          BACKPORT_APP_SLUG: ${{ vars.BACKPORT_APP_SLUG }}
+          BACKPORT_APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: ${{ vars.BACKPORT_APP_SLUG }}
         with:
           github-token: ${{ steps.app.outputs.token }}
           script: |
+            if (process.env.BACKPORT_APP_SLUG !== process.env.EXPECTED_APP_SLUG) throw new Error('Authenticated App does not match configured identity');
             const { automaticBackport } = require('./.github/scripts/verified-backport.cjs');
             await automaticBackport({ github, context, core,
               appId: Number(process.env.BACKPORT_APP_ID), appSlug: process.env.BACKPORT_APP_SLUG,

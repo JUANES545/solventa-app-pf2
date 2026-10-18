@@ -1,6 +1,6 @@
-# Preview compartida con Appetize
+# Publicación de Solventa
 
-Publicación de una demo interactiva de Android, no de una release de Play Store.
+Documentación operativa de las versiones Android y de Solventa App en Appetize.
 El plan Free consultado ofrece 30 minutos mensuales, 2 dispositivos simultáneos y
 3 minutos por sesión. No habilitar pagos, cambiar de plan ni añadir tarjeta como
 parte de esta configuración. Confirmar las condiciones en la cuenta antes de activar.
@@ -11,12 +11,12 @@ parte de esta configuración. Confirmar las condiciones en la cuenta antes de ac
   integrarlo no publica nada. `version.properties` debe aumentar `VERSION_NAME` (X.Y.Z)
   y `VERSION_CODE` antes de aprobar la entrega. La validación del PR a master lo comprueba.
 - Después de CI y pruebas UI, se crea el tag de esa versión sobre el SHA validado de master
-  y una GitHub Release con `solventa-preview.apk`, `release.json` y `SHA256SUMS`.
+  y una GitHub Release con `Solventa.apk`, `release.json` y `SHA256SUMS`.
   Es la misma APK de esa ejecución, no otra compilación para cada destino.
 - El APK `preview` usa la configuración release con firma de pruebas y sin herramientas
   de inspección de Compose de debug. No usa ni requiere una clave de distribución.
 - CI conserva su artefacto temporal 7 días; las descargas versionadas permanecen en Releases.
-- La publicación se limita a push o ejecución manual de CI en **master**. Los PRs,
+- La publicación automática sigue al CI exitoso de un push a **master**. Los PRs,
   develop y los builds obsoletos no actualizan la URL compartida.
 - `develop` es la rama predeterminada de colaboración, no la de publicación. Integrar
   este PR en develop no publica nada ni sustituye una entrega revisada a master.
@@ -25,15 +25,22 @@ parte de esta configuración. Confirmar las condiciones en la cuenta antes de ac
   no como emuladores independientes por versión.
 - La subida por API no inicia un emulador ni ejecuta pruebas de streaming.
 
-El único disparador automático es el push a master. Crear el tag o la Release no dispara
-otro pipeline. Cada SHA de master conserva su validación y publicación de Release; solo
+`android-ci.yml` (**CI · Validación**) solo valida y conserva `android-apk` con el APK compilado. Al completar
+CI de master, `android-publish.yml` recibe `workflow_run` y verifica por API el workflow
+de origen, evento push, repositorio, SHA, pertenencia a master y éxito de ambos jobs de
+Android. Descarga exclusivamente el artefacto del ID de ejecución verificado: no usa el
+último artefacto disponible ni recompila. El código se obtiene del mismo SHA validado,
+no del SHA de develop que GitHub asigna al contexto del evento.
+
+Crear el tag o la Release no dispara otra publicación. Cada SHA de master conserva su
+validación y publicación de Release; solo
 la actualización de Appetize se serializa. El workflow reutilizable `appetize-deploy.yml`
 selecciona la última entrega dentro de ese bloqueo, antes de crear el registro de despliegue.
-Así una entrega antigua no anuncia un despliegue falso ni pisa una demo más reciente.
+Así una entrega antigua no anuncia un despliegue falso ni sustituye una versión más reciente.
 
 ## Visibilidad y permisos mínimos
 
-El environment **appetize** registra el resultado y el enlace del despliegue, sin revisores
+El environment **Solventa App** registra el resultado y el enlace del despliegue, sin revisores
 adicionales ni tiempos de espera. La aprobación sigue siendo la del PR. El token de Appetize
 permanece en el secret existente del repositorio. Solo el job de Release recibe
 `contents: write`; el resto no obtiene permiso para escribir código o crear tags.
@@ -43,10 +50,11 @@ de master más reciente. Se desactiva únicamente el registro automático del jo
 para no duplicarlo ni atribuir a la app el SHA del workflow de recuperación. La API de
 Deployment usa `auto_merge: false`: no integra ramas ni sustituye la aprobación del PR.
 
-El README enlaza la demo desde Deployments y la última Release. El enlace real de Appetize
-se guarda también en el campo Website del repositorio al completar la primera publicación.
-El badge se filtra por master porque la rama predeterminada es develop; indica CI, no salud
-de la app ni cuota de streaming. No se generan commits de README en cada publicación.
+El README enlaza directamente a Solventa y a la última versión mediante imágenes locales.
+About → Website conserva el acceso directo a la app. La sección Deployments de GitHub es
+el historial técnico; su nombre de sección es propio de GitHub, mientras que el environment
+se muestra como Solventa App y su enlace abre la aplicación. No se generan commits de README
+en cada publicación.
 
 ## Configuración inicial privada
 
@@ -61,7 +69,7 @@ de la app ni cuota de streaming. No se generan commits de README en cada publica
 5. Mantener la variable `APPETIZE_ENABLED=false` hasta revisar el workflow e integrarlo
    mediante PR y release a master. Activar con `true` cuando la cuenta y el destino
    estén comprobados. Las protecciones existentes no cambian.
-6. Ejecutar manualmente el workflow en **master**, indicando esa versión en `release_version`,
+6. Ejecutar manualmente **CD · Publicación** en **master**, indicando esa versión en `release_version`,
    para la primera validación de CD sin recompilar. Revisar la publicación, el registro del
    environment y el enlace del resumen. Probar una sesión breve sin autologin.
 
@@ -71,7 +79,7 @@ y envía la clave solo al host fijo `api.appetize.io`, sin seguir redirects.
 
 ## Fallos y recuperación
 
-- Un fallo de CI impide crear la Release y actualizar la demo.
+- Un fallo de CI impide crear la Release y actualizar la app.
 - Los artefactos se suben primero a una Release borrador; solo se publica cuando están completos.
   Un reintento reutiliza los assets coincidentes y completa los faltantes. Un tag o un archivo
   con contenido distinto no se sobrescribe. Un fallo de permisos no se interpreta como ausencia.
@@ -79,7 +87,7 @@ y envía la clave solo al host fijo `api.appetize.io`, sin seguir redirects.
   Comprobar el estado remoto antes de reintentar: un timeout no demuestra que la API no actualizó.
   Si el runner termina abruptamente, el registro puede quedar en progreso: revisarlo y cerrarlo
   al recuperar, sin tratarlo como una publicación exitosa.
-- Para reintentar, usar **Actions → CI · Actions → Run workflow → master** e introducir
+- Para reintentar, usar **Actions → CD · Publicación → Run workflow → master** e introducir
   la versión publicada en `release_version`, por ejemplo `0.2.0`. Se descargan y comprueban
   el APK original, su checksum, su tag y su pertenencia a master; no se recompila ni se retaguea.
 - Una versión superada se omite antes de registrar un despliegue. No hay rollback automático.
@@ -104,8 +112,23 @@ Cubren rama/evento, destino fijo, APK, redirecciones, identidad de la app, error
 sin exposición de respuestas y límites de tamaño del resultado. Pasarlas no verifica
 las credenciales reales ni demuestra que una app esté publicada.
 
-En un PR, **Publicar entrega Android** y **Publicar preview Android** quedan omitidos por diseño. Los checks
-obligatorios de Actions y **CI / Validación (Jenkins)** siguen siendo necesarios.
+Los PRs no contienen jobs de publicación, ni siquiera omitidos. CI conserva los checks
+obligatorios de Actions y **CI / Validación (Jenkins)**; CD aparece como ejecución separada.
+
+## Compatibilidad y transición
+
+- Las nuevas versiones usan `Solventa.apk`. Las anteriores pueden contener
+  `solventa-preview.apk`: su recuperación valida los checksums originales y normaliza
+  únicamente el nombre de la copia local. No cambia binarios ni assets publicados.
+- Al integrar este ajuste en develop, los PRs ya usarán CI separado. La publicación
+  automática cambia cuando la configuración alcance master mediante una release revisada.
+  El flujo anterior de master permanece intacto mientras tanto.
+  CD escucha únicamente el nuevo nombre CI · Validación; una ejecución de CI · Actions
+  del master anterior no dispara además el nuevo publicador.
+- El environment histórico `appetize` se conserva para no borrar registros. La siguiente
+  publicación real registrará Solventa App, sin duplicar deployments automáticos del job.
+- La versión 0.2.0 ya fue publicada y su actualización por API comprobada. La primera
+  publicación mediante el nuevo workflow separado debe verificarse en una entrega real.
 
 ## Uso y privacidad
 
@@ -118,6 +141,5 @@ Cada actualización conserva un timeout de inactividad de 60 segundos, máximo 1
 segundos por sesión y hasta 2 sesiones simultáneas. El servidor aplica además los límites
 del plan. No ejecutar sesiones automatizadas que consuman minutos en cada commit.
 
-El agotamiento de minutos impide usar la demo; no sustituye pruebas físicas ni CI.
-La verificación de la app en Appetize y de la API con su token es pendiente hasta realizarla:
-configurar un workflow no equivale a un despliegue comprobado.
+El agotamiento de minutos impide usar la app en el navegador; no sustituye pruebas físicas ni CI.
+Configurar un workflow no equivale a comprobar una publicación: verificar su ejecución real.
