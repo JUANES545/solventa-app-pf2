@@ -1,6 +1,7 @@
 'use strict';
 
 const { qualifies } = require('./backport.cjs');
+const timers = require('node:timers/promises');
 const shaPattern = /^[0-9a-f]{40}$/;
 const requiredChecks = [
   ['Android verification', 15368],
@@ -97,8 +98,14 @@ async function automaticBackport({ github, context, core, appId, appSlug, source
     pulls = [created];
   }
   // Fresh API reads immediately before merging; do not trust event payloads or PR text.
-  const { data: pull } = await github.rest.pulls.get({ owner, repo, pull_number: pulls[0].number });
-  if (pull.mergeable !== true) throw new Error('Mergeability is unknown or conflicting; rerun after GitHub computes it');
+  let pull;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    pull = (await github.rest.pulls.get({ owner, repo, pull_number: pulls[0].number })).data;
+    if (pull.mergeable !== null) break;
+    if (attempt < 4) await timers.setTimeout(1000);
+  }
+  if (pull.mergeable === false) throw new Error('Backport has conflicts; manual verification required');
+  if (pull.mergeable !== true) throw new Error('Mergeability is still unknown after automatic retries');
   await verifyPull({ github, owner, repo, pull, appId, appSlug });
   const { data: merged } = await github.rest.pulls.merge({ owner, repo, pull_number: pull.number, sha: source.merge_commit_sha,
     merge_method: 'merge', commit_title: `Sincroniza la entrega del PR #${source.number} con develop [skip ci]`,

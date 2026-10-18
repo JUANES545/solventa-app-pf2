@@ -30,7 +30,7 @@ GitHub grants bypass to an actor, not to a source branch. The App technically ca
 - Current develop must be an ancestor of the release merge. Divergent branches, human-added commits and conflicts require the existing manual flow. This constraint makes omission of repeated tests justified; combining different changes is not an already-validated tree.
 - Inside `Android verification`, Actions runs a small API policy step only for candidate backport branches, loading trusted policy from the base commit before checking out any PR code. Verified App backports reuse release evidence instead of repeating application tests. Other branches run normal CI, including automation unit tests in that same job; no separate backport checks are created. Merge commit includes [skip ci] to avoid the redundant push workflow.
 - Jenkins already suppresses automatic builds. Do not request /test-jenkins on exact automatic backports; they merge via App bypass without Jenkins checks. Existing comments are not cancelled or deleted.
-- A new PR may have unknown mergeability briefly; the workflow fails visibly and can be rerun from master with the source PR number. Do not weaken verification for convenience.
+- A new PR may have unknown mergeability briefly. The workflow rereads it up to five times, waiting one second between unknown results. Conflicts stop immediately; if the state remains unknown, it fails visibly and can be rerun from master with the source PR number. Identity, SHA and ancestry checks still run after the wait.
 
 ## Concurrency limitation
 
