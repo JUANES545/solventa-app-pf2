@@ -51,19 +51,24 @@ activa la automatización de backport ni modifica sus condiciones de seguridad.
 
 La configuración del controlador y el nombre de la App no cambian por integrar este PR.
 Los nombres futuros de Actions (`CI / Calidad (Actions)`, `CI / Interfaz Android`) requieren
-la misma migración coordinada; los checks de política de backport se mantienen por seguridad.
+la misma migración coordinada. La política de backport se verifica dentro de
+`Android verification`, solo para ramas candidatas; no crea checks separados en PRs normales.
 
 | Proceso | Cuándo | Qué comprueba |
 | --- | --- | --- |
-| Actions: `Android verification` | PR y push a develop/master | Unitarias, lint y compilación |
+| Actions: `Android verification` | PR y push a develop/master | Scripts de automatización, unitarias, lint y compilación |
 | Actions: `Android UI tests` | Después de verification | Pruebas instrumentadas en emulador |
-| Actions: `Backport logic tests` | Según su workflow | Política de sincronización de releases |
 | Jenkins: `CI / Validación (Jenkins)` | Comentario nuevo `/test-jenkins` de un colaborador | Unitarias con cobertura, lint y compilación |
 
 `develop` es la rama predeterminada; `master` conserva las entregas estables. Cambiar la
 rama predeterminada no integra código ni altera las protecciones. Los PRs normales siguen
 requiriendo los checks configurados y aprobación. Después de nuevos commits, pedir Jenkins
 otra vez; no duplicar solicitudes mientras hay trabajo para el mismo commit.
+
+Las pruebas rápidas de los scripts, incluidas las de backport, se ejecutan en el mismo
+job de verificación. No hay otro workflow `Backport validation` ni jobs `backport_policy`.
+Solo un backport exacto verificado por API reutiliza la evidencia de la release y omite
+compilación e instrumentación repetidas. Un candidato no válido ejecuta CI normal.
 
 ## Leer Jenkins
 
