@@ -1,6 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { verifyPull, automaticBackport, sourceNumber } = require('./verified-backport.cjs');
 const HEAD = 'a'.repeat(40), RELEASE = 'b'.repeat(40), BASE = 'c'.repeat(40);
 
@@ -13,13 +15,13 @@ function fixture() {
     head: { ref: 'backport/release-pr-6', sha: RELEASE, repo: { full_name: full } },
     base: { ref: 'develop', sha: BASE, repo: { full_name: full } },
     user: { id: 3, type: 'Bot', login: 'backport-app[bot]' } };
-  const issue = { user: { id: 3 }, performed_via_github_app: { id: 99 } };
+  const bot = { id: 3, type: 'Bot', login: 'backport-app[bot]' };
   const checks = ['Android verification', 'Android UI tests', 'CI / Validación (Jenkins)'].map((name, index) =>
     ({ name, app: { id: index === 2 ? 5247357 : 15368 }, head_sha: HEAD, status: 'completed', conclusion: 'success' }));
   const reviews = [{ user: { id: 2, type: 'User' }, state: 'APPROVED', commit_id: HEAD }];
   let diverged = false, merged = false;
   const github = { rest: {
-    issues: { get: async () => ({ data: issue }) },
+    users: { getByUsername: async () => ({ data: bot }) },
     pulls: { get: async ({ pull_number }) => ({ data: pull_number === 6 ? source : pull }),
       list: () => {}, listReviews: () => {}, merge: async () => { merged = true; return { data: { merged: true, sha: RELEASE } }; } },
     checks: { listForRef: () => {} },
@@ -29,7 +31,7 @@ function fixture() {
       basehead === `${RELEASE}...${BASE}` ? { ahead_by: 0, behind_by: 1, status: 'behind' } :
       { ahead_by: 1, behind_by: diverged ? 1 : 0, status: diverged ? 'diverged' : 'ahead' } }) },
   }, paginate: async (method) => method === github.rest.checks.listForRef ? checks : method === github.rest.pulls.listReviews ? reviews : [pull] };
-  return { github, pull, issue, source, checks, reviews, owner: 'JUANES545', repo: 'solventa-app-pf2', appId: 99, appSlug: 'backport-app',
+  return { github, pull, bot, source, checks, reviews, owner: 'JUANES545', repo: 'solventa-app-pf2', appId: 99, appSlug: 'backport-app',
     diverge: () => { diverged = true; }, wasMerged: () => merged };
 }
 
@@ -37,16 +39,16 @@ test('only canonical backport branch numbers are accepted', () => {
   assert.equal(sourceNumber('backport/release-pr-6'), 6);
   for (const value of ['feature/login', 'backport/release-pr-06', 'backport/release-pr-0', 'backport/release-pr-6/x']) assert.equal(sourceNumber(value), 0);
 });
-test('verified App PR uses Issues API attribution, absent from the PR payload', async () => {
+test('verified App PR uses real bot identity, not optional attribution fields', async () => {
   const f = fixture();
   assert.equal('performed_via_github_app' in f.pull, false);
   await verifyPull(f);
 });
 for (const [name, mutate] of [
   ['human-created lookalike', f => { f.pull.user.type = 'User'; }],
-  ['wrong App', f => { f.issue.performed_via_github_app.id = 100; }],
-  ['missing App attribution', f => { delete f.issue.performed_via_github_app; }],
-  ['different issue author', f => { f.issue.user.id = 4; }],
+  ['wrong App', f => { f.bot.id = 100; }],
+  ['non-bot identity', f => { f.bot.type = 'User'; }],
+  ['different bot slug', f => { f.bot.login = 'other-app[bot]'; }],
   ['fork', f => { f.pull.head.repo.full_name = 'someone/repo'; }],
   ['wrong target', f => { f.pull.base.ref = 'master'; }],
   ['additional commits', f => { f.pull.head.sha = HEAD; }],
@@ -75,4 +77,9 @@ test('unknown mergeability does not merge', async () => {
   const f = fixture(); f.pull.mergeable = null;
   await assert.rejects(automaticBackport({ ...f, sourceId: 6, context: { repo: { owner: f.owner, repo: f.repo } }, core: { info: () => {} } }));
   assert.equal(f.wasMerged(), false);
+});
+test('merge workflow binds configured identity to the App authenticated by its private key', () => {
+  const workflow = fs.readFileSync(path.join(__dirname, '../workflows/automatic-backport.yml'), 'utf8');
+  assert.ok(workflow.includes('BACKPORT_APP_SLUG: ${{ steps.app.outputs.app-slug }}'));
+  assert.ok(workflow.includes('process.env.BACKPORT_APP_SLUG !== process.env.EXPECTED_APP_SLUG'));
 });

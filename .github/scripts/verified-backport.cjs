@@ -52,8 +52,8 @@ async function verifyPull({ github, owner, repo, pull, appId, appSlug }) {
       pull.user?.type !== 'Bot' || pull.user?.login !== `${appSlug}[bot]` || !Number.isSafeInteger(pull.user?.id)) {
     throw new Error('PR is not owned by the dedicated backport App');
   }
-  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: pull.number });
-  if (issue.user?.id !== pull.user.id || issue.performed_via_github_app?.id !== appId) {
+  const { data: bot } = await github.rest.users.getByUsername({ username: `${appSlug}[bot]` });
+  if (bot.id !== pull.user.id || bot.type !== 'Bot' || bot.login !== pull.user.login) {
     throw new Error('GitHub did not confirm the App that created the PR');
   }
   const source = await verifySource({ github, owner, repo, number });
