@@ -11,6 +11,7 @@
     <string name="create_account">Crear cuenta</string>
     <string name="signing_in">Ingresando…</string>
     <string name="sign_out">Cerrar sesión</string>
+    <string name="signing_out">Cerrando sesión…</string>
     <string name="session_greeting">Hola, %1$s</string>
     <string name="session_confirmed">Accediste con tu cuenta de Solventa.</string>
     <string name="auth_required">Ingresa tu correo y contraseña.</string>
@@ -22,4 +23,26 @@
     <string name="auth_unavailable">No fue posible contactar el servicio. Revisa tu conexión e intenta nuevamente.</string>
     <string name="auth_storage">No se pudo acceder al almacenamiento seguro. Intenta nuevamente.</string>
     <string name="auth_logout_remote">La sesión se eliminó del dispositivo, pero no pudimos confirmar el cierre remoto.</string>
+    <string name="name">Nombre completo</string>
+    <string name="confirm_password">Confirmar contraseña</string>
+    <string name="registration_title">Tu protección comienza aquí</string>
+    <string name="registration_subtitle">Crea tu cuenta y empieza a usar Solventa.</string>
+    <string name="registering">Creando cuenta…</string>
+    <string name="registration_success">Tu cuenta está lista</string>
+    <string name="registration_success_body">Ya puedes ingresar con tu correo y contraseña.</string>
+    <string name="go_to_login">Ir a iniciar sesión</string>
+    <string name="back_to_login">Volver a iniciar sesión</string>
+    <string name="auth_name">Ingresa un nombre de entre 1 y 120 caracteres.</string>
+    <string name="auth_password_mismatch">Las contraseñas no coinciden.</string>
+    <string name="auth_email_exists">Este correo ya tiene una cuenta. Inicia sesión con ella.</string>
+    <string name="auth_request">Revisa los datos de la cuenta e intenta nuevamente.</string>
+    <string name="registration_unavailable">No pudimos confirmar el registro. Revisa tu conexión o intenta iniciar sesión si ya creaste tu cuenta.</string>
+    <string name="home_title">Inicio</string>
+    <string name="account_title">Mi cuenta</string>
+    <string name="account_subtitle">Tu información de acceso a Solventa.</string>
+    <string name="account_security_title">Tu sesión, protegida</string>
+    <string name="account_security_body">Tu sesión se conserva en el almacenamiento seguro de este dispositivo.</string>
+    <string name="session_checking">Verificando sesión…</string>
+    <string name="show_password">Mostrar contraseña</string>
+    <string name="hide_password">Ocultar contraseña</string>
 </resources>

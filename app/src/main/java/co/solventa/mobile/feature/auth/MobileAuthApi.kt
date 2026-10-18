@@ -10,6 +10,10 @@ import javax.inject.Inject
 class MobileAuthApi @Inject constructor() : AuthApi {
     private val base = "https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1"
 
+    override fun register(name: String, email: String, password: String) = decodeUser(
+        request("POST", "/usuarios", JSONObject().put("nombre", name).put("correo", email).put("contrasena", password)),
+    )
+
     override fun login(email: String, password: String) = decodeGrant(
         request("POST", "/sesiones", JSONObject().put("correo", email).put("contrasena", password)),
     )

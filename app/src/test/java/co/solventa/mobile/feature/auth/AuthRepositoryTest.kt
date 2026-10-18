@@ -21,7 +21,14 @@ class AuthRepositoryTest {
         var refreshError: Int? = null
         var logoutError: Int? = null
         var loginValues: Pair<String, String>? = null
+        var registeredValues: Triple<String, String, String>? = null
+        var registrationError: Int? = null
         var revoked: String? = null
+        override fun register(name: String, email: String, password: String): AuthUser {
+            registrationError?.let { throw AuthHttpError(it) }
+            registeredValues = Triple(name, email, password)
+            return user
+        }
         override fun login(email: String, password: String): AuthGrant {
             loginValues = email to password
             return grant
@@ -47,6 +54,56 @@ class AuthRepositoryTest {
         assertEquals(user, AuthRepository(api, store) { 0 }.login(" cliente@example.org ", " password "))
         assertEquals("cliente@example.org" to " password ", api.loginValues)
         assertEquals(grant, store.grant)
+    }
+
+    @Test fun registrationDoesNotCreateOrPersistASession() = runBlocking {
+        val api = TestApi()
+        val store = MemoryStore()
+        assertEquals(user, AuthRepository(api, store).register(" Cliente ", " cliente@example.org ", " password ", " password "))
+        assertEquals(Triple("Cliente", "cliente@example.org", " password "), api.registeredValues)
+        assertNull(store.grant)
+        assertNull(api.loginValues)
+    }
+
+    @Test fun successfulRegistrationCannotRestoreAnOlderCachedIdentity() = runBlocking {
+        val store = MemoryStore(grant)
+        AuthRepository(TestApi(), store).register("Cliente", "cliente@example.org", "password", "password")
+        assertNull(store.grant)
+    }
+
+    @Test fun rejectedRegistrationDoesNotEraseAnExistingGrant() = runBlocking {
+        val api = TestApi().apply { registrationError = 409 }
+        val store = MemoryStore(grant)
+        try {
+            AuthRepository(api, store).register("Cliente", "cliente@example.org", "password", "password")
+            fail("Expected duplicate account")
+        } catch (error: AuthHttpError) { assertEquals(409, error.status) }
+        assertEquals(grant, store.grant)
+    }
+
+    @Test fun invalidRegistrationDoesNotCallTheBackend() = runBlocking {
+        val api = TestApi()
+        for ((name, confirmation) in listOf("" to "password", "x".repeat(121) to "password", "Cliente" to "different")) {
+            try {
+                AuthRepository(api, MemoryStore()).register(name, "cliente@example.org", "password", confirmation)
+                fail("Expected validation error")
+            } catch (_: AuthProblem) { }
+        }
+        assertNull(api.registeredValues)
+    }
+
+    @Test fun characterLimitsMatchBackendUnicodeCharacters() {
+        validateRegistration("😀".repeat(120), "cliente@example.org", "😀".repeat(8), "😀".repeat(8))
+        for ((name, password, expected) in listOf(
+            Triple("😀".repeat(121), "password", AuthError.NAME),
+            Triple("Cliente", "😀".repeat(7), AuthError.PASSWORD),
+            Triple("Cliente", "😀".repeat(129), AuthError.PASSWORD),
+        )) {
+            try {
+                validateRegistration(name, "cliente@example.org", password, password)
+                fail("Expected character limit")
+            } catch (error: AuthProblem) { assertEquals(expected, error.reason) }
+        }
     }
 
     @Test fun invalidInputDoesNotCallBackend() = runBlocking {

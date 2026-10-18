@@ -8,21 +8,12 @@ import co.solventa.mobile.feature.auth.LoginScreen
 import co.solventa.mobile.feature.auth.AuthViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
+import androidx.activity.compose.BackHandler
+import co.solventa.mobile.feature.auth.AccessScreen
+import co.solventa.mobile.feature.auth.AccountScreen
+import co.solventa.mobile.feature.auth.RegistrationScreen
+import co.solventa.mobile.feature.auth.RegistrationSuccessScreen
 
-// Provisional MVP palette; exact Figma tokens are pending design access.
 private val LoginColors = darkColorScheme(
     primary = Color(0xFF22D3EE),
     onPrimary = Color(0xFF082F49),
@@ -42,23 +33,17 @@ fun SolventaApp(auth: AuthViewModel? = null) {
         } else {
             val state by auth.state.collectAsState()
             val user = state.user
+            BackHandler(enabled = user == null && state.screen != AccessScreen.LOGIN) { auth.showLogin() }
             if (user == null) {
-                LoginScreen(loading = state.loading, error = state.error, onLogin = auth::login)
-            } else {
-                Surface(Modifier.fillMaxSize()) {
-                    Column(
-                        Modifier.safeDrawingPadding().padding(24.dp),
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Text(stringResource(R.string.session_greeting, user.name), style = MaterialTheme.typography.headlineSmall)
-                        Text(user.email)
-                        Text(stringResource(R.string.session_confirmed))
-                        Spacer(Modifier.height(24.dp))
-                        Button(onClick = auth::logout, enabled = !state.loading) {
-                            Text(stringResource(R.string.sign_out))
-                        }
-                    }
+                when (state.screen) {
+                    AccessScreen.LOGIN -> LoginScreen(loading = state.loading, error = state.error,
+                        onLogin = auth::login, initialEmail = state.email, onCreateAccount = auth::showRegistration)
+                    AccessScreen.REGISTER -> RegistrationScreen(loading = state.loading, error = state.error,
+                        onRegister = auth::register, onBack = auth::showLogin)
+                    AccessScreen.REGISTERED -> RegistrationSuccessScreen(state.email, auth::showLogin)
                 }
+            } else {
+                AccountScreen(user, state.loading, auth::logout)
             }
         }
     }

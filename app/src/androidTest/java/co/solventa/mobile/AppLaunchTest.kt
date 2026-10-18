@@ -3,6 +3,7 @@ package co.solventa.mobile
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -58,9 +59,10 @@ class AppLaunchTest {
     fun emptyLoginShowsValidationAndUnavailableFlowsAreDisabled() {
         composeRule.onNodeWithText("Ingresar").performScrollTo().performClick()
         composeRule.onNodeWithText("Ingresa tu correo y contraseña.").assertIsDisplayed()
-        listOf("Ingresar con huella o rostro", "Olvidé mi contraseña", "Crear cuenta").forEach {
+        listOf("Ingresar con huella o rostro", "Olvidé mi contraseña").forEach {
             composeRule.onNodeWithText(it).performScrollTo().assertIsNotEnabled()
         }
+        composeRule.onNodeWithText("Crear cuenta").performScrollTo().assertIsEnabled()
         composeRule.onNodeWithText("Protección siempre contigo").performScrollTo().assertIsDisplayed()
     }
 
