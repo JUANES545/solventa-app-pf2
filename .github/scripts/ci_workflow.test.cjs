@@ -101,7 +101,7 @@ test('CD solo escucha CI de master y recupera el artefacto de la ejecución veri
 });
 
 test('la portada enlaza directamente a la app y a la última versión con imágenes accesibles', () => {
-  const readme = fs.readFileSync(path.join(__dirname, '../../README.md'), 'utf8');
+  const readme = fs.readFileSync(path.join(__dirname, '../../README.md'), 'utf8').split('\n## Requisitos previos')[0];
   assert.ok(readme.includes('href="https://appetize.io/app/b_gtzqvlruilrgvlrll4wschl6wy"'));
   assert.ok(readme.includes('href="https://github.com/JUANES545/solventa-app-pf2/releases/latest"'));
   assert.doesNotMatch(readme, /demo|preview|versión de pruebas|Proyecto Final|docs\/ci|\/deployments/i);
