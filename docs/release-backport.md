@@ -47,7 +47,7 @@ Local tests use Node.js 22 and mocked API methods:
 node --test .github/scripts/backport.test.cjs
 ```
 
-`Backport validation` runs the same tests in GitHub Actions without secrets or API mutations. Existing required Android checks remain unchanged.
+`Android verification` runs the same tests alongside the other automation tests, without secrets or API mutations. There is no separate backport test workflow or check on normal PRs. Existing required Android checks remain unchanged.
 
 For the first approved real release, verify that the backport branch points to its exact merge SHA, the PR targets develop, source links are correct, CI runs after any required workflow approval and one team review is still required. Re-run the backport workflow and confirm it reuses the PR. This end-to-end release test requires the team's release approval; passing mocked tests alone is not evidence that a real backport was created.
 

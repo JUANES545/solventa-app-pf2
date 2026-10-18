@@ -23,44 +23,78 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
-  backport_policy:
-    uses: ./.github/workflows/backport-preflight.yml
-
   verify:
-    needs: backport_policy
-    if: needs.backport_policy.outputs.skip_tests != 'true' && inputs.release_version == ''
+    if: inputs.release_version == ''
     name: Android verification
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      skip_tests: ${{ steps.policy.outputs.skip_tests }}
     steps:
+      - name: Obtener política confiable solo para candidatos a backport
+        if: github.event_name == 'pull_request' && vars.BACKPORT_AUTOMATION_ENABLED == 'true' && startsWith(github.head_ref, 'backport/release-pr-')
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Verificar evidencia del backport sin ejecutar código del PR
+        id: policy
+        if: github.event_name == 'pull_request' && vars.BACKPORT_AUTOMATION_ENABLED == 'true' && startsWith(github.head_ref, 'backport/release-pr-')
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          APP_ID: ${{ vars.BACKPORT_APP_ID }}
+          APP_SLUG: ${{ vars.BACKPORT_APP_SLUG }}
+        with:
+          script: |
+            core.setOutput('skip_tests', 'false');
+            try {
+              const { verifyPull } = require('./.github/scripts/verified-backport.cjs');
+              const { owner, repo } = context.repo;
+              const { data: pull } = await github.rest.pulls.get({ owner, repo, pull_number: context.issue.number });
+              await verifyPull({ github, owner, repo, pull,
+                appId: Number(process.env.APP_ID), appSlug: process.env.APP_SLUG });
+              core.setOutput('skip_tests', 'true');
+              core.info('Backport exacto verificado: se reutiliza la evidencia de la entrega; no se repiten las pruebas.');
+            } catch (error) {
+              core.warning('No se verificó la excepción de backport; se ejecuta CI normal.');
+            }
+
       - name: Check out repository
+        if: steps.policy.outputs.skip_tests != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Set up Java 17
+        if: steps.policy.outputs.skip_tests != 'true'
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Android SDK
+        if: steps.policy.outputs.skip_tests != 'true'
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       - name: Set up Gradle
+        if: steps.policy.outputs.skip_tests != 'true'
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
 
       - name: Set up Node.js 22
+        if: steps.policy.outputs.skip_tests != 'true'
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: '22'
 
-      - name: Probar políticas de release
-        run: node --test .github/scripts/release_android.test.cjs
+      - name: Probar scripts de automatización
+        if: steps.policy.outputs.skip_tests != 'true'
+        run: node --test .github/scripts/*.test.cjs
 
       - name: Validar versión de la entrega
+        if: steps.policy.outputs.skip_tests != 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
           script: |
@@ -69,15 +103,19 @@ jobs:
             core.info(`Versión preparada: ${version.name} (código ${version.code})`);
 
       - name: Verify Android project
+        if: steps.policy.outputs.skip_tests != 'true'
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
 
       - name: Test preview deployment request policy
+        if: steps.policy.outputs.skip_tests != 'true'
         run: python3 -m unittest discover -s .github/scripts -p 'test_deploy_appetize.py'
 
       - name: Build preview APK
+        if: steps.policy.outputs.skip_tests != 'true'
         run: ./gradlew --no-daemon assemblePreview
 
       - name: Retain validated preview APK
+        if: steps.policy.outputs.skip_tests != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: android-preview-apk
@@ -86,7 +124,7 @@ jobs:
           retention-days: 7
 
       - name: Upload verification reports
-        if: ${{ always() }}
+        if: always() && steps.policy.outputs.skip_tests != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: android-verification-reports
@@ -160,6 +198,7 @@ jobs:
   instrumentation:
     name: Android UI tests
     needs: verify
+    if: needs.verify.outputs.skip_tests != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
