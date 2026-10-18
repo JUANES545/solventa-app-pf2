@@ -49,8 +49,12 @@ async function verifyPull({ github, owner, repo, pull, appId, appSlug }) {
   const number = sourceNumber(pull.head?.ref);
   if (!number || pull.state !== 'open' || pull.draft || pull.base?.ref !== 'develop' ||
       pull.head?.repo?.full_name !== `${owner}/${repo}` || pull.base?.repo?.full_name !== `${owner}/${repo}` ||
-      pull.user?.type !== 'Bot' || pull.user?.login !== `${appSlug}[bot]` || pull.performed_via_github_app?.id !== appId) {
+      pull.user?.type !== 'Bot' || pull.user?.login !== `${appSlug}[bot]` || !Number.isSafeInteger(pull.user?.id)) {
     throw new Error('PR is not owned by the dedicated backport App');
+  }
+  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: pull.number });
+  if (issue.user?.id !== pull.user.id || issue.performed_via_github_app?.id !== appId) {
+    throw new Error('GitHub did not confirm the App that created the PR');
   }
   const source = await verifySource({ github, owner, repo, number });
   if (pull.head.sha !== source.merge_commit_sha) throw new Error('Backport contains different commits');
