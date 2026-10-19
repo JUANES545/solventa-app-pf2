@@ -7,8 +7,8 @@ import java.time.OffsetDateTime
 import java.util.UUID
 import javax.inject.Inject
 
-class MobileAuthApi @Inject constructor() : AuthApi {
-    private val base = "https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1"
+class MobileAuthApi internal constructor(private val base: String) : AuthApi {
+    @Inject constructor() : this("https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1")
 
     override fun register(name: String, email: String, password: String) = decodeUser(
         request("POST", "/usuarios", JSONObject().put("nombre", name).put("correo", email).put("contrasena", password)),
