@@ -17,7 +17,7 @@ function fixture(t) {
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const properties = path.join(directory, 'version.properties');
   const apk = path.join(directory, 'Solventa.apk');
-  fs.writeFileSync(properties, 'VERSION_CODE=2\nVERSION_NAME=0.2.0\n');
+  fs.writeFileSync(properties, 'VERSION_CODE=2\nVERSION_NAME=0.2.0\nRELEASE_ID=2026-10-19-1\n');
   fs.writeFileSync(apk, 'APK de pruebas');
   const context = { repo: { owner: 'test-owner', repo: 'test-repo' }, ref: 'refs/heads/master', eventName: 'push', sha: SHA, runId: 123 };
   const state = { tag: null, release: null, latest: '0.2.0', calls: [], assets: new Map(), ancestry: { status: 'identical', behind_by: 0 },
@@ -74,10 +74,43 @@ test('versión estable y código se leen de una única fuente', () => {
   }
 });
 
+test('identificador de entrega valida fecha real y consecutivo sin cambiar la versión Android', () => {
+  const properties = 'VERSION_NAME=0.3.1\nVERSION_CODE=6\n';
+  assert.deepEqual(policy.versionFromText(properties + 'RELEASE_ID=2024-02-29-1'),
+    { name: '0.3.1', code: 6, releaseId: '2024-02-29-1' });
+  for (const id of ['', '2026-02-29-1', '2026-02-31-1', '2026-13-01-1', '2026-10-19-0',
+    '2026-10-19-01', '2026-10-19', '19-10-2026-1', '2026-10-19-99999999999999999999']) {
+    assert.throws(() => policy.versionFromText(properties + 'RELEASE_ID=' + id), /entrega inválido/);
+  }
+});
+
+test('el consecutivo de entrega aumenta numéricamente y se reinicia al cambiar de fecha', () => {
+  const previous = { name: '0.3.0', code: 5, releaseId: '2026-10-18-9' };
+  policy.assertIncrease({ name: '0.3.1', code: 6, releaseId: '2026-10-18-10' }, previous);
+  policy.assertIncrease({ name: '0.3.1', code: 6, releaseId: '2026-10-19-1' }, previous);
+  for (const releaseId of ['2026-10-17-10', '2026-10-18-8', '2026-10-18-9']) {
+    assert.throws(() => policy.assertIncrease({ name: '0.3.1', code: 6, releaseId }, previous), /RELEASE_ID/);
+  }
+});
+
+test('PR de entrega exige identificador y una rama de fecha coincidente', async t => {
+  const f = fixture(t);
+  f.context.eventName = 'pull_request';
+  f.context.payload = { pull_request: { base: { ref: 'master', sha: BASE }, head: { ref: 'release/0.2.0' } } };
+  await assert.rejects(policy.validateVersion(f), /rama de entrega/);
+  f.context.payload.pull_request.head.ref = 'release/2026-10-19-1';
+  await policy.validateVersion(f);
+  fs.writeFileSync(f.properties, 'VERSION_CODE=2\nVERSION_NAME=0.2.0\n');
+  await assert.rejects(policy.validateVersion(f), /necesita RELEASE_ID/);
+  f.context.eventName = 'push';
+  await assert.rejects(policy.validateVersion(f), /necesita RELEASE_ID/);
+  assert.equal(f.state.calls.length, 0);
+});
+
 test('PR a master valida incremento y rechaza un tag utilizado', async t => {
   const f = fixture(t);
   f.context.eventName = 'pull_request'; f.context.ref = 'refs/pull/1/merge';
-  f.context.payload = { pull_request: { base: { ref: 'master', sha: BASE } } };
+  f.context.payload = { pull_request: { base: { ref: 'master', sha: BASE }, head: { ref: 'release/2026-10-19-1' } } };
   await policy.validateVersion(f);
   f.state.tag = BASE;
   await assert.rejects(policy.validateVersion(f), /utilizada/);
@@ -85,7 +118,7 @@ test('PR a master valida incremento y rechaza un tag utilizado', async t => {
 
 test('feature a develop no necesita incrementar todavía la versión', async t => {
   const f = fixture(t); f.context.ref = 'refs/heads/develop';
-  assert.deepEqual(await policy.validateVersion(f), { name: '0.2.0', code: 2 });
+  assert.deepEqual(await policy.validateVersion(f), { name: '0.2.0', code: 2, releaseId: '2026-10-19-1' });
   assert.equal(f.state.calls.length, 0);
 });
 
@@ -112,7 +145,8 @@ test('release publicada contiene APK y metadatos del SHA exacto sin reconstruir'
   const creation = f.state.calls.find(call => call[0] === 'release')[1];
   assert.equal(creation.target_commitish, SHA);
   assert.equal(creation.draft, true);
-  assert.equal(creation.name, 'Solventa 0.2.0');
+  assert.equal(creation.name, 'Solventa · 2026-10-19-1 · v0.2.0');
+  assert.equal(metadata.release_id, '2026-10-19-1');
   assert.match(creation.body, /Descargar para Android/);
   assert.doesNotMatch(creation.body, /demo|pruebas|Play Store|Commit/i);
   const publication = f.state.calls.find(call => call[0] === 'publish')[1];
@@ -126,6 +160,29 @@ test('reintento es idempotente y no vuelve a subir ni crear la release', async t
   const calls = f.state.calls.length;
   await policy.publishRelease(f);
   assert.equal(f.state.calls.length, calls);
+});
+
+test('la fecha no sustituye el tag ni altera los enlaces de descarga y recuperación', async t => {
+  const f = fixture(t);
+  await policy.publishRelease(f);
+  const creation = f.state.calls.find(call => call[0] === 'release')[1];
+  assert.equal(creation.tag_name, '0.2.0');
+  assert.match(creation.body, /releases\/download\/0\.2\.0\/Solventa\.apk/);
+  f.state.release.name = 'Solventa · 2026-10-19-1 · v0.2.0';
+  const downloaded = await policy.downloadRelease({ ...f, version: '0.2.0', directory: path.join(f.directory, 'dated') });
+  assert.equal(downloaded.release_id, '2026-10-19-1');
+  assert.equal(downloaded.version, '0.2.0');
+  await assert.rejects(policy.prepareDeployment({ ...f, version: '2026-10-19-1', publicKey: 'test-public-key' }), /Versión/);
+});
+
+test('los metadatos anteriores sin fecha siguen permitiendo recuperar la APK original', async t => {
+  const f = fixture(t);
+  fs.writeFileSync(f.properties, 'VERSION_CODE=2\nVERSION_NAME=0.2.0\n');
+  const metadata = await policy.publishRelease(f);
+  assert.equal(metadata.release_id, undefined);
+  assert.equal(f.state.calls.find(call => call[0] === 'release')[1].name, 'Solventa 0.2.0');
+  assert.deepEqual(await policy.downloadRelease({ ...f, version: '0.2.0', directory: path.join(f.directory, 'old') }),
+    { ...metadata, version_code: 2 });
 });
 
 test('tag ajeno o APK diferente nunca se sobrescriben', async t => {

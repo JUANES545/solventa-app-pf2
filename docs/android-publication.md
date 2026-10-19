@@ -5,6 +5,65 @@ El plan Free consultado ofrece 30 minutos mensuales, 2 dispositivos simultáneos
 3 minutos por sesión. No habilitar pagos, cambiar de plan ni añadir tarjeta como
 parte de esta configuración. Confirmar las condiciones en la cuenta antes de activar.
 
+## Identificación de las entregas
+
+Las entregas se organizan por **fecha y consecutivo**, alineadas con web y backend.
+La versión de Android se conserva como identificador técnico independiente.
+
+| Elemento | Convención | Ejemplo |
+| --- | --- | --- |
+| Identificador de entrega | `AAAA-MM-DD-N`, fecha UTC y consecutivo desde 1 | `2026-10-19-1` |
+| Rama | `release/<identificador>` | `release/2026-10-19-1` |
+| Título del PR | `Publica Solventa · <identificador>` | `Publica Solventa · 2026-10-19-1` |
+| Nombre de GitHub Release | `Solventa · <identificador> · v<versión>` | `Solventa · 2026-10-19-1 · v0.3.1` |
+| Tag y versión Android | `X.Y.Z` | `0.3.1` |
+| Código Android | Entero creciente | `6` |
+
+`version.properties` conserva los tres valores de una entrega. Para preparar la siguiente,
+se actualizan juntos en una rama basada en `develop`:
+
+```properties
+VERSION_CODE=6
+VERSION_NAME=0.3.1
+RELEASE_ID=2026-10-19-1
+```
+
+El ejemplo no publica esa versión. El archivo actual identifica la última entrega preparada.
+El consecutivo distingue varias entregas del mismo día y se reinicia en 1 al cambiar de fecha.
+La fecha y el consecutivo se fijan en el PR: un reintento de CD no genera otro identificador.
+
+Antes de abrir el PR, comprobar que no exista otra rama o PR con ese identificador. Usar:
+
+```sh
+git switch -c release/2026-10-19-1 origin/develop
+# Actualizar version.properties, validar y guardar el commit de preparación.
+git push -u origin release/2026-10-19-1
+gh pr create --base master --head release/2026-10-19-1 --title "Publica Solventa · 2026-10-19-1" --assignee JUANES545
+```
+
+CI valida la fecha real, el consecutivo, la coincidencia con la rama `release/*` y el
+incremento de versión, código e identificador respecto a `master`. Los hotfixes conservan
+su prefijo y también actualizan el identificador. La aprobación humana sigue siendo requerida.
+
+CD genera el nombre visible y añade `release_id` a `release.json`. Los tags, enlaces de
+descarga y entradas de recuperación de Appetize siguen utilizando la versión Android,
+por ejemplo `0.3.1`, no el identificador por fecha.
+
+### Entregas anteriores
+
+Los nombres visibles se alinean usando la fecha UTC de publicación y su orden dentro de
+ese día. No se renombran ramas históricas, no se mueven tags y no se modifican archivos publicados.
+
+| Tag conservado | Nombre visible |
+| --- | --- |
+| `0.1.0` | Solventa · 2026-10-12-1 · v0.1.0 |
+| `0.2.0` | Solventa · 2026-10-17-1 · v0.2.0 |
+| `0.2.1` | Solventa · 2026-10-18-1 · v0.2.1 |
+| `0.2.2` | Solventa · 2026-10-18-2 · v0.2.2 |
+| `0.3.0` | Solventa · 2026-10-18-3 · v0.3.0 |
+
+Los metadatos antiguos sin `release_id` continúan siendo válidos para recuperar su APK original.
+
 ## Publicación controlada
 
 - Integrar una entrega revisada en `master` dispara el flujo completo; aprobar un PR sin
