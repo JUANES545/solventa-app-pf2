@@ -30,7 +30,14 @@ function versionFromText(text) {
       !/^[1-9][0-9]*$/.test(rawCode || '')) throw new Error('Versión inválida');
   const code = Number(rawCode);
   if (!Number.isSafeInteger(code) || code > 2100000000) throw new Error('Código de versión inválido');
-  return { name, code };
+  const releaseId = values.get('RELEASE_ID');
+  if (releaseId !== undefined) {
+    const match = /^([1-9][0-9]{3}-[0-9]{2}-[0-9]{2})-([1-9][0-9]*)$/.exec(releaseId);
+    const date = match && Date.parse(`${match[1]}T00:00:00Z`);
+    if (!match || !Number.isSafeInteger(Number(match[2])) || !Number.isFinite(date) ||
+        new Date(date).toISOString().slice(0, 10) !== match[1]) throw new Error('Identificador de entrega inválido: usar AAAA-MM-DD-N');
+  }
+  return { name, code, ...(releaseId ? { releaseId } : {}) };
 }
 
 function assertIncrease(next, previous) {
@@ -38,6 +45,12 @@ function assertIncrease(next, previous) {
   const difference = a.findIndex((value, index) => value !== b[index]);
   if (difference < 0 || a[difference] < b[difference] || next.code <= previous.code) {
     throw new Error('La entrega debe aumentar VERSION_NAME y VERSION_CODE respecto a master');
+  }
+  if (next.releaseId && previous.releaseId &&
+      (next.releaseId.slice(0, 10) < previous.releaseId.slice(0, 10) ||
+       (next.releaseId.slice(0, 10) === previous.releaseId.slice(0, 10) &&
+        Number(next.releaseId.slice(11)) <= Number(previous.releaseId.slice(11))))) {
+    throw new Error('La entrega debe aumentar RELEASE_ID respecto a master');
   }
 }
 
@@ -94,9 +107,15 @@ async function validateVersion({ github, context, properties = 'version.properti
   const next = versionFromText(fs.readFileSync(properties, 'utf8'));
   let base;
   if (context.eventName === 'pull_request' && context.payload.pull_request.base.ref === 'master') {
+    if (!next.releaseId) throw new Error('La entrega necesita RELEASE_ID (AAAA-MM-DD-N)');
+    if (context.payload.pull_request.head?.ref?.startsWith('release/') &&
+        context.payload.pull_request.head.ref !== `release/${next.releaseId}`) {
+      throw new Error('La rama de entrega debe coincidir con release/RELEASE_ID');
+    }
     base = context.payload.pull_request.base.sha;
   } else if (context.ref === 'refs/heads/master') {
     trustedMaster(context);
+    if (!next.releaseId) throw new Error('La entrega necesita RELEASE_ID (AAAA-MM-DD-N)');
     base = context.eventName === 'push' ? context.payload?.before : null;
     if (!base || /^0+$/.test(base)) base = (await github.rest.repos.getCommit({ ...context.repo, ref: context.sha })).data.parents[0]?.sha;
   } else return next;
@@ -119,14 +138,15 @@ async function publishRelease({ github, context, apk, properties = 'version.prop
   const { sha } = await publicationSource({ github, context });
   const version = versionFromText(fs.readFileSync(properties, 'utf8'));
   const bytes = fs.readFileSync(apk);
-  const metadata = { version: version.name, version_code: version.code, commit: sha, sha256: hash(bytes) };
+  const metadata = { version: version.name, version_code: version.code, commit: sha, sha256: hash(bytes),
+    ...(version.releaseId ? { release_id: version.releaseId } : {}) };
   const existingTag = await tagCommit(github, context.repo, version.name);
   if (existingTag && existingTag !== sha) throw new Error('No se sobrescribe un tag de otro commit');
   if (!existingTag) await github.rest.git.createRef({ ...context.repo, ref: `refs/tags/${version.name}`, sha });
   let release = await optional(() => github.rest.repos.getReleaseByTag({ ...context.repo, tag: version.name }));
   if (!release) {
     release = (await github.rest.repos.createRelease({ ...context.repo, tag_name: version.name,
-      target_commitish: sha, name: `Solventa ${version.name}`, draft: true, prerelease: false,
+      target_commitish: sha, name: version.releaseId ? `Solventa · ${version.releaseId} · v${version.name}` : `Solventa ${version.name}`, draft: true, prerelease: false,
       body: `[Descargar para Android](https://github.com/${context.repo.owner}/${context.repo.repo}/releases/download/${version.name}/${APK}) · [Abrir Solventa](https://appetize.io/app/b_gtzqvlruilrgvlrll4wschl6wy)` })).data;
   }
   const apkName = release.assets.some(asset => asset.name === LEGACY_APK) && !release.assets.some(asset => asset.name === APK) ? LEGACY_APK : APK;
@@ -156,7 +176,8 @@ async function publishRelease({ github, context, apk, properties = 'version.prop
     }
   }
   if (release.draft) await github.rest.repos.updateRelease({ ...context.repo, release_id: release.id, draft: false, make_latest: 'legacy' });
-  return { version: version.name, commit: sha, sha256: metadata.sha256 };
+  return { version: version.name, commit: sha, sha256: metadata.sha256,
+    ...(version.releaseId ? { release_id: version.releaseId } : {}) };
 }
 
 async function prepareDeployment({ github, context, version, publicKey }) {

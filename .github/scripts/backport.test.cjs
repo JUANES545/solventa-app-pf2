@@ -2,10 +2,16 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { executeBackport } = require('./backport.cjs');
+const { executeBackport, qualifies } = require('./backport.cjs');
 
 const SHA = 'a'.repeat(40);
 const OTHER_SHA = 'b'.repeat(40);
+
+test('una rama de entrega por fecha conserva la elegibilidad del backport', () => {
+  assert.equal(qualifies({ number: 42, merged: true, head: { ref: 'release/2026-10-19-1',
+    repo: { full_name: 'JUANES545/solventa-app-pf2' } }, base: { ref: 'master',
+    repo: { full_name: 'JUANES545/solventa-app-pf2' } } }, 'JUANES545/solventa-app-pf2'), true);
+});
 
 function fixture(options = {}) {
   const source = {

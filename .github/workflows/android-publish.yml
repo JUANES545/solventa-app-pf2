@@ -68,7 +68,7 @@ jobs:
             const { publishRelease } = require('./.github/scripts/release_android.cjs');
             const release = await publishRelease({ github, context, apk: 'distribution/Solventa.apk' });
             core.setOutput('version', release.version);
-            await core.summary.addHeading(`Solventa ${release.version}`)
+            await core.summary.addHeading(release.release_id ? `Solventa · ${release.release_id} · v${release.version}` : `Solventa ${release.version}`)
               .addLink('Descargar versión', `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/releases/tag/${release.version}`)
               .addRaw(`\n\nCommit: \`${release.commit}\`\n\nSHA-256: \`${release.sha256}\`\n`).write();
 
