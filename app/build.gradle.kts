@@ -62,7 +62,10 @@ android {
         targetSdk = 35
         versionCode = appVersion.getProperty("VERSION_CODE").toInt()
         versionName = appVersion.getProperty("VERSION_NAME")
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "co.solventa.mobile.espresso.SolventaTestRunner"
+        val backendE2e = providers.gradleProperty("backendE2e").orNull == "true"
+        testInstrumentationRunnerArguments[if (backendE2e) "annotation" else "notAnnotation"] =
+            "co.solventa.mobile.espresso.BackendE2e"
     }
 
     compileOptions {
@@ -119,6 +122,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.espresso)
+    androidTestImplementation(libs.mockwebserver)
+    androidTestImplementation(libs.hilt.testing)
+    kspAndroidTest(libs.hilt.compiler)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test)
     debugImplementation(libs.androidx.compose.ui.tooling)
