@@ -8,25 +8,35 @@ import co.solventa.mobile.feature.auth.decodeGrant
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import java.security.KeyStore
+import java.util.UUID
 
 class AuthStorageTest {
     @Test fun keystoreStorageRoundTripIsEncryptedAndClearable() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val store = EncryptedAuthStore(context)
+        // A different Context alone does not isolate Keystore aliases in the target process.
+        val namespace = "auth-storage-test-${UUID.randomUUID()}"
+        val store = EncryptedAuthStore(context, namespace, namespace)
         val grant = AuthGrant(
             AuthUser("11111111-1111-4111-8111-111111111111", "Cliente", "cliente@example.org"),
             "instrumentation-test-access", "instrumentation-test-refresh", 100_000, 200_000,
         )
         try {
             store.write(grant)
-            val raw = context.getSharedPreferences("mobile-auth", 0).getString("grant", "")!!
+            val raw = context.getSharedPreferences(namespace, 0).getString("grant", "")!!
             assertFalse(raw.contains(grant.accessToken))
             assertFalse(raw.contains(grant.refreshToken))
             assertEquals(grant, store.read())
-        } finally {
+            assertTrue(KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.containsAlias(namespace))
             store.clear()
+            assertNull(store.read())
+        } finally {
+            try {
+                context.deleteSharedPreferences(namespace)
+            } finally {
+                KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(namespace)
+            }
         }
-        assertNull(store.read())
     }
 
     @Test fun responseDecoderRejectsUnexpectedTokenTypeAndRole() {

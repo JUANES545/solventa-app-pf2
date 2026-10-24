@@ -13,9 +13,15 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.inject.Inject
 
-class EncryptedAuthStore @Inject constructor(@ApplicationContext context: Context) : AuthStore {
-    private val preferences = context.getSharedPreferences("mobile-auth", Context.MODE_PRIVATE)
-    private val alias = "solventa.mobile.auth.v1"
+class EncryptedAuthStore internal constructor(
+    context: Context,
+    preferencesName: String,
+    private val alias: String,
+) : AuthStore {
+    @Inject constructor(@ApplicationContext context: Context) :
+        this(context, "mobile-auth", "solventa.mobile.auth.v1")
+
+    private val preferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
 
     private fun key(): SecretKey {
         val keys = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
