@@ -68,6 +68,9 @@ y las brechas respecto al enunciado y la arquitectura.
 - `master` contiene versiones estables.
 - `develop` contiene el trabajo integrado para la siguiente versión.
 - Los cambios a cualquiera de estas ramas requieren pull request, al menos una aprobación y las comprobaciones exigidas por sus protecciones.
+- Las entregas usan X.Y.Z: parche por ajuste pequeño, menor por cierre semanal y mayor
+  por cierre de sprint. El equipo elige el incremento; el CI valida la versión y el CD
+  publica desde `master`. Ver [preparación de entregas](docs/android-publication.md#identificación-de-las-entregas).
 
 ## Referencias
 

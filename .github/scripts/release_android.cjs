@@ -12,7 +12,37 @@ const METADATA = 'release.json';
 const SUMS = 'SHA256SUMS';
 const shaPattern = /^[0-9a-f]{40}$/;
 const versionPattern = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+const releaseLevels = ['patch', 'minor', 'major'];
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+
+function validVersion(value) {
+  return typeof value === 'string' && versionPattern.test(value) &&
+    value.split('.').every(part => Number.isSafeInteger(Number(part)));
+}
+
+function compareVersions(a, b) {
+  const left = a.split('.').map(Number), right = b.split('.').map(Number);
+  const index = left.findIndex((value, i) => value !== right[i]);
+  return index < 0 ? 0 : Math.sign(left[index] - right[index]);
+}
+
+function versionBaseline(current, tags) {
+  if (!validVersion(current)) throw new Error('Versión de referencia inválida');
+  return tags.filter(validVersion).reduce((latest, tag) => compareVersions(tag, latest) > 0 ? tag : latest, current);
+}
+
+function incrementVersion(current, level) {
+  if (!validVersion(current) || !releaseLevels.includes(level)) {
+    throw new Error('Elegir RELEASE_LEVEL: patch (ajuste), minor (semana) o major (sprint)');
+  }
+  const parts = current.split('.').map(Number);
+  const index = { major: 0, minor: 1, patch: 2 }[level];
+  parts[index]++;
+  for (let i = index + 1; i < parts.length; i++) parts[i] = 0;
+  const next = parts.join('.');
+  if (!validVersion(next)) throw new Error('La versión supera el límite numérico permitido');
+  return next;
+}
 
 function versionFromText(text) {
   const values = new Map();
@@ -26,7 +56,7 @@ function versionFromText(text) {
   }
   const name = values.get('VERSION_NAME');
   const rawCode = values.get('VERSION_CODE');
-  if (!versionPattern.test(name || '') || !name.split('.').every(part => Number.isSafeInteger(Number(part))) ||
+  if (!validVersion(name) ||
       !/^[1-9][0-9]*$/.test(rawCode || '')) throw new Error('Versión inválida');
   const code = Number(rawCode);
   if (!Number.isSafeInteger(code) || code > 2100000000) throw new Error('Código de versión inválido');
@@ -37,7 +67,11 @@ function versionFromText(text) {
     if (!match || !Number.isSafeInteger(Number(match[2])) || !Number.isFinite(date) ||
         new Date(date).toISOString().slice(0, 10) !== match[1]) throw new Error('Identificador de entrega inválido: usar AAAA-MM-DD-N');
   }
-  return { name, code, ...(releaseId ? { releaseId } : {}) };
+  const level = values.get('RELEASE_LEVEL');
+  if (level !== undefined && !releaseLevels.includes(level)) {
+    throw new Error('Elegir RELEASE_LEVEL: patch (ajuste), minor (semana) o major (sprint)');
+  }
+  return { name, code, ...(releaseId ? { releaseId } : {}), ...(level ? { level } : {}) };
 }
 
 function assertIncrease(next, previous) {
@@ -122,9 +156,18 @@ async function validateVersion({ github, context, properties = 'version.properti
   if (!shaPattern.test(base || '')) throw new Error('No se pudo identificar la versión anterior de master');
   const file = (await github.rest.repos.getContent({ ...context.repo, path: 'version.properties', ref: base })).data;
   if (file.encoding !== 'base64' || typeof file.content !== 'string') throw new Error('Respuesta incompleta de versión');
-  assertIncrease(next, versionFromText(Buffer.from(file.content, 'base64').toString('utf8')));
+  const previous = versionFromText(Buffer.from(file.content, 'base64').toString('utf8'));
+  assertIncrease(next, previous);
   const existing = await tagCommit(github, context.repo, next.name);
   if (existing && (context.eventName === 'pull_request' || existing !== context.sha)) throw new Error('La versión ya está utilizada por otro commit');
+  const tags = await github.paginate(github.rest.repos.listTags, { ...context.repo, per_page: 100 });
+  const names = tags.map(tag => tag.name).filter(validVersion);
+  const baseline = versionBaseline(previous.name,
+    existing === context.sha ? names.filter(name => compareVersions(name, next.name) < 0) : names);
+  const expected = incrementVersion(baseline, next.level);
+  if (next.name !== expected) {
+    throw new Error(`RELEASE_LEVEL=${next.level} requiere VERSION_NAME=${expected} desde ${baseline}`);
+  }
   return next;
 }
 
@@ -139,7 +182,8 @@ async function publishRelease({ github, context, apk, properties = 'version.prop
   const version = versionFromText(fs.readFileSync(properties, 'utf8'));
   const bytes = fs.readFileSync(apk);
   const metadata = { version: version.name, version_code: version.code, commit: sha, sha256: hash(bytes),
-    ...(version.releaseId ? { release_id: version.releaseId } : {}) };
+    ...(version.releaseId ? { release_id: version.releaseId } : {}),
+    ...(version.level ? { release_level: version.level } : {}) };
   const existingTag = await tagCommit(github, context.repo, version.name);
   if (existingTag && existingTag !== sha) throw new Error('No se sobrescribe un tag de otro commit');
   if (!existingTag) await github.rest.git.createRef({ ...context.repo, ref: `refs/tags/${version.name}`, sha });
@@ -177,7 +221,8 @@ async function publishRelease({ github, context, apk, properties = 'version.prop
   }
   if (release.draft) await github.rest.repos.updateRelease({ ...context.repo, release_id: release.id, draft: false, make_latest: 'legacy' });
   return { version: version.name, commit: sha, sha256: metadata.sha256,
-    ...(version.releaseId ? { release_id: version.releaseId } : {}) };
+    ...(version.releaseId ? { release_id: version.releaseId } : {}),
+    ...(version.level ? { release_level: version.level } : {}) };
 }
 
 async function prepareDeployment({ github, context, version, publicKey }) {
@@ -241,4 +286,4 @@ async function deployApp({ github, context, directory, publicKey }) {
   return { url, commit: metadata.commit, version: metadata.version };
 }
 
-module.exports = { versionFromText, assertIncrease, validateVersion, publicationSource, publishRelease, prepareDeployment, downloadRelease, deployApp };
+module.exports = { versionFromText, versionBaseline, incrementVersion, assertIncrease, validateVersion, publicationSource, publishRelease, prepareDeployment, downloadRelease, deployApp };
