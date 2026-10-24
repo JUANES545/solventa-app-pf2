@@ -57,6 +57,12 @@ el test, no pausas arbitrarias. No hay `sleep`, `Assume` ni éxitos simulados.
 
 `SolventaTestRunner` usa `HiltTestApplication`. Se conservan `AppLaunchTest`,
 `LoginLayoutTest`, `RegistrationFlowTest`, `AuthStorageTest` y las pruebas JVM.
+`AuthStorageTest` usa un nombre de preferencias y un alias de Android Keystore únicos
+por ejecución, y elimina únicamente esos recursos al terminar. Sus fixtures y fechas
+son deterministas; no escribe ni borra `mobile-auth/grant` ni usa la clave de sesión
+productiva. Cambiar solo el `Context` no aislaría el Keystore del proceso instrumentado.
+Esta separación corresponde a ese test de almacenamiento, no a toda la batería:
+las pruebas de actividad siguen requiriendo un emulador dedicado sin sesiones personales.
 La configuración de red **solo debug** autoriza HTTP únicamente para `127.0.0.1` y
 `10.0.2.2`; preview/release mantienen HTTPS obligatorio. El módulo de pruebas rechaza
 otros hosts, credenciales en URL, query strings y rutas distintas de `/movil/v1`.
