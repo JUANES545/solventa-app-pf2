@@ -7,8 +7,26 @@ parte de esta configuración. Confirmar las condiciones en la cuenta antes de ac
 
 ## Identificación de las entregas
 
-Las entregas se organizan por **fecha y consecutivo**, alineadas con web y backend.
-La versión de Android se conserva como identificador técnico independiente.
+La versión Android sigue **X.Y.Z**, según el acuerdo de versionamiento del cierre de
+Sprint 1 (semana 2, página 2 de `PF2-ENTREGABLE-2-SPRINT-1`). El equipo elige el nivel
+antes de preparar cada entrega; no se deduce del mensaje de commit ni del calendario.
+
+| Nivel elegido | Cuándo se usa | Desde `1.2.0` |
+| --- | --- | --- |
+| `patch` (Z) | Corrección, ajuste o aporte pequeño | `1.2.1` |
+| `minor` (Y) | Consolidación de los cambios de la semana | `1.3.0` |
+| `major` (X) | Cierre de sprint | `2.0.0` |
+
+Cada incremento suma uno al nivel elegido y reinicia los niveles inferiores en cero.
+Si el cierre semanal coincide con el cierre de sprint, se elige `major`, no ambos.
+Estar en semana 3 no incrementa una versión ni publica automáticamente.
+`VERSION_CODE` es independiente: aumenta en cada entrega y no se reinicia.
+
+Se conserva la elección manual del equipo, pero los tags y Releases se generan mediante
+el CD existente después del CI exitoso de `master`, no mediante una publicación manual.
+La aprobación humana del PR y el artefacto exacto de CI se mantienen.
+
+La fecha y el consecutivo siguen identificando cada entrega, sin sustituir X.Y.Z.
 
 | Elemento | Convención | Ejemplo |
 | --- | --- | --- |
@@ -18,34 +36,52 @@ La versión de Android se conserva como identificador técnico independiente.
 | Nombre de GitHub Release | `Solventa · <identificador> · v<versión>` | `Solventa · 2026-10-19-1 · v0.3.1` |
 | Tag y versión Android | `X.Y.Z` | `0.3.1` |
 | Código Android | Entero creciente | `6` |
+| Incremento elegido | `RELEASE_LEVEL=patch`, `minor` o `major` | `patch` |
 
-`version.properties` conserva los tres valores de una entrega. Para preparar la siguiente,
-se actualizan juntos en una rama basada en `develop`:
+La versión publicada `1.2.0` es la referencia para las próximas entregas, aunque
+`version.properties` todavía identifique la entrega anterior `0.3.1`, código `6`.
+No se cambian esos valores históricos ni los APK, tags o Releases ya publicados.
+La preparación usa la mayor versión entre el archivo y los tags numéricos disponibles;
+CI vuelve a contrastarla con los tags remotos, sin depender de una copia local actualizada.
+
+`version.properties` conserva los cuatro valores de la próxima entrega una vez preparada.
+Por ejemplo, un parche desde `1.2.0`:
 
 ```properties
-VERSION_CODE=6
-VERSION_NAME=0.3.1
-RELEASE_ID=2026-10-19-1
+VERSION_CODE=7
+VERSION_NAME=1.2.1
+RELEASE_ID=2026-10-24-1
+RELEASE_LEVEL=patch
 ```
 
-El ejemplo no publica esa versión. El archivo actual identifica la última entrega preparada.
+El ejemplo no prepara ni publica esa versión por sí solo.
 El consecutivo distingue varias entregas del mismo día y se reinicia en 1 al cambiar de fecha.
 La fecha y el consecutivo se fijan en el PR: un reintento de CD no genera otro identificador.
 
 Antes de abrir el PR, comprobar que no exista otra rama o PR con ese identificador. Usar:
 
 ```sh
-git switch -c release/2026-10-19-1 origin/develop
-# Actualizar version.properties, validar y guardar el commit de preparación.
-git push -u origin release/2026-10-19-1
-gh pr create --base master --head release/2026-10-19-1 --title "Publica Solventa · 2026-10-19-1" --assignee JUANES545
+git fetch origin --tags
+git switch -c release/2026-10-24-1 origin/develop
+node .github/scripts/prepare_release.cjs patch 2026-10-24-1
+# Revisar version.properties, validar y guardar el commit de preparación.
+git push -u origin release/2026-10-24-1
+gh pr create --base master --head release/2026-10-24-1 --title "Publica Solventa · 2026-10-24-1" --assignee JUANES545
 ```
 
-CI valida la fecha real, el consecutivo, la coincidencia con la rama `release/*` y el
-incremento de versión, código e identificador respecto a `master`. Los hotfixes conservan
-su prefijo y también actualizan el identificador. La aprobación humana sigue siendo requerida.
+Sustituir `patch` por `minor` o `major` según lo acordado, y usar la fecha UTC real y
+un consecutivo disponible. El comando solo modifica `version.properties`: no crea ramas,
+commits, tags, Releases ni despliegues. Incrementa el código Android en uno y valida
+todos los valores antes de escribir; los errores se informan sin cambiar el archivo.
 
-CD genera el nombre visible y añade `release_id` a `release.json`. Los tags, enlaces de
+CI valida la fecha real, el consecutivo, la coincidencia con la rama `release/*` y el
+incremento exacto de versión según `RELEASE_LEVEL`, tomando como referencia la mayor
+versión entre `master` y los tags remotos. También exige aumentar el código Android y el
+identificador respecto a `master`. Los hotfixes conservan su prefijo y también declaran
+el nivel y actualizan el identificador. Los PR de feature a `develop` no necesitan
+preparar una entrega ni aumentar estos números. La aprobación humana sigue siendo requerida.
+
+CD genera el nombre visible y añade `release_id` y `release_level` a `release.json`. Los tags, enlaces de
 descarga y entradas de recuperación de Appetize siguen utilizando la versión Android,
 por ejemplo `0.3.1`, no el identificador por fecha.
 
@@ -163,7 +199,7 @@ limitado a las pruebas debug y no se convierte en una clave de distribución.
 Pruebas locales del publicador, sin token real ni llamadas a Appetize:
 
 ```bash
-node --test .github/scripts/release_android.test.cjs
+node --test .github/scripts/release_android.test.cjs .github/scripts/prepare_release.test.cjs
 python -m unittest discover -s .github/scripts -p test_deploy_appetize.py
 ```
 

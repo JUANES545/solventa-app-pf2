@@ -97,7 +97,7 @@ jobs:
           script: |
             const { validateVersion } = require('./.github/scripts/release_android.cjs');
             const version = await validateVersion({ github, context });
-            core.info(`Versión preparada: ${version.name} (código ${version.code})`);
+            core.info(`Versión preparada: ${version.name} (código ${version.code})${version.level ? `; incremento ${version.level}` : ''}`);
 
       - name: Verify Android project
         id: android
