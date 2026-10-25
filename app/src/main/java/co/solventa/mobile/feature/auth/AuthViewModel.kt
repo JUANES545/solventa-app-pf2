@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class AccessScreen { LOGIN, REGISTER, REGISTERED }
+enum class AccessScreen { LOGIN, REGISTER_REFERENCE, REGISTER, REGISTER_PHOTOS, REGISTER_CONFIRM, REGISTERED }
 
 data class AuthUiState(
     val user: AuthUser? = null,
@@ -23,9 +23,12 @@ data class AuthUiState(
 class AuthViewModel @Inject constructor(private val repository: AuthRepository) : ViewModel() {
     private val mutableState = MutableStateFlow(AuthUiState())
     val state = mutableState.asStateFlow()
+    private class RegistrationDraft(val name: String, val email: String, val password: String, val withPhotos: Boolean)
+    private var registrationDraft: RegistrationDraft? = null
 
     fun login(email: String, password: String) {
         if (mutableState.value.loading) return
+        registrationDraft = null
         try {
             validateLogin(email, password)
         } catch (problem: AuthProblem) {
@@ -36,15 +39,34 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
     }
 
     fun showRegistration() {
-        if (!mutableState.value.loading) mutableState.value = AuthUiState(screen = AccessScreen.REGISTER)
+        if (!mutableState.value.loading) {
+            registrationDraft = null
+            mutableState.value = AuthUiState(screen = AccessScreen.REGISTER)
+        }
+    }
+
+    fun continueRegistration(termsSelected: Boolean) {
+        if (!termsSelected || mutableState.value.screen != AccessScreen.REGISTER_REFERENCE ||
+            mutableState.value.loading) return
+        val draft = registrationDraft ?: return
+        if (draft.withPhotos) {
+            mutableState.value = mutableState.value.copy(screen = AccessScreen.REGISTER_PHOTOS)
+        } else {
+            registrationDraft = null
+            mutableState.value = AuthUiState(screen = AccessScreen.REGISTER, email = draft.email)
+            register(draft.name, draft.email, draft.password, draft.password)
+        }
     }
 
     fun showLogin() {
-        if (!mutableState.value.loading) mutableState.value = AuthUiState(email = mutableState.value.email)
+        if (!mutableState.value.loading) {
+            registrationDraft = null
+            mutableState.value = AuthUiState(email = mutableState.value.email)
+        }
     }
 
     fun register(name: String, email: String, password: String, confirmation: String) {
-        if (mutableState.value.loading) return
+        if (mutableState.value.loading || mutableState.value.screen != AccessScreen.REGISTER) return
         try {
             validateRegistration(name, email, password, confirmation)
         } catch (problem: AuthProblem) {
@@ -56,6 +78,45 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
             repository.register(name, email, password, confirmation)
             AuthUiState(screen = AccessScreen.REGISTERED, email = email.trim())
         }
+    }
+
+    fun prepareRegistration(name: String, email: String, password: String, confirmation: String, withPhotos: Boolean) {
+        if (mutableState.value.loading || mutableState.value.screen != AccessScreen.REGISTER) return
+        try {
+            validateRegistration(name, email, password, confirmation)
+        } catch (problem: AuthProblem) {
+            mutableState.value = mutableState.value.copy(error = problem.reason)
+            return
+        }
+        registrationDraft = RegistrationDraft(name.trim(), email.trim(), password, withPhotos)
+        mutableState.value = AuthUiState(screen = AccessScreen.REGISTER_REFERENCE, email = email.trim())
+    }
+
+    fun completeRegistrationPhotos() {
+        if (mutableState.value.screen != AccessScreen.REGISTER_PHOTOS || registrationDraft == null) return
+        mutableState.value = mutableState.value.copy(screen = AccessScreen.REGISTER_CONFIRM)
+    }
+
+    fun cancelRegistrationPhotos() {
+        registrationDraft = null
+        val screen = mutableState.value.screen
+        if (screen == AccessScreen.REGISTER_REFERENCE || screen == AccessScreen.REGISTER_PHOTOS ||
+            screen == AccessScreen.REGISTER_CONFIRM) {
+            mutableState.value = AuthUiState(screen = AccessScreen.REGISTER, email = mutableState.value.email)
+        }
+    }
+
+    fun confirmRegistration() {
+        if (mutableState.value.screen != AccessScreen.REGISTER_CONFIRM || mutableState.value.loading) return
+        val draft = registrationDraft ?: return
+        registrationDraft = null
+        mutableState.value = AuthUiState(screen = AccessScreen.REGISTER, email = draft.email)
+        register(draft.name, draft.email, draft.password, draft.password)
+    }
+
+    override fun onCleared() {
+        registrationDraft = null
+        super.onCleared()
     }
 
     fun restore() {
@@ -71,17 +132,20 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
             }
         }
     }
-    fun logout() = perform {
-        try {
-            repository.logout()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (problem: AuthProblem) {
-            throw problem
-        } catch (_: Exception) {
-            throw AuthProblem(AuthError.LOGOUT_REMOTE)
+    fun logout() {
+        registrationDraft = null
+        perform {
+            try {
+                repository.logout()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (problem: AuthProblem) {
+                throw problem
+            } catch (_: Exception) {
+                throw AuthProblem(AuthError.LOGOUT_REMOTE)
+            }
+            AuthUiState()
         }
-        AuthUiState()
     }
 
     private fun perform(action: suspend () -> AuthUiState) {
