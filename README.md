@@ -41,14 +41,19 @@ Abre el repositorio en Android Studio una vez que se haya agregado el proyecto A
 
 ## Ejecución y pruebas
 
-Una vez que el proyecto Android esté incorporado, documenta y valida los comandos reales de compilación, pruebas y ejecución.
+Con JDK 17 y Android SDK 35:
 
-Como mínimo, la validación deberá confirmar:
+```powershell
+.\gradlew.bat --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+.\gradlew.bat --no-daemon connectedDebugAndroidTest
+```
 
-1. Gradle sincroniza sin errores.
-2. La aplicación compila.
-3. La aplicación inicia en un emulador o dispositivo.
-4. Las pruebas disponibles se ejecutan correctamente.
+La instrumentación requiere un emulador dedicado sin cuentas reales y limpia su sesión
+local de Solventa. La suite [Espresso + Compose](docs/testing.md#suite-espresso-integrada)
+ejercita la actividad real, HTTP controlado y Android Keystore. El
+[E2E contra backend local real](docs/testing.md#e2e-con-backend-real-y-persistencia-temporal)
+se activa por separado; el mismo documento identifica las funcionalidades cubiertas
+y las brechas respecto al enunciado y la arquitectura.
 
 
 ## Equipo
@@ -63,6 +68,9 @@ Como mínimo, la validación deberá confirmar:
 - `master` contiene versiones estables.
 - `develop` contiene el trabajo integrado para la siguiente versión.
 - Los cambios a cualquiera de estas ramas requieren pull request, al menos una aprobación y las comprobaciones exigidas por sus protecciones.
+- Las entregas usan X.Y.Z: parche por ajuste pequeño, menor por cierre semanal y mayor
+  por cierre de sprint. El equipo elige el incremento; el CI valida la versión y el CD
+  publica desde `master`. Ver [preparación de entregas](docs/android-publication.md#identificación-de-las-entregas).
 
 ## Referencias
 

@@ -7,6 +7,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -77,19 +79,26 @@ class RegistrationFlowTest {
         compose.onNodeWithContentDescription("Confirmar contraseña").performImeAction()
     }
 
+    private fun continueTerms() {
+        compose.onNodeWithText("Continuar").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Acepto los términos y el tratamiento de datos personales.").performScrollTo().performClick()
+        compose.onNodeWithText("Continuar").performScrollTo().performClick()
+    }
+
     @Test fun registrationConfirmationLoginAndLogoutAreSeparateSteps() {
         val api = Api()
         val store = Store()
         val auth = AuthViewModel(AuthRepository(api, store))
         compose.setContent { SolventaApp(auth) }
-        compose.onNodeWithText("Crear cuenta").performScrollTo().performClick()
+        compose.onNode(hasText("Crear cuenta") and hasClickAction()).performScrollTo().performClick()
         fillRegistration()
+        continueTerms()
         compose.waitUntil(5_000) { auth.state.value.screen == AccessScreen.REGISTERED }
-        compose.onNodeWithText("Tu cuenta está lista").assertIsDisplayed()
+        compose.onNodeWithText("Cuenta creada").assertIsDisplayed()
         assertEquals(1, api.registered)
         assertNull(store.grant)
         assertNull(auth.state.value.user)
-        compose.onNodeWithText("Ir a iniciar sesión").performScrollTo().performClick()
+        compose.onNodeWithText("Iniciar sesión").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Correo electrónico")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(api.user.email)))
         compose.onNodeWithContentDescription("Contraseña").performScrollTo().performTextInput("test-password")
@@ -100,21 +109,22 @@ class RegistrationFlowTest {
         compose.waitUntil(5_000) { auth.state.value.user == null && !auth.state.value.loading }
         assertTrue(api.revoked)
         assertNull(store.grant)
-        compose.onNodeWithText("Crear cuenta").performScrollTo().assertIsEnabled()
+        compose.onNode(hasText("Crear cuenta") and hasClickAction()).performScrollTo().assertIsEnabled()
     }
 
     @Test fun existingEmailDoesNotPretendRegistrationOrLoginSucceeded() {
         val api = Api().apply { registrationError = 409 }
         val auth = AuthViewModel(AuthRepository(api, Store()))
         compose.setContent { SolventaApp(auth) }
-        compose.onNodeWithText("Crear cuenta").performScrollTo().performClick()
+        compose.onNode(hasText("Crear cuenta") and hasClickAction()).performScrollTo().performClick()
         fillRegistration()
+        continueTerms()
         compose.waitUntil(5_000) { auth.state.value.error != null }
-        compose.onNodeWithText("Este correo ya tiene una cuenta. Inicia sesión con ella.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Este correo ya tiene cuenta. Inicia sesión.").performScrollTo().assertIsDisplayed()
         assertEquals(AccessScreen.REGISTER, auth.state.value.screen)
         assertNull(auth.state.value.user)
         assertEquals(0, api.registered)
-        compose.onNodeWithText("Volver a iniciar sesión").performScrollTo().performClick()
+        compose.onNodeWithText("Volver al acceso").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Correo electrónico")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(api.user.email)))
         compose.onNodeWithContentDescription("Contraseña")
@@ -126,14 +136,14 @@ class RegistrationFlowTest {
         compose.onNodeWithContentDescription("Nombre completo").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithContentDescription("Correo electrónico").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("Creando cuenta…").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithText("Volver a iniciar sesión").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Volver al acceso").performScrollTo().assertIsNotEnabled()
     }
 
     @Test fun differentPasswordsDoNotSubmitRegistration() {
         val api = Api()
         val auth = AuthViewModel(AuthRepository(api, Store()))
         compose.setContent { SolventaApp(auth) }
-        compose.onNodeWithText("Crear cuenta").performScrollTo().performClick()
+        compose.onNode(hasText("Crear cuenta") and hasClickAction()).performScrollTo().performClick()
         fillRegistration("different-password")
         compose.onNodeWithText("Las contraseñas no coinciden.").performScrollTo().assertIsDisplayed()
         assertEquals(0, api.registered)
@@ -144,10 +154,11 @@ class RegistrationFlowTest {
         val api = Api().apply { registrationError = 503 }
         val auth = AuthViewModel(AuthRepository(api, Store()))
         compose.setContent { SolventaApp(auth) }
-        compose.onNodeWithText("Crear cuenta").performScrollTo().performClick()
+        compose.onNode(hasText("Crear cuenta") and hasClickAction()).performScrollTo().performClick()
         fillRegistration()
+        continueTerms()
         compose.waitUntil(5_000) { auth.state.value.error != null }
-        compose.onNodeWithText("No pudimos confirmar el registro. Revisa tu conexión o intenta iniciar sesión si ya creaste tu cuenta.")
+        compose.onNodeWithText("No pudimos confirmar el registro. Revisa tu conexión o inicia sesión si ya tienes cuenta.")
             .performScrollTo().assertIsDisplayed()
         assertEquals(AccessScreen.REGISTER, auth.state.value.screen)
         assertNull(auth.state.value.user)
@@ -165,7 +176,7 @@ class RegistrationFlowTest {
         }
         fillRegistration()
         compose.runOnIdle { assertTrue(submitted) }
-        compose.onNodeWithText("Volver a iniciar sesión").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Volver al acceso").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun expiredSessionReturnsToLoginWithAnExpirationMessage() {

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Geometry reused from core/ui/BrandMark.kt, including its original S stroke. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="36"
+    android:viewportHeight="36">
+    <group android:translateX="6" android:translateY="6">
+        <path
+            android:fillColor="@color/solventa_launch_primary"
+            android:pathData="M12,2.25 L20,5.15 L20,11.35 C20,16.4 16.85,20.1 12,21.75 C7.15,20.1 4,16.4 4,11.35 L4,5.15 Z" />
+        <path
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="@color/solventa_launch_on_primary"
+            android:strokeWidth="2.35"
+            android:strokeLineCap="round"
+            android:pathData="M15.55,7.25 C14.65,6.47 13.43,6.05 12.05,6.05 C9.9,6.05 8.5,7 8.5,8.4 C8.5,9.95 9.9,10.52 12.05,11.05 C14.15,11.57 15.5,12.2 15.5,13.75 C15.5,15.25 14.05,16.3 11.85,16.3 C10.35,16.3 9,15.85 8,14.95" />
+    </group>
+</vector>

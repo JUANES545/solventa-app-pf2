@@ -1,7 +1,14 @@
 # Login móvil con backend
 
-La pantalla móvil llama al BFF de AWS, no usa un usuario demo ni simula el acceso.
-La base actual es `https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1`.
+Las variantes normales llaman al BFF de AWS.
+Su base actual es `https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1`.
+El issuer canónico verificado es
+`https://65qgzhody9.execute-api.us-east-2.amazonaws.com`, sin barra final ni ruta.
+El candidato normal incorpora fotos locales y firma biométrica; su promoción
+requiere desplegar primero los endpoints biométricos del backend.
+La variante aislada `biometricTest` usa `http://127.0.0.1:18717/movil/v1`,
+issuer exacto `https://identidad.solventa.test` y un applicationId separado:
+`co.solventa.mobile.pf2.biometrictest`. No usa el entorno compartido ni cuentas reales.
 El contrato de referencia está en `contracts/openapi/bff-movil-v1.yaml` de la rama
 `feature/api-login` del backend; su despliegue manual fue informado por Migue.
 
@@ -21,12 +28,19 @@ El contrato de referencia está en `contracts/openapi/bff-movil-v1.yaml` de la r
 
 Las respuestas 503/fallos de red no eliminan el grant persistido al restaurar una
 sesión. Un refresh rechazado/expirado sí exige nuevo ingreso. No se siguen redirects
-ni se permite HTTP claro, caché de respuestas o logging de credenciales/tokens.
+ni se permite HTTP claro en release, caché de respuestas o logging de credenciales/tokens.
+Solo las variantes debug y aislada permiten HTTP a los hosts loopback declarados.
 
 ## Alcance y límites
 
-- Registro, recuperación de contraseña y biometría siguen deshabilitados; no abren
-  la sesión ni navegan al área autenticada.
+- El alcance original dejó registro, recuperación de contraseña y biometría
+  deshabilitados. El registro actual, la consulta informativa y el flujo local de clave
+  biométrica se describen en [Registro, acceso y cuenta móvil](acceso-cuenta-movil.md).
+  La consulta no autentica. La firma biométrica solo autoriza acceso después de la
+  validación del backend. El candidato normal habilita ese cliente con el issuer
+  público exacto, sin fallback local; un 404/503 informa indisponibilidad y
+  permite seguir usando contraseña.
+  La recuperación de contraseña sigue deshabilitada.
 - La sesión se valida al volver a primer plano; no se agregó polling periódico ni
   un interceptor para futuros servicios de negocio que todavía no existen.
 - Cerrar sesión revoca el refresh, pero no promete revocación inmediata de un JWT
@@ -45,6 +59,11 @@ ni se permite HTTP claro, caché de respuestas o logging de credenciales/tokens.
   round-trip de almacenamiento cifrado y rechazo de tipo/rol inesperado.
 - No incluir credenciales del entorno en tests, variables versionadas o comandos CI.
   Las pruebas instrumentadas usan datos aislados de prueba, no cuentas AWS.
+- SOL-169 cuenta con un recorrido físico separado contra el stack local:
+  alta y acceso con huella del usuario, cancelación, revocación y login convencional
+  posterior. Ver [la evidencia y sus límites](testing.md#comprobación-física-de-sol-169-25-de-octubre-de-2026-utc).
+  Ese recorrido histórico no acredita el despliegue biométrico público del
+  candidato normal ni verificación PAD/KYC.
 
 Comandos: `./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest`.
 Con dispositivo/emulador disponible: `./gradlew connectedDebugAndroidTest`.

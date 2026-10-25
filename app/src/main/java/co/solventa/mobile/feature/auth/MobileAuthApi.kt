@@ -1,5 +1,6 @@
 package co.solventa.mobile.feature.auth
 
+import co.solventa.mobile.BuildConfig
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -7,8 +8,8 @@ import java.time.OffsetDateTime
 import java.util.UUID
 import javax.inject.Inject
 
-class MobileAuthApi internal constructor(private val base: String) : AuthApi {
-    @Inject constructor() : this("https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1")
+class MobileAuthApi internal constructor(private val base: String) : AuthApi, BiometricApi {
+    @Inject constructor() : this(BuildConfig.AUTH_BASE_URL)
 
     override fun register(name: String, email: String, password: String) = decodeUser(
         request("POST", "/usuarios", JSONObject().put("nombre", name).put("correo", email).put("contrasena", password)),
@@ -28,7 +29,60 @@ class MobileAuthApi internal constructor(private val base: String) : AuthApi {
         request("DELETE", "/sesiones/actual", JSONObject().put("refreshToken", refreshToken), accessToken)
     }
 
-    private fun request(method: String, path: String, body: JSONObject? = null, token: String? = null): JSONObject {
+    override fun beginEnrollment(token: String, password: String, publicKey: ByteArray) =
+        request("POST", "/biometria/enrolamientos/desafio",
+            JSONObject().put("contrasena", password).put("clavePublica", base64Url(publicKey)), token, 200)
+
+    override fun confirmEnrollment(token: String, challenge: BiometricChallenge, signature: ByteArray) {
+        val result = request("POST", "/biometria/enrolamientos", biometricProof(challenge, signature), token, 201)
+        require(result.keys().asSequence().toSet() == setOf("credencialId", "estado"))
+        require(strictString(result, "credencialId") == challenge.credentialId && strictString(result, "estado") == "activa")
+    }
+
+    override fun biometricChallenge(credentialId: String) = request("POST", "/biometria/desafios",
+        JSONObject().put("credencialId", canonicalUuid(credentialId)), expectedStatus = 200)
+
+    override fun biometricLogin(challenge: BiometricChallenge, signature: ByteArray): AuthGrant {
+        val result = request("POST", "/sesiones/biometria", biometricProof(challenge, signature), expectedStatus = 200)
+        require(result.keys().asSequence().toSet() ==
+            setOf("usuario", "tokenType", "accessToken", "refreshToken", "expiraEn", "refreshExpiraEn"))
+        listOf("tokenType", "accessToken", "refreshToken", "expiraEn", "refreshExpiraEn").forEach { strictString(result, it) }
+        val user = result.getJSONObject("usuario")
+        require(user.keys().asSequence().toSet() == setOf("id", "nombre", "correo", "rol"))
+        listOf("id", "nombre", "correo", "rol").forEach { strictString(user, it) }
+        canonicalUuid(strictString(user, "id"))
+        return decodeGrant(result)
+    }
+
+    override fun biometricCredentials(token: String): List<RemoteBiometricCredential> {
+        val result = request("GET", "/biometria/credenciales", token = token, expectedStatus = 200)
+        require(result.keys().asSequence().toSet() == setOf("credenciales"))
+        val entries = result.getJSONArray("credenciales")
+        return (0 until entries.length()).map { index ->
+            val entry = entries.getJSONObject(index)
+            require(entry.keys().asSequence().toSet() == setOf("credencialId", "creadaEn", "ultimoUsoEn", "estado"))
+            val state = strictString(entry, "estado")
+            require(state in setOf("activa", "revocada"))
+            val created = strictString(entry, "creadaEn")
+            require(OffsetDateTime.parse(created).offset.totalSeconds == 0)
+            if (!entry.isNull("ultimoUsoEn")) require(OffsetDateTime.parse(strictString(entry, "ultimoUsoEn")).offset.totalSeconds == 0)
+            RemoteBiometricCredential(canonicalUuid(strictString(entry, "credencialId")), created, state == "activa")
+        }
+    }
+
+    override fun revokeBiometricCredential(token: String, credentialId: String) {
+        request("DELETE", "/biometria/credenciales/${canonicalUuid(credentialId)}", token = token, expectedStatus = 204)
+    }
+
+    private fun biometricProof(challenge: BiometricChallenge, signature: ByteArray): JSONObject {
+        require(signature.isNotEmpty() && signature.size <= 72)
+        return JSONObject().put("credencialId", challenge.credentialId)
+            .put("desafioId", challenge.challengeId).put("firma", base64Url(signature))
+    }
+
+    private fun request(method: String, path: String, body: JSONObject? = null, token: String? = null, expectedStatus: Int? = null): JSONObject {
+        val encodedBody = body?.toString()?.toByteArray(Charsets.UTF_8)
+        if (expectedStatus != null && encodedBody != null) require(encodedBody.size <= 8192)
         val connection = URL(base + path).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = method
@@ -42,10 +96,11 @@ class MobileAuthApi internal constructor(private val base: String) : AuthApi {
             if (body != null) {
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                connection.outputStream.use { it.write(checkNotNull(encodedBody)) }
             }
             val status = connection.responseCode
             if (status !in 200..299) throw AuthHttpError(status)
+            if (expectedStatus != null && status != expectedStatus) throw AuthProblem(AuthError.UNAVAILABLE)
             if (status == 204) return JSONObject()
             val text = connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
                 val buffer = CharArray(65_537)

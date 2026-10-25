@@ -17,10 +17,10 @@ function fixture(t) {
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const properties = path.join(directory, 'version.properties');
   const apk = path.join(directory, 'Solventa.apk');
-  fs.writeFileSync(properties, 'VERSION_CODE=2\nVERSION_NAME=0.2.0\nRELEASE_ID=2026-10-19-1\n');
+  fs.writeFileSync(properties, 'VERSION_CODE=2\nVERSION_NAME=0.2.0\nRELEASE_ID=2026-10-19-1\nRELEASE_LEVEL=minor\n');
   fs.writeFileSync(apk, 'APK de pruebas');
   const context = { repo: { owner: 'test-owner', repo: 'test-repo' }, ref: 'refs/heads/master', eventName: 'push', sha: SHA, runId: 123 };
-  const state = { tag: null, release: null, latest: '0.2.0', calls: [], assets: new Map(), ancestry: { status: 'identical', behind_by: 0 },
+  const state = { tag: null, tags: [], release: null, latest: '0.2.0', calls: [], assets: new Map(), ancestry: { status: 'identical', behind_by: 0 },
     run: { id: 456, workflow_id: 10, name: 'CI · Validación', event: 'push', head_branch: 'master', head_sha: SHA,
       head_repository: { full_name: 'test-owner/test-repo' }, status: 'completed', conclusion: 'success' },
     jobs: ['Android verification', 'Android UI tests'].map(name => ({ name, status: 'completed', conclusion: 'success' })) };
@@ -33,6 +33,7 @@ function fixture(t) {
     repos: {
       getCommit: async () => ({ data: { parents: [{ sha: BASE }] } }),
       getContent: async () => ({ data: { encoding: 'base64', content: Buffer.from('VERSION_NAME=0.1.0\nVERSION_CODE=1').toString('base64') } }),
+      listTags: () => {},
       getReleaseByTag: async () => { if (!state.release) throw missing(); return { data: state.release }; },
       createRelease: async args => { state.calls.push(['release', args]); state.release = { id: 1, draft: true, prerelease: false, assets: [] }; return { data: state.release }; },
       uploadReleaseAsset: async args => {
@@ -47,7 +48,7 @@ function fixture(t) {
       createDeployment: async args => { state.calls.push(['deployment', args]); return { data: { id: 10 } }; },
       createDeploymentStatus: async args => { state.calls.push(['deployment-status', args]); },
     },
-  }, paginate: async () => state.jobs };
+  }, paginate: async method => method === github.rest.repos.listTags ? state.tags : state.jobs };
   t.mock.method(childProcess, 'execFileSync', (command, args) => {
     if (command === 'python3') { state.calls.push(['appetize', args]); return; }
     assert.equal(command, 'gh');
@@ -84,6 +85,64 @@ test('identificador de entrega valida fecha real y consecutivo sin cambiar la ve
   }
 });
 
+test('el equipo elige parche, cierre semanal o cierre de sprint y se reinician los niveles inferiores', () => {
+  for (const [level, expected] of [['patch', '1.2.1'], ['minor', '1.3.0'], ['major', '2.0.0']]) {
+    assert.equal(policy.incrementVersion('1.2.0', level), expected);
+  }
+  assert.equal(policy.incrementVersion('1.2.9', 'minor'), '1.3.0');
+  assert.equal(policy.incrementVersion('1.9.9', 'major'), '2.0.0');
+  assert.equal(policy.versionBaseline('0.3.1', ['0.3.0', '1.2.0', '0.10.0', 'v9.0.0', '1.02.0']), '1.2.0');
+  assert.equal(policy.versionBaseline('1.3.0', ['1.2.0']), '1.3.0');
+  assert.equal(policy.versionBaseline('0.9.0', ['0.10.0']), '0.10.0');
+  for (const level of [undefined, '', 'weekly', 'PATCH']) {
+    assert.throws(() => policy.incrementVersion('1.2.0', level), /RELEASE_LEVEL/);
+    assert.throws(() => policy.versionFromText(`VERSION_NAME=1.2.0\nVERSION_CODE=6\nRELEASE_LEVEL=${level}`), /RELEASE_LEVEL/);
+  }
+  assert.throws(() => policy.incrementVersion('9007199254740991.0.0', 'major'), /límite/);
+  assert.throws(() => policy.incrementVersion('1.02.0', 'patch'));
+});
+
+test('la entrega compara con el mayor tag existente aunque master conserve una versión anterior', async t => {
+  const f = fixture(t);
+  f.context.eventName = 'pull_request';
+  f.context.payload = { pull_request: { base: { ref: 'master', sha: BASE }, head: { ref: 'release/2026-10-24-1' } } };
+  f.state.tags = [{ name: '0.3.1' }, { name: '1.2.0' }];
+  for (const [level, name] of [['patch', '1.2.1'], ['minor', '1.3.0'], ['major', '2.0.0']]) {
+    fs.writeFileSync(f.properties, `VERSION_CODE=7\nVERSION_NAME=${name}\nRELEASE_ID=2026-10-24-1\nRELEASE_LEVEL=${level}\n`);
+    assert.equal((await policy.validateVersion(f)).name, name);
+  }
+  fs.writeFileSync(f.properties, 'VERSION_CODE=7\nVERSION_NAME=1.4.0\nRELEASE_ID=2026-10-24-1\nRELEASE_LEVEL=minor\n');
+  await assert.rejects(policy.validateVersion(f), /requiere VERSION_NAME=1.3.0 desde 1.2.0/);
+  fs.writeFileSync(f.properties, 'VERSION_CODE=7\nVERSION_NAME=1.2.1\nRELEASE_ID=2026-10-24-1\n');
+  await assert.rejects(policy.validateVersion(f), /RELEASE_LEVEL/);
+  assert.equal(f.state.calls.length, 0);
+});
+
+test('un reintento no usa su propio tag como referencia ni oculta errores al consultar tags', async t => {
+  const f = fixture(t);
+  f.state.tag = SHA;
+  f.state.tags = [{ name: '0.1.0' }, { name: '0.2.0' }, { name: '0.3.0' }];
+  await policy.validateVersion(f);
+  f.github.paginate = async () => { throw Object.assign(new Error('Prohibido consultar tags'), { status: 403 }); };
+  await assert.rejects(policy.validateVersion(f), /Prohibido/);
+});
+
+test('un tag aparecido durante la validación no se excluye como si fuera un reintento', async t => {
+  const f = fixture(t);
+  f.context.eventName = 'pull_request';
+  f.context.payload = { pull_request: { base: { ref: 'master', sha: BASE }, head: { ref: 'release/2026-10-19-1' } } };
+  f.state.tags = [{ name: '0.2.0' }];
+  await assert.rejects(policy.validateVersion(f), /requiere VERSION_NAME=0.3.0/);
+});
+
+test('hotfix también declara un incremento y no necesita el prefijo release', async t => {
+  const f = fixture(t);
+  f.context.eventName = 'pull_request';
+  f.context.payload = { pull_request: { base: { ref: 'master', sha: BASE }, head: { ref: 'hotfix/correccion-sesion' } } };
+  fs.writeFileSync(f.properties, 'VERSION_CODE=2\nVERSION_NAME=0.1.1\nRELEASE_ID=2026-10-19-1\nRELEASE_LEVEL=patch\n');
+  assert.equal((await policy.validateVersion(f)).name, '0.1.1');
+});
+
 test('el consecutivo de entrega aumenta numéricamente y se reinicia al cambiar de fecha', () => {
   const previous = { name: '0.3.0', code: 5, releaseId: '2026-10-18-9' };
   policy.assertIncrease({ name: '0.3.1', code: 6, releaseId: '2026-10-18-10' }, previous);
@@ -118,7 +177,9 @@ test('PR a master valida incremento y rechaza un tag utilizado', async t => {
 
 test('feature a develop no necesita incrementar todavía la versión', async t => {
   const f = fixture(t); f.context.ref = 'refs/heads/develop';
-  assert.deepEqual(await policy.validateVersion(f), { name: '0.2.0', code: 2, releaseId: '2026-10-19-1' });
+  assert.deepEqual(await policy.validateVersion(f), { name: '0.2.0', code: 2, releaseId: '2026-10-19-1', level: 'minor' });
+  fs.writeFileSync(f.properties, 'VERSION_NAME=0.3.1\nVERSION_CODE=6\nRELEASE_ID=2026-10-19-1\n');
+  assert.equal((await policy.validateVersion(f)).level, undefined);
   assert.equal(f.state.calls.length, 0);
 });
 
@@ -147,6 +208,7 @@ test('release publicada contiene APK y metadatos del SHA exacto sin reconstruir'
   assert.equal(creation.draft, true);
   assert.equal(creation.name, 'Solventa · 2026-10-19-1 · v0.2.0');
   assert.equal(metadata.release_id, '2026-10-19-1');
+  assert.equal(metadata.release_level, 'minor');
   assert.match(creation.body, /Descargar para Android/);
   assert.doesNotMatch(creation.body, /demo|pruebas|Play Store|Commit/i);
   const publication = f.state.calls.find(call => call[0] === 'publish')[1];

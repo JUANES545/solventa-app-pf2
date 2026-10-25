@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Solventa.Starting" parent="Theme.Solventa.Starting.Base">
+        <item name="android:navigationBarColor">@color/solventa_launch_background</item>
+        <item name="android:windowLightNavigationBar">@bool/solventa_launch_light_bars</item>
+    </style>
+</resources>

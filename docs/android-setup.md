@@ -16,7 +16,10 @@ For PowerShell command-line builds, configure `JAVA_HOME` and `ANDROID_HOME` for
 ./gradlew.bat connectedDebugAndroidTest
 ```
 
-The second command requires a running emulator or connected device. Compiling instrumentation tests does not execute them.
+The second command requires a dedicated test emulator or device without real accounts:
+instrumented authentication journeys clear this app's local session. Compiling instrumentation
+tests does not execute them. See [testing.md](testing.md) for the Espresso + Compose HTTP
+suite and the separately selected E2E against a disposable real backend.
 
 ## Initial technical baseline
 
@@ -31,12 +34,17 @@ The single `app` module contains an application class, an activity and a minimal
 `.github/workflows/android-ci.yml` runs on pull requests to `develop` and `master`, and on pushes to those branches. It uses GitHub-hosted Linux runners, JDK 17 and the Gradle Wrapper.
 
 - `Android verification` runs unit tests, Android Lint, debug compilation and instrumentation-test compilation.
-- `Android UI tests` runs the application-launch test on an Android 35 emulator after verification succeeds.
+- `Android UI tests` runs the existing layout/storage tests and the Espresso + Compose
+  authentication HTTP journeys on an Android 35 emulator after verification succeeds.
 - Both jobs upload their available test reports, including on failure.
 
 Lint errors fail verification. Dependency-update advisories remain visible as warnings because the initial toolchain is deliberately kept consistent with the previous project; updating it requires a compatibility review.
 
-The initial tests validate build metadata and application launch only. They do not demonstrate authentication, API integration or any other business acceptance criterion. Coverage reporting and feature-specific tests remain separate work.
+The instrumented HTTP suite now covers registration, login, session restoration/rotation,
+logout and error handling through the real application. Its HTTP server is a test double,
+not a real backend. The opt-in real-backend E2E and the requirements still missing from
+Android are documented in [testing.md](testing.md); a successful default CI run does not
+claim E2E or full business-requirement coverage.
 
 The workflow has read-only repository permissions and does not use signing credentials. Actions are pinned to commit hashes, and the Gradle distribution is checked against its published SHA-256 checksum.
 

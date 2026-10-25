@@ -1,0 +1,204 @@
+package co.solventa.mobile.espresso
+
+import android.Manifest
+import android.graphics.Bitmap
+import android.util.Log
+import androidx.activity.compose.setContent
+import androidx.lifecycle.ViewModelProvider
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.assertIsNotEnabled
+import co.solventa.mobile.feature.auth.validateRegistration
+import co.solventa.mobile.feature.auth.AuthProblem
+import co.solventa.mobile.feature.auth.AuthViewModel
+import co.solventa.mobile.feature.photo.PhotoReviewHost
+import co.solventa.mobile.feature.photo.PhotoButton
+import co.solventa.mobile.feature.photo.PhotoStep
+import co.solventa.mobile.SolventaApp
+import androidx.compose.ui.text.AnnotatedString
+import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso
+import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.isRoot
+import androidx.test.platform.app.InstrumentationRegistry
+import co.solventa.mobile.MainActivity
+import co.solventa.mobile.R
+import co.solventa.mobile.feature.auth.EncryptedAuthStore
+import dagger.hilt.android.testing.HiltAndroidRule
+import org.junit.After
+import org.junit.Before
+import org.junit.Rule
+
+abstract class AuthJourney {
+    @get:Rule(order = 0) val hilt = HiltAndroidRule(this)
+    @get:Rule(order = 1) val compose = createEmptyComposeRule()
+    protected val context get() = InstrumentationRegistry.getInstrumentation().targetContext
+    protected val store get() = EncryptedAuthStore(context)
+    protected var scenario: ActivityScenario<MainActivity>? = null
+
+    @Before fun resetSession() {
+        localBackendUrl()
+        store.clear()
+        hilt.inject()
+    }
+
+    @After fun closeSession() {
+        scenario?.close()
+        store.clear()
+    }
+
+    protected fun launch() {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        scenario!!.onActivity { activity ->
+            logWindowState(activity, "before-content")
+            val auth = ViewModelProvider(activity)[AuthViewModel::class.java]
+            activity.setContent {
+                PhotoReviewHost(activity, auth, camera = { model, state ->
+                    // Controlled JPEG fixture; HTTP journeys do not exercise a physical camera.
+                    PhotoButton(R.string.photo_take, {
+                        val capture = checkNotNull(model.beginCapture())
+                        val bitmap = Bitmap.createBitmap(64, 48, Bitmap.Config.ARGB_8888)
+                        try {
+                            capture.file.outputStream().use {
+                                check(bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it))
+                            }
+                        } finally {
+                            bitmap.recycle()
+                        }
+                        model.captured(capture)
+                    }, state.step == PhotoStep.CAMERA)
+                }) { openPhoto, beforeChange ->
+                    SolventaApp(auth, onPhotoReview = openPhoto, beforeAccessChange = beforeChange)
+                }
+            }
+        }
+        try {
+            Espresso.onView(isRoot()).check(matches(isDisplayed()))
+        } catch (failure: Throwable) {
+            try {
+                scenario!!.onActivity { logWindowState(it, "espresso-root-failure") }
+                logSystemFocus()
+                val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
+                Log.e("AuthJourneyFocus", "activeWindow package=${root?.packageName} class=${root?.className} windowId=${root?.windowId}")
+            } catch (diagnosticFailure: Throwable) {
+                Log.e("AuthJourneyFocus", "diagnosticUnavailable=${diagnosticFailure.javaClass.simpleName}")
+            }
+            throw failure
+        }
+        compose.waitUntil(20_000) {
+            listOf(R.string.sign_in, R.string.sign_out).any {
+                compose.onAllNodesWithText(text(it)).fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+    }
+
+    private fun logWindowState(activity: MainActivity, phase: String) {
+        val decor = activity.window.decorView
+        Log.i("AuthJourneyFocus", "$phase lifecycle=${activity.lifecycle.currentState} " +
+            "windowFocus=${decor.hasWindowFocus()} attached=${decor.isAttachedToWindow} " +
+            "shown=${decor.isShown} layoutRequested=${decor.isLayoutRequested} flags=${activity.window.attributes.flags}")
+    }
+
+    private fun logSystemFocus() {
+        if (InstrumentationRegistry.getArguments().getString("focusDiagnostics") != "true") return
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val keys = setOf("mCurrentFocus", "mFocusedApp", "mTopFocusedDisplayId",
+            "FocusedApplications", "FocusedWindows", "FocusedApplication", "FocusedWindow",
+            "DispatchEnabled", "DispatchFrozen", "InputDispatchEnabled", "InputDispatchFrozen")
+        val component = Regex("""\b[a-z][a-z0-9_]*(?:\.[a-zA-Z0-9_]+)+/[a-zA-Z0-9_.$]+\b""")
+        val state = Regex("""\b(?:true|false|<null>|null)\b""")
+        for (service in listOf("window", "input")) {
+            automation.executeShellCommand("dumpsys $service").use { descriptor ->
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        val key = line.trim().substringBefore('=').substringBefore(':').trim()
+                        if (key in keys) {
+                            val value = line.substringAfter(key)
+                            Log.e("AuthJourneyFocus", "$service.$key components=${component.findAll(value).map { it.value }.toList()} " +
+                                "state=${state.findAll(value).map { it.value }.toList()}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    protected fun text(id: Int) = context.getString(id)
+
+    protected fun awaitText(id: Int) {
+        compose.waitUntil(20_000) {
+            compose.onAllNodesWithText(text(id)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText(text(id)).performScrollTo().assertIsDisplayed()
+    }
+
+    protected fun click(id: Int) {
+        compose.onNodeWithText(text(id)).performScrollTo().performClick()
+    }
+
+    protected fun input(id: Int, value: String) {
+        compose.onNodeWithContentDescription(text(id)).performScrollTo().performTextReplacement(value)
+    }
+
+    protected fun assertInput(id: Int, value: String) {
+        compose.onNodeWithContentDescription(text(id)).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(value)),
+        )
+    }
+
+    protected fun login(email: String = EMAIL, password: String = PASSWORD) {
+        input(R.string.email, email)
+        input(R.string.password, password)
+        Espresso.closeSoftKeyboard()
+        click(R.string.sign_in)
+    }
+
+    protected fun register(email: String = EMAIL, confirmation: String = PASSWORD) {
+        click(R.string.create_account)
+        input(R.string.name, "Cliente Espresso")
+        input(R.string.email, email)
+        input(R.string.password, PASSWORD)
+        input(R.string.confirm_password, confirmation)
+        Espresso.closeSoftKeyboard()
+        click(R.string.registration_continue)
+        val valid = try {
+            validateRegistration("Cliente Espresso", email, PASSWORD, confirmation)
+            true
+        } catch (_: AuthProblem) {
+            false
+        }
+        if (valid) {
+            compose.onNodeWithText(text(R.string.registration_continue)).performScrollTo().assertIsNotEnabled()
+            click(R.string.registration_terms)
+            click(R.string.registration_continue)
+            repeat(2) {
+                awaitText(R.string.photo_start)
+                click(R.string.photo_start)
+                awaitText(R.string.photo_take)
+                click(R.string.photo_take)
+                awaitText(R.string.photo_accept)
+                click(R.string.photo_accept)
+            }
+            awaitText(R.string.photo_back_login)
+            click(R.string.photo_back_login)
+            awaitText(R.string.registration_finish)
+            click(R.string.create_account)
+        }
+    }
+
+    companion object {
+        const val EMAIL = "espresso@example.com"
+        const val PASSWORD = "Solventa123!"
+    }
+}

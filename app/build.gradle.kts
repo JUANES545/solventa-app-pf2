@@ -62,7 +62,14 @@ android {
         targetSdk = 35
         versionCode = appVersion.getProperty("VERSION_CODE").toInt()
         versionName = appVersion.getProperty("VERSION_NAME")
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "AUTH_BASE_URL", "\"https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1\"")
+        buildConfigField("String", "AUTH_ISSUER", "\"https://65qgzhody9.execute-api.us-east-2.amazonaws.com\"")
+        buildConfigField("boolean", "BIOMETRIC_LOGIN_ENABLED", "true")
+        buildConfigField("boolean", "PHOTO_REVIEW_ENABLED", "true")
+        testInstrumentationRunner = "co.solventa.mobile.espresso.SolventaTestRunner"
+        val backendE2e = providers.gradleProperty("backendE2e").orNull == "true"
+        testInstrumentationRunnerArguments[if (backendE2e) "annotation" else "notAnnotation"] =
+            "co.solventa.mobile.espresso.BackendE2e"
     }
 
     compileOptions {
@@ -90,6 +97,18 @@ android {
     buildTypes.getByName("debug") {
         enableUnitTestCoverage = true
     }
+    buildTypes.create("biometricTest") {
+        initWith(buildTypes.getByName("debug"))
+        applicationIdSuffix = ".biometrictest"
+        matchingFallbacks += "debug"
+        buildConfigField("String", "AUTH_BASE_URL", "\"http://127.0.0.1:18717/movil/v1\"")
+        buildConfigField("String", "AUTH_ISSUER", "\"https://identidad.solventa.test\"")
+        buildConfigField("boolean", "BIOMETRIC_LOGIN_ENABLED", "true")
+        buildConfigField("boolean", "PHOTO_REVIEW_ENABLED", "true")
+    }
+    sourceSets.getByName("biometricTest") {
+        res.srcDir("src/debug/res")
+    }
     testCoverage {
         jacocoVersion = "0.8.13"
     }
@@ -100,6 +119,8 @@ android {
 
 dependencies {
     implementation(libs.androidx.core)
+    implementation(libs.androidx.splashscreen)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -119,8 +140,17 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.espresso)
+    androidTestImplementation(libs.mockwebserver)
+    androidTestImplementation(libs.hilt.testing)
+    kspAndroidTest(libs.hilt.compiler)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.face)
+    "biometricTestImplementation"(libs.androidx.compose.ui.test.manifest)
 }

@@ -97,7 +97,7 @@ jobs:
           script: |
             const { validateVersion } = require('./.github/scripts/release_android.cjs');
             const version = await validateVersion({ github, context });
-            core.info(`Versión preparada: ${version.name} (código ${version.code})`);
+            core.info(`Versión preparada: ${version.name} (código ${version.code})${version.level ? `; incremento ${version.level}` : ''}`);
 
       - name: Verify Android project
         id: android
@@ -178,7 +178,7 @@ jobs:
           test -e /dev/kvm
           sudo chmod 666 /dev/kvm
 
-      - name: Run tests on Android 35
+      - name: Run Espresso and Compose HTTP journeys on Android 35
         id: device
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
@@ -188,7 +188,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          script: ./gradlew --no-daemon connectedDebugAndroidTest -PbackendE2e=false -Pandroid.testInstrumentationRunnerArguments.focusDiagnostics=true
 
       - name: Upload device test reports
         id: reports
