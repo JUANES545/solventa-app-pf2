@@ -2,7 +2,6 @@ package co.solventa.mobile
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.SemanticsMatcher
@@ -36,8 +35,8 @@ class AppLaunchTest {
     fun applicationLaunchesAndDisplaysItsName() {
         val appName = composeRule.activity.getString(R.string.app_name)
         composeRule.onNodeWithText(appName).assertIsDisplayed()
-        composeRule.onNodeWithText("Protección siempre contigo").assertIsDisplayed()
-        composeRule.onNodeWithText("Accede de forma rápida y segura a tus pólizas").assertIsDisplayed()
+        composeRule.onNodeWithText("Inicia sesión").assertIsDisplayed()
+        composeRule.onNodeWithText("Accede de forma rápida y segura a tus pólizas").assertDoesNotExist()
         composeRule.onNodeWithContentDescription("Correo electrónico").assertInputText("")
         composeRule.onNodeWithContentDescription("Contraseña").assertInputText("")
     }
@@ -58,18 +57,20 @@ class AppLaunchTest {
         composeRule.onNodeWithContentDescription("Contraseña").assertIsFocused().performImeAction()
         composeRule.onNodeWithContentDescription("Contraseña")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Focused, false))
-        composeRule.onNodeWithText("Protección siempre contigo").assertIsDisplayed()
+        composeRule.onNodeWithText("Inicia sesión").assertIsDisplayed()
     }
 
     @Test
     fun emptyLoginShowsValidationAndUnavailableFlowsAreDisabled() {
         composeRule.onNodeWithText("Ingresar").performScrollTo().performClick()
         composeRule.onNodeWithText("Ingresa tu correo y contraseña.").assertIsDisplayed()
-        listOf("Ingresar con huella o rostro", "Olvidé mi contraseña").forEach {
-            composeRule.onNodeWithText(it).performScrollTo().assertIsNotEnabled()
-        }
+        composeRule.onNodeWithText("Olvidé mi contraseña").assertDoesNotExist()
+        composeRule.onNodeWithText("Consultar biometría").performScrollTo().assertIsEnabled().performClick()
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.biometric_service_unavailable)).assertIsDisplayed()
+        composeRule.onNodeWithText("Usar contraseña").performClick()
+        composeRule.onNodeWithContentDescription("Correo electrónico").assertIsFocused()
         composeRule.onNodeWithText("Crear cuenta").performScrollTo().assertIsEnabled()
-        composeRule.onNodeWithText("Protección siempre contigo").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Inicia sesión").performScrollTo().assertIsDisplayed()
     }
 
     @Test

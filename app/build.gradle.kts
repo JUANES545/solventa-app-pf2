@@ -62,6 +62,10 @@ android {
         targetSdk = 35
         versionCode = appVersion.getProperty("VERSION_CODE").toInt()
         versionName = appVersion.getProperty("VERSION_NAME")
+        buildConfigField("String", "AUTH_BASE_URL", "\"https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1\"")
+        buildConfigField("String", "AUTH_ISSUER", "\"\"")
+        buildConfigField("boolean", "BIOMETRIC_LOGIN_ENABLED", "false")
+        buildConfigField("boolean", "PHOTO_REVIEW_ENABLED", "false")
         testInstrumentationRunner = "co.solventa.mobile.espresso.SolventaTestRunner"
         val backendE2e = providers.gradleProperty("backendE2e").orNull == "true"
         testInstrumentationRunnerArguments[if (backendE2e) "annotation" else "notAnnotation"] =
@@ -93,6 +97,21 @@ android {
     buildTypes.getByName("debug") {
         enableUnitTestCoverage = true
     }
+    buildTypes.create("biometricTest") {
+        initWith(buildTypes.getByName("debug"))
+        applicationIdSuffix = ".biometrictest"
+        matchingFallbacks += "debug"
+        buildConfigField("String", "AUTH_BASE_URL", "\"http://127.0.0.1:18717/movil/v1\"")
+        buildConfigField("String", "AUTH_ISSUER", "\"https://identidad.solventa.test\"")
+        buildConfigField("boolean", "BIOMETRIC_LOGIN_ENABLED", "true")
+        buildConfigField("boolean", "PHOTO_REVIEW_ENABLED", "true")
+    }
+    sourceSets.getByName("biometricTest") {
+        res.srcDir("src/debug/res")
+    }
+    listOf("debug", "release", "preview").forEach {
+        sourceSets.getByName(it).java.srcDir("src/noPhoto/java")
+    }
     testCoverage {
         jacocoVersion = "0.8.13"
     }
@@ -103,6 +122,8 @@ android {
 
 dependencies {
     implementation(libs.androidx.core)
+    implementation(libs.androidx.splashscreen)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -129,4 +150,10 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    "biometricTestImplementation"(libs.androidx.camera.core)
+    "biometricTestImplementation"(libs.androidx.camera.camera2)
+    "biometricTestImplementation"(libs.androidx.camera.lifecycle)
+    "biometricTestImplementation"(libs.androidx.camera.view)
+    "biometricTestImplementation"(libs.mlkit.face)
+    "biometricTestImplementation"(libs.androidx.compose.ui.test.manifest)
 }

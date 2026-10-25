@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="solventa_launch_background">#F7F9FC</color>
+    <color name="solventa_launch_primary">#123B6D</color>
+    <color name="solventa_launch_on_primary">#FFFFFF</color>
+    <bool name="solventa_launch_light_bars">true</bool>
+</resources>

@@ -24,6 +24,7 @@ class AuthRepositoryTest {
         var registeredValues: Triple<String, String, String>? = null
         var registrationError: Int? = null
         var revoked: String? = null
+        var loginGrant = grant
         override fun register(name: String, email: String, password: String): AuthUser {
             registrationError?.let { throw AuthHttpError(it) }
             registeredValues = Triple(name, email, password)
@@ -31,7 +32,7 @@ class AuthRepositoryTest {
         }
         override fun login(email: String, password: String): AuthGrant {
             loginValues = email to password
-            return grant
+            return loginGrant
         }
         override fun refresh(token: String): AuthGrant {
             refreshCount++
@@ -40,7 +41,7 @@ class AuthRepositoryTest {
         }
         override fun current(token: String): AuthUser {
             currentError?.let { throw AuthHttpError(it) }
-            return user
+            return loginGrant.user
         }
         override fun logout(accessToken: String, refreshToken: String) {
             revoked = refreshToken
@@ -53,6 +54,90 @@ class AuthRepositoryTest {
         val store = MemoryStore()
         assertEquals(user, AuthRepository(api, store) { 0 }.login(" cliente@example.org ", " password "))
         assertEquals("cliente@example.org" to " password ", api.loginValues)
+        assertEquals(grant, store.grant)
+    }
+
+    @Test fun authorizedManagementRenewsBeforeActionAndDoesNotClearSessionForWrongStepUpPassword() = runBlocking {
+        val api = TestApi()
+        val store = MemoryStore(grant)
+        val repository = AuthRepository(api, store) { 90_000 }
+        try {
+            repository.withSession { current ->
+                assertEquals("rotated-access", current.accessToken)
+                throw AuthHttpError(401)
+            }
+            fail("Expected rejected step-up password")
+        } catch (error: AuthHttpError) {
+            assertEquals(401, error.status)
+        }
+        assertEquals(1, api.refreshCount)
+        assertEquals("rotated-refresh", store.grant?.refreshToken)
+    }
+
+    @Test fun biometricGrantIsStoredOnlyAfterCurrentUserAndLifetimeAreValidated() = runBlocking {
+        val api = TestApi()
+        val store = MemoryStore()
+        val repository = AuthRepository(api, store) { 0 }
+        val generation = repository.beginBiometricLogin(user.id)
+        for (invalid in listOf(grant.copy(expiresAt = 0),
+            grant.copy(refreshExpiresAt = grant.expiresAt),
+            grant.copy(user = user.copy(id = "22222222-2222-4222-8222-222222222222")))) {
+            try {
+                repository.acceptBiometricGrant(invalid, generation)
+                fail("Expected invalid biometric grant")
+            } catch (_: IllegalArgumentException) { }
+            assertNull(store.grant)
+        }
+        api.currentError = 503
+        try {
+            repository.acceptBiometricGrant(grant, generation)
+            fail("Expected unavailable authoritative session")
+        } catch (error: AuthHttpError) {
+            assertEquals(503, error.status)
+        }
+        assertNull(store.grant)
+        api.currentError = null
+        repository.acceptBiometricGrant(grant, generation)
+        assertEquals(grant, store.grant)
+    }
+
+    @Test fun logoutRejectsALateBiometricGrantEvenWithoutAnExistingSession() = runBlocking {
+        val store = MemoryStore()
+        val repository = AuthRepository(TestApi(), store) { 0 }
+        val generation = repository.beginBiometricLogin(user.id)
+        repository.logout()
+        try {
+            repository.acceptBiometricGrant(grant, generation)
+            fail("A late response must not resurrect the session")
+        } catch (error: AuthProblem) { assertEquals(AuthError.EXPIRED, error.reason) }
+        assertNull(store.grant)
+    }
+
+    @Test fun changingAccountRejectsALateBiometricGrantAndForeignManagement() = runBlocking {
+        val api = TestApi()
+        val store = MemoryStore()
+        val repository = AuthRepository(api, store) { 0 }
+        val generation = repository.beginBiometricLogin(user.id)
+        val other = grant.copy(user = user.copy(id = "22222222-2222-4222-8222-222222222222"))
+        api.loginGrant = other
+        repository.login("other@example.org", "password")
+        try {
+            repository.acceptBiometricGrant(grant, generation)
+            fail("A late response must not replace the new account")
+        } catch (error: AuthProblem) { assertEquals(AuthError.EXPIRED, error.reason) }
+        try {
+            repository.withSession(user.id) { fail("Must not execute management for another actor") }
+        } catch (error: AuthProblem) { assertEquals(AuthError.EXPIRED, error.reason) }
+        assertEquals(other, store.grant)
+    }
+
+    @Test fun sameActorRefreshDoesNotInvalidateBiometricContext() = runBlocking {
+        val store = MemoryStore(grant)
+        val repository = AuthRepository(TestApi(), store) { 90_000 }
+        val generation = repository.beginBiometricLogin(user.id)
+        repository.restore()
+        assertEquals("rotated-access", store.grant?.accessToken)
+        repository.acceptBiometricGrant(grant, generation)
         assertEquals(grant, store.grant)
     }
 

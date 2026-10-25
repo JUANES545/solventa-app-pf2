@@ -53,6 +53,7 @@ class AuthRepository(
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val mutex = Mutex()
+    private var sessionGeneration = 0L
 
     suspend fun register(name: String, email: String, password: String, confirmation: String): AuthUser = withContext(Dispatchers.IO) {
         validateRegistration(name, email, password, confirmation)
@@ -60,6 +61,7 @@ class AuthRepository(
             val user = api.register(name.trim(), email.trim(), password)
             // A new account must not restore a previously cached identity on the next resume.
             store.clear()
+            sessionGeneration++
             user
         }
     }
@@ -67,6 +69,7 @@ class AuthRepository(
     suspend fun login(email: String, password: String): AuthUser = withContext(Dispatchers.IO) {
         validateLogin(email, password)
         mutex.withLock {
+            sessionGeneration++
             val grant = api.login(email.trim(), password)
             store.write(grant)
             grant.user
@@ -78,6 +81,7 @@ class AuthRepository(
             var grant = store.read() ?: return@withLock null
             if (grant.refreshExpiresAt <= now()) {
                 store.clear()
+                sessionGeneration++
                 return@withLock null
             }
             try {
@@ -92,7 +96,10 @@ class AuthRepository(
                     api.current(grant.accessToken)
                 }
             } catch (error: AuthHttpError) {
-                if (error.status == 401) store.clear()
+                if (error.status == 401) {
+                    store.clear()
+                    sessionGeneration++
+                }
                 throw error
             }
         }
@@ -100,13 +107,49 @@ class AuthRepository(
 
     private fun renew(grant: AuthGrant): AuthGrant {
         val renewed = api.refresh(grant.refreshToken)
+        require(renewed.user.id == grant.user.id)
         // Persist both rotated tokens together before any further protected request.
         store.write(renewed)
         return renewed
     }
 
+    internal suspend fun <T> withSession(expectedUserId: String? = null, action: (AuthGrant) -> T): T = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            var grant = store.read() ?: throw AuthProblem(AuthError.EXPIRED)
+            if (expectedUserId != null && grant.user.id != expectedUserId) throw AuthProblem(AuthError.EXPIRED)
+            if (grant.refreshExpiresAt <= now()) throw AuthProblem(AuthError.EXPIRED)
+            if (grant.expiresAt <= now() + 30_000) grant = renew(grant)
+            val user = try {
+                api.current(grant.accessToken)
+            } catch (error: AuthHttpError) {
+                if (error.status != 401) throw error
+                grant = renew(grant)
+                api.current(grant.accessToken)
+            }
+            require(user.id == grant.user.id)
+            action(grant)
+        }
+    }
+
+    internal suspend fun beginBiometricLogin(userId: String): Long = mutex.withLock {
+        val current = store.read()
+        if (current != null && current.user.id != userId) throw AuthProblem(AuthError.EXPIRED)
+        sessionGeneration
+    }
+
+    internal suspend fun acceptBiometricGrant(grant: AuthGrant, expectedGeneration: Long) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            if (sessionGeneration != expectedGeneration) throw AuthProblem(AuthError.EXPIRED)
+            require(grant.expiresAt > now() && grant.refreshExpiresAt > grant.expiresAt)
+            require(api.current(grant.accessToken).id == grant.user.id)
+            store.write(grant)
+            sessionGeneration++
+        }
+    }
+
     suspend fun logout() = withContext(Dispatchers.IO) {
         mutex.withLock {
+            sessionGeneration++
             val grant = store.read()
             try {
                 if (grant != null) {

@@ -11,6 +11,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.assertIsNotEnabled
+import co.solventa.mobile.feature.auth.validateRegistration
+import co.solventa.mobile.feature.auth.AuthProblem
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso
@@ -91,7 +94,18 @@ abstract class AuthJourney {
         input(R.string.password, PASSWORD)
         input(R.string.confirm_password, confirmation)
         Espresso.closeSoftKeyboard()
-        click(R.string.create_account)
+        click(R.string.registration_continue)
+        val valid = try {
+            validateRegistration("Cliente Espresso", email, PASSWORD, confirmation)
+            true
+        } catch (_: AuthProblem) {
+            false
+        }
+        if (valid) {
+            compose.onNodeWithText(text(R.string.registration_continue)).performScrollTo().assertIsNotEnabled()
+            click(R.string.registration_terms)
+            click(R.string.registration_continue)
+        }
     }
 
     companion object {

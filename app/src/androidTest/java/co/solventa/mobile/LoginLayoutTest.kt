@@ -30,15 +30,16 @@ class LoginLayoutTest {
                 Box(Modifier.requiredSize(320.dp, 480.dp)) { SolventaApp() }
             }
         }
-        composeRule.onNodeWithText("Protección siempre contigo").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Inicia sesión").performScrollTo().assertIsDisplayed()
         val emailField = composeRule.onNodeWithContentDescription("Correo electrónico")
         emailField.performScrollTo().assertIsDisplayed().performTextInput("persona@example.org")
         emailField.performImeAction()
         val passwordField = composeRule.onNodeWithContentDescription("Contraseña")
         passwordField.assertIsFocused().performScrollTo().assertIsDisplayed().performTextInput("secreto")
         passwordField.performImeAction()
-        listOf("Ingresar", "Ingresar con huella o rostro", "Olvidé mi contraseña", "Crear cuenta").forEach {
+        listOf("Ingresar", "Consultar biometría", "Crear cuenta").forEach {
             composeRule.onNodeWithText(it).performScrollTo().assertIsDisplayed()
         }
+        composeRule.onNodeWithText("Olvidé mi contraseña").assertDoesNotExist()
     }
 }
