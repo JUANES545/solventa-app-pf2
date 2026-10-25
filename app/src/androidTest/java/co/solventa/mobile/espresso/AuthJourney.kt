@@ -2,6 +2,7 @@ package co.solventa.mobile.espresso
 
 import android.Manifest
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -60,6 +61,7 @@ abstract class AuthJourney {
         InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
         scenario = ActivityScenario.launch(MainActivity::class.java)
         scenario!!.onActivity { activity ->
+            logWindowState(activity, "before-content")
             val auth = ViewModelProvider(activity)[AuthViewModel::class.java]
             activity.setContent {
                 PhotoReviewHost(activity, auth, camera = { model, state ->
@@ -81,10 +83,53 @@ abstract class AuthJourney {
                 }
             }
         }
-        Espresso.onView(isRoot()).check(matches(isDisplayed()))
+        try {
+            Espresso.onView(isRoot()).check(matches(isDisplayed()))
+        } catch (failure: Throwable) {
+            try {
+                scenario!!.onActivity { logWindowState(it, "espresso-root-failure") }
+                logSystemFocus()
+                val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
+                Log.e("AuthJourneyFocus", "activeWindow package=${root?.packageName} class=${root?.className} windowId=${root?.windowId}")
+            } catch (diagnosticFailure: Throwable) {
+                Log.e("AuthJourneyFocus", "diagnosticUnavailable=${diagnosticFailure.javaClass.simpleName}")
+            }
+            throw failure
+        }
         compose.waitUntil(20_000) {
             listOf(R.string.sign_in, R.string.sign_out).any {
                 compose.onAllNodesWithText(text(it)).fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+    }
+
+    private fun logWindowState(activity: MainActivity, phase: String) {
+        val decor = activity.window.decorView
+        Log.i("AuthJourneyFocus", "$phase lifecycle=${activity.lifecycle.currentState} " +
+            "windowFocus=${decor.hasWindowFocus()} attached=${decor.isAttachedToWindow} " +
+            "shown=${decor.isShown} layoutRequested=${decor.isLayoutRequested} flags=${activity.window.attributes.flags}")
+    }
+
+    private fun logSystemFocus() {
+        if (InstrumentationRegistry.getArguments().getString("focusDiagnostics") != "true") return
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val keys = setOf("mCurrentFocus", "mFocusedApp", "mTopFocusedDisplayId",
+            "FocusedApplications", "FocusedWindows", "FocusedApplication", "FocusedWindow",
+            "DispatchEnabled", "DispatchFrozen", "InputDispatchEnabled", "InputDispatchFrozen")
+        val component = Regex("""\b[a-z][a-z0-9_]*(?:\.[a-zA-Z0-9_]+)+/[a-zA-Z0-9_.$]+\b""")
+        val state = Regex("""\b(?:true|false|<null>|null)\b""")
+        for (service in listOf("window", "input")) {
+            automation.executeShellCommand("dumpsys $service").use { descriptor ->
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        val key = line.trim().substringBefore('=').substringBefore(':').trim()
+                        if (key in keys) {
+                            val value = line.substringAfter(key)
+                            Log.e("AuthJourneyFocus", "$service.$key components=${component.findAll(value).map { it.value }.toList()} " +
+                                "state=${state.findAll(value).map { it.value }.toList()}")
+                        }
+                    }
+                }
             }
         }
     }
