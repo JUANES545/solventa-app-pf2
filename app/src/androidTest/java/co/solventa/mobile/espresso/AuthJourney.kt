@@ -145,7 +145,9 @@ abstract class AuthJourney {
                 awaitText(R.string.photo_accept)
                 click(R.string.photo_accept)
             }
+            awaitText(R.string.photo_back_login)
             click(R.string.photo_back_login)
+            awaitText(R.string.registration_finish)
             click(R.string.create_account)
         }
     }
