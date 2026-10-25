@@ -10,7 +10,8 @@ Historia: [SOL-332](https://proyectointegradorgrupo2.atlassian.net/browse/SOL-33
 - Conservar recuperación de sesión, renovación de tokens y cierre seguro.
 
 El acceso convencional no incluye edición de perfil, recuperación de contraseña,
-pólizas o pagos. La variante aislada añade la revisión local de fotos descrita abajo.
+pólizas o pagos. La app normal y la variante aislada incluyen la revisión local
+de fotos descrita abajo.
 SOL-169 añade el acceso con clave protegida por biometría descrito abajo; la historia
 completa sigue pendiente de validación de onboarding/selfie y prueba de vida
 con el servicio. SOL-189 queda fuera.
@@ -30,8 +31,9 @@ presenta las casillas sin marcar.
 La nota indica que los textos son de referencia: las selecciones no registran
 consentimiento legal ni autorizan acceso financiero. No se envían al backend
 ni se agregan campos al contrato de alta. `continueRegistration(termsSelected)`
-requiere formulario válido y selección local de términos; la variante aislada
-abre las fotos y la normal envía el alta una sola vez. Salir, detener la actividad
+requiere formulario válido y selección local de términos; ambas variantes
+abren las fotos y la confirmación antes de enviar el alta una sola vez.
+Salir, detener la actividad
 o recrearla descarta el borrador. Las contraseñas y casillas no usan estado guardado.
 
 El coordinador contrastó la app original `solventa-app@6a3521af`: sus casillas
@@ -58,16 +60,15 @@ AndroidX aporta `USE_BIOMETRIC` y `USE_FINGERPRINT` al manifiesto combinado;
 son permisos normales, sin solicitud de permiso en tiempo de ejecución.
 no se añade permiso de cámara para esta consulta.
 
-Un diálogo nativo muestra el resultado y aclara que el servicio no está habilitado
-en las variantes normales ni existe verificación con selfie. La variante aislada
-explica el alcance de la clave protegida por biometría. «Usar contraseña»
+Un diálogo nativo muestra el resultado y explica el alcance limitado de la clave
+protegida por biometría; no existe verificación con selfie. «Usar contraseña»
 cierra el diálogo y enfoca el correo del formulario existente.
 Cada apertura consulta de nuevo el dispositivo; no conserva capacidad ni
 credenciales entre recreaciones. Durante un login en curso no abre la consulta.
 
 Este flujo no abre `BiometricPrompt`, no verifica identidad, no llama al backend,
 no guarda tokens y no crea una sesión. No captura ni registra datos biométricos.
-Esta consulta informativa conserva su función aunque la variante aislada habilite
+Esta consulta informativa conserva su función aunque la app habilite
 el flujo de firma siguiente.
 
 `BiometricAccessInfoTest` cubre los códigos de capacidad; `AccessScreensTest`
@@ -79,10 +80,21 @@ Estas pruebas no sustituyen una comprobación en hardware ni de lector de pantal
 
 ### SOL-169: acceso con clave protegida por biometría
 
-La variante `biometricTest` habilita el flujo contra el backend local autorizado.
-Las variantes normales conservan `BIOMETRIC_LOGIN_ENABLED=false` e issuer vacío:
-no se ha confirmado un issuer de producción y no se deriva de la URL del BFF.
-El usuario conserva el acceso convencional.
+El candidato normal habilita el flujo con el contrato público confirmado:
+BFF `https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1` e issuer
+exacto `https://65qgzhody9.execute-api.us-east-2.amazonaws.com`, sin barra final
+ni ruta del BFF. Ese issuer procede del documento OIDC público verificado por
+el backend; no se infiere ni normaliza a partir de la URL de la API.
+La variante `biometricTest` conserva su backend local autorizado e issuer `.test`;
+no se comparten applicationId, tokens ni credenciales entre esas instalaciones.
+
+El orden de salida es **backend antes que app normal**. En la revisión de este
+candidato, el backend informó que las rutas biométricas públicas todavía devuelven
+404: requiere migración `0006`, Redis, flags y las dos rutas de infraestructura.
+Habilitar el cliente no acredita ese despliegue. Un 404 HTML, 503 u otro fallo no
+produce una sesión biométrica ni borra el vínculo local o la sesión convencional.
+El cliente informa indisponibilidad y conserva el acceso con contraseña.
+No hay fallback a localhost, issuer `.test` ni simulación de autorización.
 
 Después de ingresar con contraseña, «Habilitar acceso biométrico» pide consentimiento
 y la contraseña actual, transitoria. Android genera una clave EC P-256 no exportable
@@ -190,9 +202,9 @@ originales `9e7771e32575873bba48b16b6ef1696b63087a2a` y
 Compose aplica el eje de peso de cada fuente variable; no necesita descargarlas
 durante el uso de la app.
 
-### Documento y selfie locales en la variante aislada
+### Documento y selfie locales en la app normal
 
-Solo `biometricTest` habilita `PHOTO_REVIEW_ENABLED`. Tras la validación del
+Todas las variantes habilitan `PHOTO_REVIEW_ENABLED`. Tras la validación del
 formulario y las casillas de referencia provisional,
 la app conserva nombre, correo y contraseña en un borrador de RAM y abre
 `REGISTER_PHOTOS`: documento → selfie → resumen local. Todavía no envía el alta.
@@ -200,8 +212,8 @@ Después de revisar y eliminar ambas fotos, «Continuar» cierra el diálogo y a
 `REGISTER_CONFIRM`. El usuario pulsa «Crear cuenta» para enviar un único
 `POST /movil/v1/usuarios`. Solo una respuesta confirmada abre `REGISTERED`,
 sin sesión. «Iniciar sesión» vuelve al acceso con correo preparado y contraseña
-vacía. Las variantes normales, sin cámara, envían el alta al continuar después
-de las casillas, sin etapa de fotos.
+vacía. El código y los recursos de cámara están en `src/main`; las pruebas de
+foto están en `src/test` y se ejecutan también en el CI de la app normal.
 
 El usuario concede CAMERA y abre explícitamente cada paso: documento usa cámara
 trasera y selfie usa frontal. Si falta la cámara de ese paso se informa el error,
@@ -248,8 +260,10 @@ de PAD/identidad segura de SOL-169. La arquitectura v7 (pp. 2–4, 10 y 12)
 exige privacidad y separación por canal: aquí no se agrega un contrato BFF,
 reglas de negocio o consentimiento persistido. Las fotos no se envían al servidor.
 
-CameraX 1.4.2 (`core`, `camera2`, `lifecycle`, `view`) se incorpora solo en
-`biometricTest`. No se abre una app de cámara externa, galería ni FileProvider.
+CameraX 1.4.2 (`core`, `camera2`, `lifecycle`, `view`) y ML Kit bundled se incorporan
+en todas las variantes. CAMERA se solicita durante el recorrido; ambas cámaras
+se declaran opcionales para instalación y sus errores se muestran al usarlas.
+No se abre una app de cámara externa, galería ni FileProvider.
 La cámara escribe JPEG en `cacheDir/photo-review`, con nombres aleatorios sin
 identificadores de cuenta. La validación comprueba que el archivo existe, tiene
 contenido JPEG decodificable, hasta 20 MiB y 64 millones de píxeles. La vista usa

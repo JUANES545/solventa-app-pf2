@@ -63,9 +63,9 @@ android {
         versionCode = appVersion.getProperty("VERSION_CODE").toInt()
         versionName = appVersion.getProperty("VERSION_NAME")
         buildConfigField("String", "AUTH_BASE_URL", "\"https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1\"")
-        buildConfigField("String", "AUTH_ISSUER", "\"\"")
-        buildConfigField("boolean", "BIOMETRIC_LOGIN_ENABLED", "false")
-        buildConfigField("boolean", "PHOTO_REVIEW_ENABLED", "false")
+        buildConfigField("String", "AUTH_ISSUER", "\"https://65qgzhody9.execute-api.us-east-2.amazonaws.com\"")
+        buildConfigField("boolean", "BIOMETRIC_LOGIN_ENABLED", "true")
+        buildConfigField("boolean", "PHOTO_REVIEW_ENABLED", "true")
         testInstrumentationRunner = "co.solventa.mobile.espresso.SolventaTestRunner"
         val backendE2e = providers.gradleProperty("backendE2e").orNull == "true"
         testInstrumentationRunnerArguments[if (backendE2e) "annotation" else "notAnnotation"] =
@@ -109,9 +109,6 @@ android {
     sourceSets.getByName("biometricTest") {
         res.srcDir("src/debug/res")
     }
-    listOf("debug", "release", "preview").forEach {
-        sourceSets.getByName(it).java.srcDir("src/noPhoto/java")
-    }
     testCoverage {
         jacocoVersion = "0.8.13"
     }
@@ -150,10 +147,10 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    "biometricTestImplementation"(libs.androidx.camera.core)
-    "biometricTestImplementation"(libs.androidx.camera.camera2)
-    "biometricTestImplementation"(libs.androidx.camera.lifecycle)
-    "biometricTestImplementation"(libs.androidx.camera.view)
-    "biometricTestImplementation"(libs.mlkit.face)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.face)
     "biometricTestImplementation"(libs.androidx.compose.ui.test.manifest)
 }
