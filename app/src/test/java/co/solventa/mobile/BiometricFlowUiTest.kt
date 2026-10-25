@@ -44,6 +44,9 @@ class BiometricFlowUiTest {
     private var local: BiometricCredential? = null
     private var active = false
     private var loginFailure = false
+    private var enrollmentStatus: Int? = null
+    private var challengeStatus: Int? = null
+    private var revocationStatus: Int? = null
     private var publicKey = byteArrayOf()
     private var primaryLogins = 0
     private var registrations = 0
@@ -89,12 +92,16 @@ class BiometricFlowUiTest {
         override fun current(token: String) = currentActor
         override fun logout(accessToken: String, refreshToken: String) {}
         override fun beginEnrollment(token: String, password: String, publicKey: ByteArray): JSONObject {
+            enrollmentStatus?.let { throw AuthHttpError(it) }
             if (password != "password") throw AuthHttpError(401)
             this@BiometricFlowUiTest.publicKey = publicKey
             return challenge("enrolar")
         }
         override fun confirmEnrollment(token: String, challenge: BiometricChallenge, signature: ByteArray) { active = true }
-        override fun biometricChallenge(credentialId: String) = challenge("login")
+        override fun biometricChallenge(credentialId: String): JSONObject {
+            challengeStatus?.let { throw AuthHttpError(it) }
+            return challenge("login")
+        }
         override fun biometricLogin(challenge: BiometricChallenge, signature: ByteArray): AuthGrant {
             if (loginFailure) throw AuthHttpError(401)
             val result = issued("biometric")
@@ -106,6 +113,7 @@ class BiometricFlowUiTest {
         override fun biometricCredentials(token: String) =
             if (currentActor.id == user.id) listOf(RemoteBiometricCredential(id, "2026-10-24T00:00:00Z", active)) else emptyList()
         override fun revokeBiometricCredential(token: String, credentialId: String) {
+            revocationStatus?.let { throw AuthHttpError(it) }
             revocations++
             if (currentActor.id == user.id) active = false
         }
@@ -187,6 +195,66 @@ class BiometricFlowUiTest {
         assertTrue(active)
         assertEquals(user.id, local?.userId)
         assertEquals(currentActor.id, grant?.user?.id)
+    }
+
+    @Test fun unavailableEnrollmentDeletesCandidateButKeepsPasswordSessionAndAllowsRetry() {
+        openAccount()
+        for (status in listOf(404, 503)) {
+            enrollmentStatus = status
+            val authorized = grant
+            compose.runOnIdle { biometrics.enroll("password", device) }
+            await { !biometrics.state.value.busy && biometrics.state.value.message == R.string.auth_unavailable }
+            assertSame(authorized, grant)
+            assertEquals(user, auth.state.value.user)
+            assertNull(local)
+            assertFalse(active)
+        }
+        assertEquals(2, device.deleted)
+        enrollmentStatus = null
+        compose.runOnIdle { biometrics.enroll("password", device) }
+        await { local != null && !biometrics.state.value.busy }
+        assertTrue(active)
+        assertEquals("password", grant?.accessToken)
+    }
+
+    @Test fun unavailableChallengeKeepsLocalLinkWithoutSessionAndPasswordRemainsAvailable() {
+        openAccount()
+        compose.runOnIdle { biometrics.enroll("password", device) }
+        await { local != null && !biometrics.state.value.busy }
+        val linked = local
+        compose.runOnIdle { auth.logout() }
+        await { auth.state.value.user == null && biometrics.state.value.actorUserId == null && !auth.state.value.loading }
+        challengeStatus = 404
+        compose.runOnIdle { biometrics.login(device, auth::restore) }
+        await { !biometrics.state.value.busy && biometrics.state.value.message == R.string.auth_unavailable }
+        assertNull(grant)
+        assertNull(auth.state.value.user)
+        assertSame(linked, local)
+        assertEquals(0, biometricLogins)
+        assertEquals(0, device.deleted)
+        compose.runOnIdle { auth.login(user.email, "password") }
+        await { auth.state.value.user == user && !auth.state.value.loading }
+        assertEquals("password", grant?.accessToken)
+    }
+
+    @Test fun unavailableRevocationNeverDeletesLocalKeyOrClaimsSuccess() {
+        openAccount()
+        compose.runOnIdle { biometrics.enroll("password", device) }
+        await { local != null && !biometrics.state.value.busy }
+        val linked = local
+        revocationStatus = 503
+        compose.runOnIdle { biometrics.revoke(id, device) }
+        await { !biometrics.state.value.busy && biometrics.state.value.message == R.string.auth_unavailable }
+        assertSame(linked, local)
+        assertEquals(0, device.deleted)
+        assertTrue(active)
+        assertEquals("password", grant?.accessToken)
+        revocationStatus = null
+        compose.runOnIdle { biometrics.revoke(id, device) }
+        await { !biometrics.state.value.busy && biometrics.state.value.message == R.string.biometric_revoked }
+        assertNull(local)
+        assertEquals(1, device.deleted)
+        assertFalse(active)
     }
 
     @Test fun lateNetworkBiometricResponseCannotUndoLogoutOrReplaceAnotherAccount() = runBlocking {

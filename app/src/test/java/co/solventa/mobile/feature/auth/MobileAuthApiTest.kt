@@ -151,11 +151,13 @@ class MobileAuthApiTest {
     @Test fun biometricSuccessShapesAndStatusAreStrictAndErrorsNeverYieldAGrant() {
         val id = "11111111-1111-4111-8111-111111111111"
         val challenge = BiometricChallenge(id, base64Url(ByteArray(32)), byteArrayOf(1), Long.MAX_VALUE)
-        for (status in listOf(400, 401, 403, 409, 429, 503)) {
-            server.enqueue(MockResponse().setResponseCode(status).setBody("{}"))
+        for (status in listOf(400, 401, 403, 404, 409, 429, 503)) {
+            server.enqueue(MockResponse().setResponseCode(status).setHeader("Content-Type", "text/html")
+                .setBody("<html>Service unavailable</html>"))
             val error = assertThrows(AuthHttpError::class.java) { api.biometricLogin(challenge, byteArrayOf(1)) }
             assertEquals(status, error.status)
         }
+
         server.enqueue(MockResponse().setResponseCode(201).setBody(grantResponse))
         assertThrows(AuthProblem::class.java) { api.biometricLogin(challenge, byteArrayOf(1)) }
         server.enqueue(MockResponse().setResponseCode(200).setBody("""{"credencialId":"$id","estado":"activa"}"""))
@@ -166,5 +168,26 @@ class MobileAuthApiTest {
         assertThrows(AuthProblem::class.java) { api.biometricLogin(challenge, byteArrayOf(1)) }
         server.enqueue(MockResponse().setBody("""{"credenciales":[{"credencialId":"$id","creadaEn":"2026-10-24T00:00:00Z","ultimoUsoEn":null,"estado":"unknown"}]}"""))
         assertThrows(IllegalArgumentException::class.java) { api.biometricCredentials("access") }
+    }
+
+    @Test fun missingBiometricServiceDoesNotRedirectOrBreakConventionalLogin() {
+        val id = "11111111-1111-4111-8111-111111111111"
+        for (status in listOf(404, 503)) {
+            server.enqueue(MockResponse().setResponseCode(status).setHeader("Content-Type", "text/html")
+                .setBody("<html>Unavailable</html>").addHeader("Location", server.url("/unexpected")))
+            val enrollmentError = assertThrows(AuthHttpError::class.java) {
+                api.beginEnrollment("access", "password", byteArrayOf(1))
+            }
+            assertEquals(status, enrollmentError.status)
+            assertEquals("/movil/v1/biometria/enrolamientos/desafio", server.takeRequest().path)
+            server.enqueue(MockResponse().setResponseCode(status).setBody("<html>Unavailable</html>"))
+            val challengeError = assertThrows(AuthHttpError::class.java) { api.biometricChallenge(id) }
+            assertEquals(status, challengeError.status)
+            assertEquals("/movil/v1/biometria/desafios", server.takeRequest().path)
+            server.enqueue(MockResponse().setBody(grantResponse))
+            assertEquals("access", api.login("cliente@example.org", "password").accessToken)
+            assertEquals("/movil/v1/sesiones", server.takeRequest().path)
+        }
+        assertEquals(6, server.requestCount)
     }
 }

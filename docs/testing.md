@@ -1,5 +1,69 @@
 # Pruebas y cobertura Android
 
+## Candidato normal con fotos y contrato biométrico público
+
+Base de trabajo: `develop@806679151feff01510dd475be18d5b570ee59418`.
+La app normal comparte ahora el código CameraX/ML Kit, recursos y pruebas de
+fotos con la variante aislada. CAMERA y ambas cámaras opcionales se declaran
+en el manifiesto común; no se añaden permisos de micrófono, almacenamiento
+o galería. Se elimina el host vacío `noPhoto`.
+
+`debug`, `preview` y `release` compilan sin propiedades privadas con:
+
+| Campo | Valor |
+| --- | --- |
+| applicationId | `co.solventa.mobile.pf2` |
+| AUTH_BASE_URL | `https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1` |
+| AUTH_ISSUER | `https://65qgzhody9.execute-api.us-east-2.amazonaws.com` |
+| BIOMETRIC_LOGIN_ENABLED / PHOTO_REVIEW_ENABLED | `true` / `true` |
+
+El issuer exacto, sin barra final ni `/movil/v1`, fue confirmado por el
+coordinador a partir del OIDC público revisado por backend. `biometricTest`
+conserva su applicationId separado, URL loopback e issuer `.test` explícitos.
+No existe fallback de la app normal hacia ese entorno.
+
+Orden de salida: revisar y aplicar las rutas biométricas autorizadas, desplegar
+Identidad con la migración `0006` y BFF móvil, comprobar Redis e issuer, y activar
+primero Identidad y después BFF móvil antes de distribuir la app normal. En esta
+revisión backend informó 404 en esas rutas públicas. Este corte prepara el
+cliente; no demuestra un servicio público operativo ni cierra los criterios
+de prueba de vida/identidad de SOL-169. Las fotos siguen siendo revisión local
+y las casillas siguen siendo provisionales, no consentimiento legal persistido.
+
+Validación del candidato:
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest :app:testBiometricTestUnitTest `
+  :app:compileDebugAndroidTestKotlin :app:lintDebug :app:lintPreview `
+  :app:assemblePreview :app:assembleDebugAndroidTest
+```
+
+Resultado: 205 casos por variante, 204 ejecutados y uno optativo de backend
+omitido en cada una; cero fallos o errores. Lint: cero errores, 40 advertencias
+debug y 32 preview. Compilación y empaquetado terminaron con código 0.
+Las pruebas de fotos antes exclusivas de `testBiometricTest` están en `src/test`
+y quedan incluidas en los checks debug existentes, sin excluir sus aserciones.
+
+Se añaden regresiones de issuer público exacto (rechazo de barra, ruta,
+issuer local y HTTP), 404 HTML/503 sin redirects ni grant biométrico,
+enrolamiento fallido que elimina solo la clave candidata, login convencional
+recuperable y revocación fallida que conserva el vínculo hasta confirmación.
+Las pruebas HTTP instrumentadas usan el PhotoReviewHost real con JPEG sintético:
+recorren las dos revisiones y confirmación antes del POST. Se compilaron,
+no se ejecutaron en este corte. El doble no acredita una cámara física.
+
+APK `app\build\outputs\apk\preview\app-preview.apk`:
+46 872 930 bytes, SHA-256
+`8FC4892C7D170C80A9225992E6D5DFF235FF98D72665B17014E6BED55CDCD53C`.
+`aapt2` comprobó package normal, versión 0.3.1/code 6, min26/target35 y
+cámaras opcionales. No se modificó versionado ni se instaló ese APK.
+La firma V2 y `zipalign -c -P 16 4` pasan. El manifiesto preview combinado
+mantiene `usesCleartextTraffic=false` y no incluye la excepción de red local
+de debug/biometricTest. Esto no acredita ejecución en páginas de 16 KB.
+El worktree anterior y su APK aislado `CEE030…DDD15B` se conservan.
+Sin ADB, emuladores, nuevas cuentas, despliegue, merge o publicación en esta
+primera etapa; el diff se entrega al coordinador para revisión.
+
 ## Batería JVM
 
 JUnit 4 ejecuta las pruebas del repositorio de autenticación y configuración.

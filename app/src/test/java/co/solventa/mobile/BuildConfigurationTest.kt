@@ -1,7 +1,6 @@
 package co.solventa.mobile
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -17,10 +16,10 @@ class BuildConfigurationTest {
             assertTrue(BuildConfig.DEBUG)
         } else {
             assertEquals("co.solventa.mobile.pf2", BuildConfig.APPLICATION_ID)
-            assertTrue(BuildConfig.AUTH_BASE_URL.startsWith("https://"))
-            assertEquals("", BuildConfig.AUTH_ISSUER)
-            assertFalse(BuildConfig.BIOMETRIC_LOGIN_ENABLED)
-            assertFalse(BuildConfig.PHOTO_REVIEW_ENABLED)
+            assertEquals("https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1", BuildConfig.AUTH_BASE_URL)
+            assertEquals("https://65qgzhody9.execute-api.us-east-2.amazonaws.com", BuildConfig.AUTH_ISSUER)
+            assertTrue(BuildConfig.BIOMETRIC_LOGIN_ENABLED)
+            assertTrue(BuildConfig.PHOTO_REVIEW_ENABLED)
         }
     }
 

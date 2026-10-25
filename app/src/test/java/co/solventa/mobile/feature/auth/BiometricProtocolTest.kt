@@ -76,11 +76,24 @@ class BiometricProtocolTest {
             assertThrows(IllegalArgumentException::class.java) {
                 decode(challenge().put("mensaje", base64Url(changed.toByteArray())))
             }
+
         }
         listOf("\n", "\r", "\r\n").forEach { suffix ->
             assertThrows(IllegalArgumentException::class.java) {
                 decode(challenge().put("mensaje", base64Url((fixture.getString("mensajeTexto") + suffix).toByteArray())))
             }
+        }
+    }
+
+    @Test fun publicIssuerBindsExactOriginNotTheBffPathOrLocalEnvironment() {
+        val issuer = "https://65qgzhody9.execute-api.us-east-2.amazonaws.com"
+        val lines = fixture.getString("mensajeTexto").split('\n').toMutableList()
+        lines[3] = sha256Base64(issuer.toByteArray(Charsets.UTF_8))
+        val response = challenge().put("mensaje", base64Url(lines.joinToString("\n").toByteArray(Charsets.US_ASCII)))
+        assertArrayEquals(lines.joinToString("\n").toByteArray(Charsets.US_ASCII), decode(response, issuer).message)
+        for (other in listOf("$issuer/", "$issuer/movil/v1", "https://identidad.solventa.test",
+            issuer.replace("https://", "http://"))) {
+            assertThrows(IllegalArgumentException::class.java) { decode(response, other) }
         }
     }
 

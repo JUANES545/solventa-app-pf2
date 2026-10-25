@@ -1,5 +1,9 @@
 package co.solventa.mobile.espresso
 
+import android.Manifest
+import android.graphics.Bitmap
+import androidx.activity.compose.setContent
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -14,6 +18,11 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertIsNotEnabled
 import co.solventa.mobile.feature.auth.validateRegistration
 import co.solventa.mobile.feature.auth.AuthProblem
+import co.solventa.mobile.feature.auth.AuthViewModel
+import co.solventa.mobile.feature.photo.PhotoReviewHost
+import co.solventa.mobile.feature.photo.PhotoButton
+import co.solventa.mobile.feature.photo.PhotoStep
+import co.solventa.mobile.SolventaApp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso
@@ -48,7 +57,30 @@ abstract class AuthJourney {
     }
 
     protected fun launch() {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
         scenario = ActivityScenario.launch(MainActivity::class.java)
+        scenario!!.onActivity { activity ->
+            val auth = ViewModelProvider(activity)[AuthViewModel::class.java]
+            activity.setContent {
+                PhotoReviewHost(activity, auth, camera = { model, state ->
+                    // Controlled JPEG fixture; HTTP journeys do not exercise a physical camera.
+                    PhotoButton(R.string.photo_take, {
+                        val capture = checkNotNull(model.beginCapture())
+                        val bitmap = Bitmap.createBitmap(64, 48, Bitmap.Config.ARGB_8888)
+                        try {
+                            capture.file.outputStream().use {
+                                check(bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it))
+                            }
+                        } finally {
+                            bitmap.recycle()
+                        }
+                        model.captured(capture)
+                    }, state.step == PhotoStep.CAMERA)
+                }) { openPhoto, beforeChange ->
+                    SolventaApp(auth, onPhotoReview = openPhoto, beforeAccessChange = beforeChange)
+                }
+            }
+        }
         Espresso.onView(isRoot()).check(matches(isDisplayed()))
         compose.waitUntil(20_000) {
             listOf(R.string.sign_in, R.string.sign_out).any {
@@ -105,6 +137,18 @@ abstract class AuthJourney {
             compose.onNodeWithText(text(R.string.registration_continue)).performScrollTo().assertIsNotEnabled()
             click(R.string.registration_terms)
             click(R.string.registration_continue)
+            repeat(2) {
+                awaitText(R.string.photo_start)
+                click(R.string.photo_start)
+                awaitText(R.string.photo_take)
+                click(R.string.photo_take)
+                awaitText(R.string.photo_accept)
+                click(R.string.photo_accept)
+            }
+            awaitText(R.string.photo_back_login)
+            click(R.string.photo_back_login)
+            awaitText(R.string.registration_finish)
+            click(R.string.create_account)
         }
     }
 
