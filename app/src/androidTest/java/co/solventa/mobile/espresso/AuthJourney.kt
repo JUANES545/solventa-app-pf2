@@ -3,6 +3,7 @@ package co.solventa.mobile.espresso
 import android.Manifest
 import android.graphics.Bitmap
 import android.util.Log
+import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -61,6 +62,7 @@ abstract class AuthJourney {
         InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
         scenario = ActivityScenario.launch(MainActivity::class.java)
         scenario!!.onActivity { activity ->
+            activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             logWindowState(activity, "before-content")
             val auth = ViewModelProvider(activity)[AuthViewModel::class.java]
             activity.setContent {

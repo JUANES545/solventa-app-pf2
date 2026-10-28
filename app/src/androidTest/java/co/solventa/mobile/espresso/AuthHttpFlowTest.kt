@@ -17,6 +17,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import okhttp3.mockwebserver.SocketPolicy
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
@@ -154,6 +155,92 @@ class AuthHttpFlowTest : AuthJourney() {
         awaitText(R.string.registration_unavailable)
         assertNull(store.read())
         assertEquals(1, server.requestCount)
+    }
+
+    @Test fun disconnectedRegistrationCanReturnToExplicitLoginWithoutResubmitting() {
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+        launch()
+        register()
+        awaitText(R.string.registration_unavailable)
+        request("POST", "/usuarios")
+        assertNull(store.read())
+        assertEquals(1, server.requestCount)
+        click(R.string.back_to_login)
+        assertInput(R.string.email, EMAIL)
+        assertInput(R.string.password, "")
+        assertEquals(1, server.requestCount)
+        respond(grantJson())
+        login()
+        awaitText(R.string.account_title)
+        request("POST", "/sesiones")
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test fun registrationRateLimitRequiresExplicitRetryAndNeverCreatesASession() {
+        status(429)
+        launch()
+        register()
+        awaitText(R.string.auth_rate_limit)
+        request("POST", "/usuarios")
+        assertNull(store.read())
+        assertEquals(1, server.requestCount)
+        respond(userJson(), 201)
+        click(R.string.back_to_login)
+        register()
+        awaitText(R.string.registration_success)
+        request("POST", "/usuarios")
+        assertNull(store.read())
+        assertEquals(2, server.requestCount)
+        click(R.string.go_to_login)
+        assertInput(R.string.email, EMAIL)
+        assertInput(R.string.password, "")
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test fun malformedRegistrationResponseNeverAnnouncesSuccessOrStartsLogin() {
+        respond(JSONObject().put("usuario", "invalid"), 201)
+        launch()
+        register()
+        awaitText(R.string.registration_unavailable)
+        request("POST", "/usuarios")
+        assertNull(store.read())
+        assertEquals(1, server.requestCount)
+        click(R.string.back_to_login)
+        assertInput(R.string.email, EMAIL)
+        assertInput(R.string.password, "")
+    }
+
+    @Test fun registrationInFlightDisablesInputsAndPreventsDuplicateSubmission() {
+        val releaseResponse = CountDownLatch(1)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                check(releaseResponse.await(20, TimeUnit.SECONDS)) { "Test did not release registration response" }
+                return MockResponse().setResponseCode(201).setHeader("Content-Type", "application/json")
+                    .setBody(userJson().toString())
+            }
+        }
+        try {
+            launch()
+            register()
+            request("POST", "/usuarios")
+            awaitText(R.string.registering)
+            for (field in listOf(R.string.name, R.string.email, R.string.password, R.string.confirm_password)) {
+                compose.onNodeWithContentDescription(text(field)).performScrollTo().assertIsNotEnabled()
+            }
+            compose.onNodeWithText(text(R.string.registering)).performScrollTo().assertIsNotEnabled().performClick()
+            compose.onNodeWithText(text(R.string.back_to_login)).performScrollTo().assertIsNotEnabled()
+            Espresso.pressBack()
+            assertNull(store.read())
+            assertEquals(1, server.requestCount)
+        } finally {
+            releaseResponse.countDown()
+        }
+        awaitText(R.string.registration_success)
+        assertNull(store.read())
+        assertEquals(1, server.requestCount)
+        click(R.string.go_to_login)
+        assertInput(R.string.email, EMAIL)
+        assertInput(R.string.password, "")
     }
 
     @Test fun invalidCredentialsCanBeCorrectedWithoutLeavingLogin() {

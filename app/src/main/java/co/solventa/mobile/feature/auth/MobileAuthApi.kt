@@ -96,6 +96,8 @@ class MobileAuthApi internal constructor(private val base: String) : AuthApi, Bi
             if (body != null) {
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                // Account creation must not be replayed automatically after a lost response.
+                if (path == "/usuarios") connection.setFixedLengthStreamingMode(checkNotNull(encodedBody).size)
                 connection.outputStream.use { it.write(checkNotNull(encodedBody)) }
             }
             val status = connection.responseCode
