@@ -3,6 +3,7 @@ package co.solventa.mobile.feature.auth
 import android.app.Application
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
@@ -12,6 +13,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.time.Instant
+import java.io.IOException
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
@@ -70,6 +72,16 @@ class MobileAuthApiTest {
         assertEquals("/movil/v1/sesiones/actual", logout.path)
         assertEquals("Bearer access", logout.getHeader("Authorization"))
         assertEquals("refresh", JSONObject(logout.body.readUtf8()).getString("refreshToken"))
+    }
+
+    @Test fun registrationWithLostResponseIsNotSilentlyRetried() {
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+        server.enqueue(MockResponse().setResponseCode(409))
+        assertThrows(IOException::class.java) {
+            api.register("Cliente", "cliente@example.org", "password")
+        }
+        assertEquals("/movil/v1/usuarios", server.takeRequest().path)
+        assertEquals(1, server.requestCount)
     }
 
     @Test fun httpFailuresAreNotDecodedAsSuccessfulSessionsOrFollowedAsRedirects() {
