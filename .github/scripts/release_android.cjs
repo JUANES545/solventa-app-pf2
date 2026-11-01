@@ -44,6 +44,17 @@ function incrementVersion(current, level) {
   return next;
 }
 
+function sprintWeekVersion(current, sprint, week) {
+  if (!validVersion(current) || ![sprint, week].every(value => Number.isSafeInteger(value) && value > 0)) {
+    throw new Error('Confirmar sprint y semana como enteros positivos');
+  }
+  const [previousSprint, previousWeek, revision] = current.split('.').map(Number);
+  const next = `${sprint}.${week}.${sprint === previousSprint && week === previousWeek ? revision + 1 : 0}`;
+  if (!validVersion(next)) throw new Error('La versión supera el límite numérico permitido');
+  if (compareVersions(next, current) <= 0) throw new Error('Sprint y semana no pueden retroceder respecto a la última entrega');
+  return next;
+}
+
 function versionFromText(text) {
   const values = new Map();
   for (const line of text.split(/\r?\n/)) {
@@ -68,8 +79,11 @@ function versionFromText(text) {
         new Date(date).toISOString().slice(0, 10) !== match[1]) throw new Error('Identificador de entrega inválido: usar AAAA-MM-DD-N');
   }
   const level = values.get('RELEASE_LEVEL');
-  if (level !== undefined && !releaseLevels.includes(level)) {
-    throw new Error('Elegir RELEASE_LEVEL: patch (ajuste), minor (semana) o major (sprint)');
+  if (level !== undefined && level !== 'sprint-week' && !releaseLevels.includes(level)) {
+    throw new Error('Elegir RELEASE_LEVEL: sprint-week; patch, minor y major solo para entregas anteriores');
+  }
+  if (level === 'sprint-week' && name.split('.').slice(0, 2).some(part => Number(part) === 0)) {
+    throw new Error('Confirmar sprint y semana como enteros positivos');
   }
   return { name, code, ...(releaseId ? { releaseId } : {}), ...(level ? { level } : {}) };
 }
@@ -164,7 +178,8 @@ async function validateVersion({ github, context, properties = 'version.properti
   const names = tags.map(tag => tag.name).filter(validVersion);
   const baseline = versionBaseline(previous.name,
     existing === context.sha ? names.filter(name => compareVersions(name, next.name) < 0) : names);
-  const expected = incrementVersion(baseline, next.level);
+  const [sprint, week] = next.name.split('.').map(Number);
+  const expected = next.level === 'sprint-week' ? sprintWeekVersion(baseline, sprint, week) : incrementVersion(baseline, next.level);
   if (next.name !== expected) {
     throw new Error(`RELEASE_LEVEL=${next.level} requiere VERSION_NAME=${expected} desde ${baseline}`);
   }
@@ -286,4 +301,4 @@ async function deployApp({ github, context, directory, publicKey }) {
   return { url, commit: metadata.commit, version: metadata.version };
 }
 
-module.exports = { versionFromText, versionBaseline, incrementVersion, assertIncrease, validateVersion, publicationSource, publishRelease, prepareDeployment, downloadRelease, deployApp };
+module.exports = { versionFromText, versionBaseline, incrementVersion, sprintWeekVersion, assertIncrease, validateVersion, publicationSource, publishRelease, prepareDeployment, downloadRelease, deployApp };
