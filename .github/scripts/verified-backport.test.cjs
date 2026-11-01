@@ -6,6 +6,7 @@ const path = require('node:path');
 const timers = require('node:timers/promises');
 const { verifyPull, automaticBackport, sourceNumber } = require('./verified-backport.cjs');
 const HEAD = 'a'.repeat(40), RELEASE = 'b'.repeat(40), BASE = 'c'.repeat(40);
+const MERGE = 'd'.repeat(40);
 
 function fixture() {
   const full = 'JUANES545/solventa-app-pf2';
@@ -13,6 +14,7 @@ function fixture() {
     head: { ref: 'release/0.1.0', sha: HEAD, repo: { full_name: full } },
     base: { ref: 'master', repo: { full_name: full } }, html_url: 'https://github.com/' + full + '/pull/6' };
   const pull = { number: 7, state: 'open', draft: false, mergeable: true,
+    merge_commit_sha: MERGE,
     head: { ref: 'backport/release-pr-6', sha: RELEASE, repo: { full_name: full } },
     base: { ref: 'develop', sha: BASE, repo: { full_name: full } },
     user: { id: 3, type: 'Bot', login: 'backport-app[bot]' } };
@@ -20,6 +22,7 @@ function fixture() {
   const checks = ['Android verification', 'Android UI tests', 'CI / Validación (Jenkins)'].map((name, index) =>
     ({ name, app: { id: index === 2 ? 5247357 : 15368 }, head_sha: HEAD, status: 'completed', conclusion: 'success' }));
   const reviews = [{ user: { id: 2, type: 'User' }, state: 'APPROVED', commit_id: HEAD }];
+  const candidate = { tree: { sha: HEAD }, parents: [{ sha: BASE }, { sha: RELEASE }] };
   let diverged = false, merged = false;
   const github = { rest: {
     users: { getByUsername: async () => ({ data: bot }) },
@@ -27,12 +30,13 @@ function fixture() {
       list: () => {}, listReviews: () => {}, merge: async () => { merged = true; return { data: { merged: true, sha: RELEASE } }; } },
     checks: { listForRef: () => {} },
     git: { getRef: async ({ ref }) => ({ data: { object: { sha: ref === 'heads/develop' ? BASE : RELEASE } } }),
-      getCommit: async () => ({ data: { tree: { sha: HEAD } } }) },
+      getCommit: async ({ commit_sha }) => ({ data: commit_sha === MERGE ? candidate : { tree: { sha: HEAD } } }) },
     repos: { compareCommitsWithBasehead: async ({ basehead }) => ({ data:
       basehead === `${RELEASE}...${BASE}` ? { ahead_by: 0, behind_by: 1, status: 'behind' } :
-      { ahead_by: 1, behind_by: diverged ? 1 : 0, status: diverged ? 'diverged' : 'ahead' } }) },
+      basehead === `${BASE}...${RELEASE}` && diverged ? { ahead_by: 1, behind_by: 1, status: 'diverged' } :
+      { ahead_by: 1, behind_by: 0, status: 'ahead' } }) },
   }, paginate: async (method) => method === github.rest.checks.listForRef ? checks : method === github.rest.pulls.listReviews ? reviews : [pull] };
-  return { github, pull, bot, source, checks, reviews, owner: 'JUANES545', repo: 'solventa-app-pf2', appId: 99, appSlug: 'backport-app',
+  return { github, pull, bot, source, checks, reviews, candidate, owner: 'JUANES545', repo: 'solventa-app-pf2', appId: 99, appSlug: 'backport-app',
     diverge: () => { diverged = true; }, wasMerged: () => merged };
 }
 
@@ -65,7 +69,7 @@ for (const [name, mutate] of [
   ['dismissed review', f => { f.reviews[0].state = 'DISMISSED'; }],
   ['self review', f => { f.reviews[0].user.id = 1; }],
   ['unmerged source', f => { f.source.merged = false; }],
-  ['divergent develop', f => { f.diverge(); }],
+  ['divergent develop with unvalidated content', f => { f.diverge(); f.candidate.tree.sha = BASE; }],
 ]) test(`${name} cannot bypass verification`, async () => {
   const f = fixture(); mutate(f); await assert.rejects(verifyPull(f)); assert.equal(f.wasMerged(), false);
 });
@@ -73,6 +77,57 @@ test('automatic merge uses verified PR and never calls review APIs', async () =>
   const f = fixture();
   await automaticBackport({ ...f, sourceId: 6, context: { repo: { owner: f.owner, repo: f.repo } }, core: { info: () => {} } });
   assert.equal(f.wasMerged(), true);
+});
+test('divergent history is accepted only when its prospective merge is the approved release tree', async () => {
+  const f = fixture(); f.diverge();
+  await verifyPull(f);
+  await automaticBackport({ ...f, sourceId: 6, context: { repo: { owner: f.owner, repo: f.repo } }, core: { info: () => {} } });
+  assert.equal(f.wasMerged(), true);
+});
+test('a new divergent backport preserves the exact release head before verifying its merge tree', async t => {
+  const f = fixture(); f.diverge();
+  const paginate = f.github.paginate;
+  t.mock.method(f.github, 'paginate', async (method, args) =>
+    method === f.github.rest.pulls.list ? [] : paginate(method, args));
+  let created = false;
+  f.github.rest.git.createRef = async args => {
+    assert.equal(args.ref, 'refs/heads/backport/release-pr-6');
+    assert.equal(args.sha, RELEASE);
+  };
+  f.github.rest.pulls.create = async args => {
+    assert.equal(args.head, 'backport/release-pr-6');
+    assert.equal(args.base, 'develop');
+    created = true;
+    return { data: f.pull };
+  };
+  await automaticBackport({ ...f, sourceId: 6, context: { repo: { owner: f.owner, repo: f.repo } }, core: { info: () => {} } });
+  assert.equal(created, true);
+  assert.equal(f.wasMerged(), true);
+});
+for (const [name, mutate] of [
+  ['unknown mergeability', f => { f.pull.mergeable = null; }],
+  ['conflict', f => { f.pull.mergeable = false; }],
+  ['missing merge commit', f => { delete f.pull.merge_commit_sha; }],
+  ['different merge base', f => { f.candidate.parents[0].sha = HEAD; }],
+  ['different merge head', f => { f.candidate.parents[1].sha = HEAD; }],
+  ['missing merge parents', f => { delete f.candidate.parents; }],
+  ['additional merge parent', f => { f.candidate.parents.push({ sha: HEAD }); }],
+  ['missing merge tree', f => { delete f.candidate.tree; }],
+]) test(`divergent history with ${name} requires manual verification`, async () => {
+  const f = fixture(); f.diverge(); mutate(f);
+  await assert.rejects(verifyPull(f));
+  assert.equal(f.wasMerged(), false);
+});
+test('develop moving while the prospective tree is checked prevents automatic integration', async t => {
+  const f = fixture(); f.diverge();
+  const read = f.github.rest.git.getRef;
+  let reads = 0;
+  t.mock.method(f.github.rest.git, 'getRef', async args => {
+    if (args.ref === 'heads/develop' && ++reads > 1) return { data: { object: { sha: HEAD } } };
+    return read(args);
+  });
+  await assert.rejects(verifyPull(f), /changed/);
+  assert.equal(f.wasMerged(), false);
 });
 test('unknown mergeability stops after bounded retries without merging', async t => {
   const wait = t.mock.method(timers, 'setTimeout', async () => {});

@@ -1,6 +1,6 @@
 # Verified automatic backports
 
-The team approved a dedicated GitHub App for automatic release synchronization. This replaces manual review and repeated application tests only for an exact, already-approved release whose history contains current develop. Other PRs retain all checks and review requirements. This does not implement login, publish releases or change AWS.
+The team approved a dedicated GitHub App for automatic release synchronization. This replaces manual review and repeated application tests only for an exact, already-approved release. Divergent histories qualify only when GitHub's prospective merge preserves the approved release tree without additional changes. Other PRs retain all checks and review requirements. This does not implement login, publish releases or change AWS.
 
 ## App setup (owner, private credentials)
 
@@ -27,10 +27,10 @@ GitHub grants bypass to an actor, not to a source branch. The App technically ca
 - Verify merge SHA belongs to current master, source-head required checks are successful from the expected Apps, and a human approval belongs to that source head.
 - Dedicated-App PR creator, App ID, repository, deterministic branch, target and head SHA must match API evidence. Existing PRs created by github-actions[bot] (including PR #7) are not silently adopted or auto-merged.
 - App identity uses the authenticated `app-slug` output from token creation, matched against configuration. Users API confirms that the PR author has the real Bot ID and login for that App. Do not rely on `performed_via_github_app`: it is absent from PR responses and can be null in Issues API.
-- Current develop must be an ancestor of the release merge. Divergent branches, human-added commits and conflicts require the existing manual flow. This constraint makes omission of repeated tests justified; combining different changes is not an already-validated tree.
+- If current develop is an ancestor of the release merge, the existing ancestry proof applies. Otherwise GitHub must report a conflict-free prospective merge with exactly current develop and the release SHA as its parents, in that order, and the exact approved release tree. Develop is reread after this check. A different tree, moved base, unknown mergeability or conflict requires manual verification; application tests are never reused for combined, unvalidated content.
 - Inside `Android verification`, Actions runs a small API policy step only for candidate backport branches, loading trusted policy from the base commit before checking out any PR code. Verified App backports reuse release evidence instead of repeating application tests. Other branches run normal CI, including automation unit tests in that same job; no separate backport checks are created. Merge commit includes [skip ci] to avoid the redundant push workflow.
 - Jenkins already suppresses automatic builds. Do not request /test-jenkins on exact automatic backports; they merge via App bypass without Jenkins checks. Existing comments are not cancelled or deleted.
-- A new PR may have unknown mergeability briefly. The workflow rereads it up to five times, waiting one second between unknown results. Conflicts stop immediately; if the state remains unknown, it fails visibly and can be rerun from master with the source PR number. Identity, SHA and ancestry checks still run after the wait.
+- A new PR may have unknown mergeability briefly. The workflow rereads it up to five times, waiting one second between unknown results. Conflicts stop immediately; if the state remains unknown, it fails visibly and can be rerun from master with the source PR number. Identity, SHA and ancestry or prospective-tree checks still run after the wait.
 
 ## Concurrency limitation
 

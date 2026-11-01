@@ -1,5 +1,54 @@
 # Pruebas y cobertura Android
 
+## SOL-332: registro y recuperación de errores
+
+Crear la cuenta no inicia sesión. Tras confirmar el registro, la pantalla de
+acceso conserva el correo y deja la contraseña vacía. Las validaciones locales,
+el rechazo de correo duplicado y el bloqueo de acciones durante una solicitud
+siguen siendo parte del flujo existente.
+
+El POST `/movil/v1/usuarios` usa streaming de longitud fija para impedir que el
+cliente HTTP repita automáticamente la creación si se pierde la respuesta.
+Una desconexión no demuestra que el servidor haya descartado el alta: se muestra
+que no pudo confirmarse y se permite volver al acceso, sin reenvíos silenciosos.
+Esto no agrega idempotencia al backend ni impide un nuevo intento explícito.
+
+Regresiones focalizadas:
+
+```powershell
+.\gradlew.bat --no-daemon :app:testDebugUnitTest `
+  --tests "co.solventa.mobile.feature.auth.*" `
+  --tests "co.solventa.mobile.AccessScreensTest" `
+  --tests "co.solventa.mobile.feature.photo.PhotoFlowUiTest" :app:lintDebug
+```
+
+`MobileAuthApiTest.registrationWithLostResponseIsNotSilentlyRetried` corta la
+conexión después de recibir el POST y exige un único envío, no un 409 de un
+segundo intento. La regresión falló antes de la corrección.
+
+`AuthHttpFlowTest` cubre registro sin sesión y acceso explícito, validaciones,
+correo duplicado, servicio no disponible, respuesta perdida, límite de intentos
+con reintento explícito, respuesta inválida y envío en curso sin duplicados.
+Durante esta última prueba se retiene la respuesta mediante un latch; no se
+simula el estado de carga de la interfaz.
+
+La instrumentación requiere un teléfono de pruebas desbloqueado. Mantiene la
+pantalla encendida solo mientras la actividad de prueba está visible, sin
+desactivar el bloqueo ni cambiar los controles de captura. Usa HTTP controlado
+con MockWebServer y almacenamiento cifrado real; no crea usuarios en AWS ni
+certifica el backend productivo, la cámara física o la huella.
+No ejecutar sobre la instalación personal: esta batería limpia la sesión del
+paquete objetivo. La comprobación local de SOL-332 utiliza un identificador
+aislado, `co.solventa.mobile.pf2.sol332test`, sin cambiar los paquetes normales
+de `debug`, `preview` o `release`.
+
+Resultado local del 28 de octubre de 2026: 106 pruebas JVM aprobadas y una
+prueba optativa de backend omitida; lint debug sin errores. Los ocho recorridos
+HTTP indicados pasaron en Samsung SM-A217M, Android 16, sin fallos ni omisiones.
+El primer intento físico se interrumpió por pantalla bloqueada; se repitió tras
+el desbloqueo del usuario. Los paquetes aislados ya no estaban instalados al
+terminar Gradle; se conservaron las instalaciones previas del teléfono.
+
 ## Candidato normal con fotos y contrato biométrico público
 
 Base de trabajo: `develop@806679151feff01510dd475be18d5b570ee59418`.

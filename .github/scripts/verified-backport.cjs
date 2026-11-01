@@ -61,8 +61,22 @@ async function verifyPull({ github, owner, repo, pull, appId, appSlug }) {
   if (pull.head.sha !== source.merge_commit_sha) throw new Error('Backport contains different commits');
   const branch = (await github.rest.git.getRef({ owner, repo, ref: `heads/${pull.head.ref}` })).data.object.sha;
   const develop = (await github.rest.git.getRef({ owner, repo, ref: 'heads/develop' })).data.object.sha;
-  if (branch !== source.merge_commit_sha || pull.base.sha !== develop || !await ancestor(github, owner, repo, develop, branch)) {
-    throw new Error('Develop diverged or references changed; manual verification required');
+  if (branch !== source.merge_commit_sha || pull.base.sha !== develop) {
+    throw new Error('Backport references changed; manual verification required');
+  }
+  if (!await ancestor(github, owner, repo, develop, branch)) {
+    if (pull.mergeable !== true || !shaPattern.test(pull.merge_commit_sha || '')) {
+      throw new Error('Divergent history needs a conflict-free prospective merge');
+    }
+    const candidate = (await github.rest.git.getCommit({ owner, repo, commit_sha: pull.merge_commit_sha })).data;
+    const release = (await github.rest.git.getCommit({ owner, repo, commit_sha: source.merge_commit_sha })).data;
+    if (!Array.isArray(candidate.parents) || candidate.parents.length !== 2 ||
+        candidate.parents[0]?.sha !== develop || candidate.parents[1]?.sha !== branch ||
+        !shaPattern.test(release.tree?.sha || '') || candidate.tree?.sha !== release.tree.sha) {
+      throw new Error('Prospective merge is not the approved release tree; manual verification required');
+    }
+    const current = (await github.rest.git.getRef({ owner, repo, ref: 'heads/develop' })).data.object.sha;
+    if (current !== develop) throw new Error('Develop changed during tree verification');
   }
   return { source, develop };
 }
@@ -83,7 +97,6 @@ async function automaticBackport({ github, context, core, appId, appSlug, source
     core.info('Develop already contains the release');
     return;
   }
-  if (!await ancestor(github, owner, repo, develop, source.merge_commit_sha)) throw new Error('Divergent develop: leave synchronization to manual review');
   if (!pulls.length) {
     try {
       await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: source.merge_commit_sha });
@@ -94,7 +107,7 @@ async function automaticBackport({ github, context, core, appId, appSlug, source
     }
     const { data: created } = await github.rest.pulls.create({ owner, repo, head: branch, base: 'develop',
       title: `Sincroniza ${source.head.ref} con develop`,
-      body: `Sincroniza la entrega aprobada ${source.html_url}.\n\nSHA integrado exacto: ${source.merge_commit_sha}.\n\nSolo la sincronización exacta y sin divergencias permite integración automática. Se reutiliza la evidencia validada de la entrega; no se repite ni se fabrica.`, draft: false });
+      body: `Sincroniza con develop la entrega aprobada ${source.html_url}, conservando ambos historiales y el contenido validado.`, draft: false });
     pulls = [created];
   }
   // Fresh API reads immediately before merging; do not trust event payloads or PR text.
