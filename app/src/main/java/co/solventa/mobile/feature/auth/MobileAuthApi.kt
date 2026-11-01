@@ -34,30 +34,30 @@ class MobileAuthApi internal constructor(private val base: String) : AuthApi, Bi
             JSONObject().put("contrasena", password).put("clavePublica", base64Url(publicKey)), token, 200)
 
     override fun confirmEnrollment(token: String, challenge: BiometricChallenge, signature: ByteArray) {
-        val result = request("POST", "/biometria/enrolamientos", biometricProof(challenge, signature), token, 201)
-        require(result.keys().asSequence().toSet() == setOf("credencialId", "estado"))
-        require(strictString(result, "credencialId") == challenge.credentialId && strictString(result, "estado") == "activa")
+        val responseBody = request("POST", "/biometria/enrolamientos", biometricProof(challenge, signature), token, 201)
+        require(responseBody.keys().asSequence().toSet() == setOf("credencialId", "estado"))
+        require(strictString(responseBody, "credencialId") == challenge.credentialId && strictString(responseBody, "estado") == "activa")
     }
 
     override fun biometricChallenge(credentialId: String) = request("POST", "/biometria/desafios",
         JSONObject().put("credencialId", canonicalUuid(credentialId)), expectedStatus = 200)
 
     override fun biometricLogin(challenge: BiometricChallenge, signature: ByteArray): AuthGrant {
-        val result = request("POST", "/sesiones/biometria", biometricProof(challenge, signature), expectedStatus = 200)
-        require(result.keys().asSequence().toSet() ==
+        val responseBody = request("POST", "/sesiones/biometria", biometricProof(challenge, signature), expectedStatus = 200)
+        require(responseBody.keys().asSequence().toSet() ==
             setOf("usuario", "tokenType", "accessToken", "refreshToken", "expiraEn", "refreshExpiraEn"))
-        listOf("tokenType", "accessToken", "refreshToken", "expiraEn", "refreshExpiraEn").forEach { strictString(result, it) }
-        val user = result.getJSONObject("usuario")
+        listOf("tokenType", "accessToken", "refreshToken", "expiraEn", "refreshExpiraEn").forEach { strictString(responseBody, it) }
+        val user = responseBody.getJSONObject("usuario")
         require(user.keys().asSequence().toSet() == setOf("id", "nombre", "correo", "rol"))
         listOf("id", "nombre", "correo", "rol").forEach { strictString(user, it) }
         canonicalUuid(strictString(user, "id"))
-        return decodeGrant(result)
+        return decodeGrant(responseBody)
     }
 
     override fun biometricCredentials(token: String): List<RemoteBiometricCredential> {
-        val result = request("GET", "/biometria/credenciales", token = token, expectedStatus = 200)
-        require(result.keys().asSequence().toSet() == setOf("credenciales"))
-        val entries = result.getJSONArray("credenciales")
+        val responseBody = request("GET", "/biometria/credenciales", token = token, expectedStatus = 200)
+        require(responseBody.keys().asSequence().toSet() == setOf("credenciales"))
+        val entries = responseBody.getJSONArray("credenciales")
         return (0 until entries.length()).map { index ->
             val entry = entries.getJSONObject(index)
             require(entry.keys().asSequence().toSet() == setOf("credencialId", "creadaEn", "ultimoUsoEn", "estado"))

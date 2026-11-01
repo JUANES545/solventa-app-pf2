@@ -20,9 +20,9 @@ internal class LocalBiometricCredentialStore @Inject constructor(@ApplicationCon
     private val preferences = context.getSharedPreferences("biometric-credential", Context.MODE_PRIVATE)
 
     override fun read(): BiometricCredential? {
-        val value = preferences.getString("credential", null) ?: return null
+        val storedJson = preferences.getString("credential", null) ?: return null
         try {
-            val json = JSONObject(value)
+            val json = JSONObject(storedJson)
             return BiometricCredential(canonicalUuid(strictString(json, "id")), strictString(json, "alias"),
                 canonicalUuid(strictString(json, "user")), decodeBase64Url(strictString(json, "key"), 91))
         } catch (_: org.json.JSONException) {
