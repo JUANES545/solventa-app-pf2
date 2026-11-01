@@ -118,6 +118,57 @@ test('la entrega compara con el mayor tag existente aunque master conserve una v
   assert.equal(f.state.calls.length, 0);
 });
 
+test('sprint.semana.revisión conserva el período confirmado y cuenta revisiones por repositorio', () => {
+  assert.equal(policy.sprintWeekVersion('1.4.0', 2, 2), '2.2.0');
+  assert.equal(policy.sprintWeekVersion('2.2.0', 2, 2), '2.2.1');
+  assert.equal(policy.sprintWeekVersion('2.2.9', 2, 2), '2.2.10');
+  assert.equal(policy.sprintWeekVersion('2.2.9', 2, 3), '2.3.0');
+  assert.equal(policy.sprintWeekVersion('2.3.9', 3, 1), '3.1.0');
+  for (const [sprint, week] of [[0, 2], [2, 0], [-1, 2], [2, 1.5], ['2', 2], [1, 2], [2, 1], [Infinity, 2]]) {
+    assert.throws(() => policy.sprintWeekVersion('2.2.0', sprint, week));
+  }
+  assert.throws(() => policy.sprintWeekVersion('2.2.9007199254740991', 2, 2), /límite/);
+  for (const name of ['0.2.0', '2.0.0']) {
+    assert.throws(() => policy.versionFromText(`VERSION_CODE=9\nVERSION_NAME=${name}\nRELEASE_LEVEL=sprint-week\n`), /sprint y semana/);
+  }
+});
+
+test('CI admite la migración a 2.2.0 y exige la revisión exacta dentro de la misma semana', async t => {
+  const f = fixture(t);
+  f.context.eventName = 'pull_request';
+  f.context.payload = { pull_request: { base: { ref: 'master', sha: BASE }, head: { ref: 'release/2026-10-31-2' } } };
+  f.state.tags = [{ name: '1.4.0' }];
+  const properties = name => `VERSION_CODE=9\nVERSION_NAME=${name}\nRELEASE_ID=2026-10-31-2\nRELEASE_LEVEL=sprint-week\n`;
+  fs.writeFileSync(f.properties, properties('2.2.0'));
+  assert.equal((await policy.validateVersion(f)).name, '2.2.0');
+  f.state.tags.push({ name: '2.2.3' });
+  fs.writeFileSync(f.properties, properties('2.2.4'));
+  assert.equal((await policy.validateVersion(f)).name, '2.2.4');
+  fs.writeFileSync(f.properties, properties('2.2.5'));
+  await assert.rejects(policy.validateVersion(f), /requiere VERSION_NAME=2.2.4/);
+  fs.writeFileSync(f.properties, properties('2.1.0'));
+  await assert.rejects(policy.validateVersion(f), /retroceder/);
+  assert.equal(f.state.calls.length, 0);
+});
+
+test('reintentar la publicación de sprint conserva tag, APK y metadatos originales', async t => {
+  const f = fixture(t);
+  fs.writeFileSync(f.properties, 'VERSION_CODE=9\nVERSION_NAME=2.2.0\nRELEASE_ID=2026-10-31-2\nRELEASE_LEVEL=sprint-week\n');
+  f.state.tags = [{ name: '1.4.0' }, { name: '2.2.0' }];
+  f.state.tag = SHA;
+  await policy.validateVersion(f);
+  f.state.tag = null;
+  await policy.publishRelease(f);
+  const metadata = JSON.parse(f.state.assets.get('release.json').toString());
+  assert.equal(metadata.version, '2.2.0');
+  assert.equal(metadata.version_code, 9);
+  assert.equal(metadata.release_level, 'sprint-week');
+  assert.equal(metadata.commit, SHA);
+  const calls = f.state.calls.length;
+  await policy.publishRelease(f);
+  assert.equal(f.state.calls.length, calls);
+});
+
 test('un reintento no usa su propio tag como referencia ni oculta errores al consultar tags', async t => {
   const f = fixture(t);
   f.state.tag = SHA;
