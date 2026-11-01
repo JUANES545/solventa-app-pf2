@@ -60,6 +60,29 @@ test('un error de Git se informa sin cambiar propiedades', t => {
   assert.equal(fs.readFileSync(f.properties, 'utf8'), f.original);
 });
 
+test('prepara sprint y semana confirmados desde tags sin alterar otros archivos', t => {
+  const f = fixture(t);
+  const next = prepareRelease({ directory: f.directory, sprint: 2, week: 2, releaseId: '2026-10-31-2' });
+  assert.deepEqual(next, { name: '2.2.0', code: 7, releaseId: '2026-10-31-2', level: 'sprint-week', baseline: '1.2.0' });
+  assert.match(fs.readFileSync(f.properties, 'utf8'), /^RELEASE_LEVEL=sprint-week$/m);
+  t.mock.method(childProcess, 'execFileSync', () => '2.2.3\n');
+  const revision = prepareRelease({ directory: f.directory, sprint: 2, week: 2, releaseId: '2026-10-31-3' });
+  assert.equal(revision.name, '2.2.4');
+  assert.equal(revision.code, 8);
+  assert.deepEqual(fs.readdirSync(f.directory), ['version.properties']);
+});
+
+test('sprint o semana inválidos, retrocesos y opciones mezcladas no escriben', t => {
+  const f = fixture(t);
+  for (const values of [
+    { sprint: 2 }, { week: 2 }, { sprint: 0, week: 2 }, { sprint: 2, week: -1 },
+    { sprint: '2', week: 2 }, { sprint: 1, week: 1 }, { sprint: 2, week: 2, level: 'major' },
+  ]) {
+    assert.throws(() => prepareRelease({ directory: f.directory, releaseId: '2026-10-31-2', ...values }));
+    assert.equal(fs.readFileSync(f.properties, 'utf8'), f.original);
+  }
+});
+
 test('preparar otra entrega reemplaza RELEASE_LEVEL y conserva propiedades adicionales', t => {
   const f = fixture(t);
   fs.writeFileSync(f.properties, f.original + 'RELEASE_LEVEL=patch\nEXTRA=conservar\n');
@@ -92,4 +115,20 @@ test('el comando prepara un archivo real sin crear commits ni tags', t => {
   assert.equal(tags.stdout, '');
   const head = childProcess.spawnSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: f.directory, encoding: 'utf8' });
   assert.notEqual(head.status, 0);
+});
+
+test('el comando de sprint y semana produce 2.2.0 y rechaza entradas ambiguas', t => {
+  const f = fixture(t);
+  const init = childProcess.spawnSync('git', ['init', '--quiet', f.directory], { encoding: 'utf8' });
+  assert.equal(init.status, 0, init.stderr);
+  const script = path.join(__dirname, 'prepare_release.cjs');
+  for (const args of [['02', '2', '2026-10-31-2'], ['2', '0', '2026-10-31-2']]) {
+    const invalid = childProcess.spawnSync(process.execPath, [script, ...args], { cwd: f.directory, encoding: 'utf8' });
+    assert.equal(invalid.status, 1);
+    assert.equal(fs.readFileSync(f.properties, 'utf8'), f.original);
+  }
+  const result = childProcess.spawnSync(process.execPath, [script, '2', '2', '2026-10-31-2'],
+    { cwd: f.directory, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /2\.2\.0 \(sprint-week\); VERSION_CODE=7/);
 });
