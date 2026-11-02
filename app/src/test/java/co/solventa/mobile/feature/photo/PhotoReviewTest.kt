@@ -317,4 +317,35 @@ class PhotoReviewTest {
         assertEquals(768, bitmap.width)
         assertEquals(1024, bitmap.height)
     }
+
+    @Test fun everyExifOrientationProducesAnUprightBoundedPreview() {
+        for (orientation in 1..8) {
+            val file = files.create()
+            jpeg(file, 64, 48)
+            ExifInterface(file.path).apply {
+                setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+                saveAttributes()
+            }
+            val preview = files.preview(file)
+            assertEquals(if (orientation >= 5) 48 else 64, preview.width)
+            assertEquals(if (orientation >= 5) 64 else 48, preview.height)
+            preview.recycle()
+            files.remove(file)
+        }
+    }
+
+    @Test fun filesOutsideCacheNonJpegAndNonFileCapturesAreRejected() {
+        val foreign = File(app.cacheDir, "outside.jpg")
+        assertThrows(IllegalArgumentException::class.java) { files.preview(foreign) }
+        assertThrows(IllegalArgumentException::class.java) { files.remove(foreign) }
+        val missing = files.create()
+        files.remove(missing)
+        assertThrows(PhotoFileProblem::class.java) { files.preview(missing) }
+        val png = files.create()
+        Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888).let { bitmap ->
+            png.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            bitmap.recycle()
+        }
+        assertThrows(PhotoFileProblem::class.java) { files.preview(png) }
+    }
 }

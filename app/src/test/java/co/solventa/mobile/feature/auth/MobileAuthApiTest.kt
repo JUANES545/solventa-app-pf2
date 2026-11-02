@@ -202,4 +202,53 @@ class MobileAuthApiTest {
         }
         assertEquals(6, server.requestCount)
     }
+
+    @Test fun tokenAndProofBoundsRejectInvalidInputBeforeAuthorization() {
+        for ((field, value) in listOf("accessToken" to "a".repeat(16_385), "refreshToken" to "r".repeat(2049))) {
+            assertThrows(IllegalArgumentException::class.java) { decodeGrant(JSONObject(grantResponse).put(field, value)) }
+        }
+        val id = "11111111-1111-4111-8111-111111111111"
+        val challenge = BiometricChallenge(id, base64Url(ByteArray(32)), byteArrayOf(1), Long.MAX_VALUE)
+        for (proof in listOf(byteArrayOf(), ByteArray(73))) {
+            assertThrows(IllegalArgumentException::class.java) { api.biometricLogin(challenge, proof) }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            api.beginEnrollment("access", "p".repeat(8192), byteArrayOf(1))
+        }
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test fun enrollmentRequiresMatchingIdentifierActiveStateAndExactFields() {
+        val id = "11111111-1111-4111-8111-111111111111"
+        val challenge = BiometricChallenge(id, base64Url(ByteArray(32)), byteArrayOf(1), Long.MAX_VALUE)
+        for (response in listOf(
+            """{"credencialId":"$id","estado":"activa","extra":true}""",
+            """{"credencialId":"22222222-2222-4222-8222-222222222222","estado":"activa"}""",
+            """{"credencialId":"$id","estado":"revocada"}""",
+        )) {
+            server.enqueue(MockResponse().setResponseCode(201).setBody(response))
+            assertThrows(IllegalArgumentException::class.java) { api.confirmEnrollment("access", challenge, byteArrayOf(1)) }
+        }
+        val extraUserField = JSONObject(grantResponse).apply { getJSONObject("usuario").put("extra", true) }
+        server.enqueue(MockResponse().setBody(extraUserField.toString()))
+        assertThrows(IllegalArgumentException::class.java) { api.biometricLogin(challenge, byteArrayOf(1)) }
+    }
+
+    @Test fun credentialListValidatesStructureUtcDatesAndRevokedEntries() {
+        val id = "11111111-1111-4111-8111-111111111111"
+        val entry = JSONObject().put("credencialId", id).put("creadaEn", "2026-10-24T00:00:00Z")
+            .put("ultimoUsoEn", "2026-10-25T00:00:00Z").put("estado", "revocada")
+        fun response(value: JSONObject) = JSONObject().put("credenciales", org.json.JSONArray().put(value)).toString()
+        server.enqueue(MockResponse().setBody(response(entry)))
+        assertFalse(api.biometricCredentials("access").single().active)
+        server.enqueue(MockResponse().setBody("""{"credenciales":[]}"""))
+        assertTrue(api.biometricCredentials("access").isEmpty())
+        server.enqueue(MockResponse().setBody("""{"credenciales":[],"extra":true}"""))
+        assertThrows(IllegalArgumentException::class.java) { api.biometricCredentials("access") }
+        for ((field, value) in listOf("extra" to "value", "creadaEn" to "2026-10-24T01:00:00+01:00",
+            "ultimoUsoEn" to "2026-10-25T01:00:00+01:00")) {
+            server.enqueue(MockResponse().setBody(response(JSONObject(entry.toString()).put(field, value))))
+            assertThrows(IllegalArgumentException::class.java) { api.biometricCredentials("access") }
+        }
+    }
 }
