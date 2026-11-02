@@ -97,8 +97,13 @@ internal object SolventaLayout {
 }
 
 @Composable
+internal fun SolventaTheme(content: @Composable () -> Unit) {
+    SolventaTheme(darkTheme = isSystemInDarkTheme(), content = content)
+}
+
+@Composable
 internal fun SolventaTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean,
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(

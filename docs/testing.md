@@ -1,5 +1,42 @@
 # Pruebas y cobertura Android
 
+## Cobertura superior al 80 % por archivo
+
+Desde la raíz del repositorio, con JDK 17, Android SDK y Python 3.9 o posterior:
+
+```powershell
+.\gradlew.bat --no-daemon jacocoDebugUnitTestReport :app:lintDebug --console=plain
+python scripts\verify_file_coverage.py
+python -m unittest discover -s scripts -p "test_*.py"
+```
+
+El verificador exige **más del 80 % de líneas y de ramas en cada archivo**
+Kotlin/Java de `app/src/main/java` y `app/src/main/kotlin`; un 80 % exacto falla.
+También falla si una fuente no aparece en el XML. Los archivos sin ramas
+medibles muestran `N/A`, no un porcentaje artificial. El comando debe ejecutarse
+después de la suite completa: una ejecución con `--tests` sustituye el informe
+con cobertura parcial. El verificador es local; no modifica los controles de CI.
+
+JaCoCo lee las clases transformadas por Hilt en
+`intermediates/classes/debug/transformDebugClassesWithAsm/dirs`, las mismas que
+ejecutan las pruebas. Las exclusiones corresponden a clases generadas, no a
+archivos de producto. `SolventaTheme` separa la selección automática del tema
+en una sobrecarga y mantiene las llamadas con tema explícito, sin cambiar
+colores ni comportamiento.
+
+Resultado sobre la base `df1bd5b1445b28d328cff8606579e47136ca850c` con estos cambios:
+los **31 archivos** cumplen; cobertura total de líneas **97,66 % (2045/2094)**
+y de ramas **90,01 % (1235/1372)**. El mínimo por archivo es 90,91 % en líneas
+y 81,82 % en ramas. Se ejecutaron 256 pruebas JVM sin fallos, con una prueba
+optativa de backend omitida; las 21 pruebas de scripts pasaron. Lint debug
+terminó sin errores y con 40 advertencias.
+
+Las pruebas usan JVM/Robolectric, servidores HTTP locales y simulaciones de
+proveedores de cámara, keystore y callbacks biométricos. Incluyen cifrado y
+firmas reales con claves de prueba, errores de almacenamiento y eventos tardíos.
+No sustituyen la comprobación de cámara, huella o claves protegidas por hardware
+en un teléfono físico ni certifican el backend productivo.
+
 ## SOL-332: registro y recuperación de errores
 
 Crear la cuenta no inicia sesión. Tras confirmar el registro, la pantalla de

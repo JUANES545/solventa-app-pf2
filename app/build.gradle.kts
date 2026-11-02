@@ -31,13 +31,15 @@ tasks.register<JacocoReport>("jacocoDebugUnitTestReport") {
     sourceDirectories.setFrom(files("src/main/java", "src/main/kotlin"))
     val generated = listOf(
         "**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*",
-        "**/Hilt_*.*", "**/*_Factory.*", "**/*_MembersInjector.*",
+        "**/Hilt_*.*", "**/*_Factory.*", "**/*_Factory\$*.*", "**/*_MembersInjector.*",
         "**/*_HiltModules*.*", "**/*_HiltComponents*.*", "**/*_GeneratedInjector.*",
         "**/hilt_aggregated_deps/**", "**/dagger/hilt/internal/**",
     )
     classDirectories.setFrom(files(
-        fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) { exclude(generated) },
-        fileTree(layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes")) { exclude(generated) },
+        // Hilt rewrites entry points before tests execute them.
+        fileTree(layout.buildDirectory.dir("intermediates/classes/debug/transformDebugClassesWithAsm/dirs")) {
+            exclude(generated)
+        },
     ))
     reports {
         xml.required.set(true)
@@ -135,6 +137,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.mockwebserver)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockito)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.compose.ui.test)
     androidTestImplementation(libs.androidx.test.runner)
