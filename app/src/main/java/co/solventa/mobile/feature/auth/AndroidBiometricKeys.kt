@@ -38,13 +38,13 @@ internal class AndroidBiometricKeys @Inject constructor() {
         val spec = biometricKeySpec(alias)
         val keys = store()
         try {
-            val pair = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore").apply {
+            val keyPair = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore").apply {
                 initialize(spec)
             }.generateKeyPair()
-            val info = KeyFactory.getInstance(pair.private.algorithm, "AndroidKeyStore")
-                .getKeySpec(pair.private, KeyInfo::class.java)
-            if (!isPerOperationBiometricKey(info)) throw BiometricProblem(BiometricFailure.INSECURE_KEY)
-            return BiometricKey(alias, pair.public.encoded)
+            val keyInfo = KeyFactory.getInstance(keyPair.private.algorithm, "AndroidKeyStore")
+                .getKeySpec(keyPair.private, KeyInfo::class.java)
+            if (!isPerOperationBiometricKey(keyInfo)) throw BiometricProblem(BiometricFailure.INSECURE_KEY)
+            return BiometricKey(alias, keyPair.public.encoded)
         } catch (error: GeneralSecurityException) {
             delete(alias)
             throw BiometricProblem(biometricKeyFailure(error))

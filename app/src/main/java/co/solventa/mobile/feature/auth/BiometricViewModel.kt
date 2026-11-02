@@ -59,7 +59,7 @@ internal class BiometricViewModel @Inject constructor(private val repository: Bi
             val signature = device.sign(key.alias, pending.challenge.message)
             repository.confirmEnrollment(pending, signature)
             published = true
-            update(token) { it.copy(message = R.string.biometric_enrolled) }
+            update(token) { state -> state.copy(message = R.string.biometric_enrolled) }
         } finally {
             val key = candidate
             if (!published && key != null) withContext(NonCancellable + Dispatchers.IO) {
@@ -80,7 +80,7 @@ internal class BiometricViewModel @Inject constructor(private val repository: Bi
     fun loadCredentials() = perform { actor, token ->
         if (actor == null) throw AuthProblem(AuthError.EXPIRED)
         val credentials = repository.credentials(actor)
-        update(token) { it.copy(credentials = credentials) }
+        update(token) { state -> state.copy(credentials = credentials) }
     }
 
     fun revoke(id: String, device: BiometricDevice) = perform { actor, token ->
@@ -93,7 +93,7 @@ internal class BiometricViewModel @Inject constructor(private val repository: Bi
             repository.clearLocalCredential()
         }
         val credentials = repository.credentials(actor)
-        update(token) { it.copy(credentials = credentials, message = R.string.biometric_revoked) }
+        update(token) { state -> state.copy(credentials = credentials, message = R.string.biometric_revoked) }
     }
 
     private fun ensureCurrent(token: Long) {
@@ -114,7 +114,7 @@ internal class BiometricViewModel @Inject constructor(private val repository: Bi
             try {
                 action(actor, token)
                 val local = repository.credential()
-                update(token) { it.copy(localCredential = local) }
+                update(token) { state -> state.copy(localCredential = local) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (problem: BiometricProblem) {

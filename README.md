@@ -14,8 +14,8 @@ Aplicación Android de Solventa, desarrollada por el Grupo 2 para MISW4501 en la
 
 - Git
 - Android Studio
-- JDK compatible con la versión de Gradle seleccionada
-- Android SDK y componentes requeridos por el proyecto
+- JDK 17 (el proyecto compila con `jvmTarget = "17"`)
+- Android SDK 35 (`compileSdk` y `targetSdk`); la app soporta desde Android 8.0 (`minSdk = 26`)
 - Emulador Android o dispositivo físico para ejecutar la aplicación
 
 
@@ -23,9 +23,26 @@ Aplicación Android de Solventa, desarrollada por el Grupo 2 para MISW4501 en la
 
 ```bash
 git clone https://github.com/JUANES545/solventa-app-pf2.git
+cd solventa-app-pf2
 ```
 
-Abre el repositorio en Android Studio una vez que se haya agregado el proyecto Android.
+Abre la carpeta clonada en Android Studio. Para más detalle, consulta la [guía de preparación](docs/android-setup.md).
+
+## Estructura del repositorio
+
+```text
+.
+├── app/src/
+│   ├── main/java/co/solventa/mobile/
+│   │   ├── core/          # Diseño, componentes de UI y utilidades compartidas
+│   │   └── feature/       # Funcionalidades: auth (login y biometría) y photo
+│   ├── test/              # Pruebas unitarias JVM
+│   ├── androidTest/       # Instrumentación Espresso + Compose
+│   └── biometricTest/     # Pruebas de la integración biométrica
+├── docs/                  # Guías de preparación, pruebas, CI y publicación
+├── infra/jenkins/         # Pipeline de Jenkins bajo demanda
+└── scripts/               # Resúmenes de CI y cobertura
+```
 
 ## Preparación del entorno Android
 
@@ -86,11 +103,14 @@ El repositorio anterior es una referencia; el caso del curso, los criterios de a
 ## Solución de problemas
 
 ### Android Studio no puede sincronizar Gradle
-- Confirma que el proyecto Android y el Gradle Wrapper ya estén incluidos.
-- Comprueba la versión de JDK requerida por el proyecto.
-- Revisa los mensajes de sincronización y los componentes de SDK faltantes.
+- Comprueba que Android Studio use JDK 17 (Settings → Build Tools → Gradle → Gradle JDK).
+- Revisa los mensajes de sincronización e instala los componentes de SDK 35 que falten.
+
+### Gradle no encuentra el Android SDK desde la terminal
+- Define la variable `ANDROID_HOME` con la ruta del SDK (en Windows suele ser
+  `%LOCALAPPDATA%\Android\Sdk`), o crea `local.properties` con `sdk.dir=<ruta>`.
+- `local.properties` es una configuración local: no lo subas al repositorio.
 
 ### No se puede ejecutar la aplicación
-- Confirma que el proyecto base ya haya sido agregado.
-- Comprueba que haya un emulador iniciado o un dispositivo conectado.
+- Comprueba que haya un emulador iniciado o un dispositivo conectado (`adb devices`).
 - Documenta el error concreto y la solución verificada para que el resto del equipo pueda reproducirla.
