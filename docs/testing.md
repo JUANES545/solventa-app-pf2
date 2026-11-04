@@ -1,5 +1,195 @@
 # Pruebas y cobertura Android
 
+## SOL-170: reporte móvil y envío pendiente
+
+La cuenta ofrece **Reportar un siniestro**. El formulario consulta las pólizas
+autorizadas con `GET /movil/v1/siniestros/polizas` y pide tipo, fecha, hora local,
+ubicación y descripción. Convierte la fecha a UTC y valida la vigencia, fechas
+futuras, campos obligatorios, límites de caracteres y el máximo de 16 KiB del
+BFF. Mantiene el formulario ante errores de validación.
+
+Antes del primer POST, guarda el cuerpo y un UUID de operación en
+`noBackupFilesDir/claim-reports.db`, con `synchronous=FULL` y separación por
+actor. Conserva también las últimas pólizas autorizadas de esa cuenta; cuando
+usa esta copia, lo indica. Cada reintento conserva el cuerpo y
+`Idempotency-Key`. Solo un 200/201 con identificador canónico, estado
+`registrado`, fecha de registro y contenido coincidente confirma el reporte.
+El botón de evidencia abre ese siniestro mediante el flujo de SOL-171.
+
+Sin conexión o ante una respuesta incierta, conserva el reporte pendiente.
+Un rechazo explícito de póliza/fecha permite **Corregir reporte rechazado**:
+conserva los datos hasta guardar la corrección y entonces cambia la operación.
+No permite cambiar el cuerpo ni generar otra clave para un ACK incierto.
+Solo `404 + poliza_no_encontrada` y `422 + fecha_evento_invalida` habilitan esa
+corrección; el mismo código con un estado HTTP distinto no acredita rechazo.
+La reconexión con la pantalla activa, su apertura y el regreso a primer plano
+reintentan pendientes; el usuario también puede hacerlo con el botón.
+Una pasada se detiene ante el primer fallo de red o sesión, sin enviar los
+restantes ni consultar pólizas. Conserva sus UUID/cuerpos, muestra el error y
+libera el formulario; un rechazo individual no bloquea otros reportes válidos.
+
+Al restaurar una sesión, un error de transporte o HTTP 5xx permite consultar
+datos locales solo si existe una sesión cifrada cuya vigencia de renovación
+no haya vencido. La cuenta muestra que está sin conexión. Esto no autoriza
+ninguna petición remota: `withSession` sigue verificando identidad, actor y
+renovación contra el backend. Un 401/403 no habilita ese acceso local.
+No incluye sincronización general, comentarios, transiciones, resolución de
+conflictos ni trabajo en segundo plano de SOL-193/SOL-328.
+
+### Comprobaciones y dispositivo
+
+Compilar antes de ejecutar la suite conserva la separación de memoria del CI:
+
+```powershell
+.\gradlew.bat :app:compileDebugUnitTestSources --no-daemon `
+  "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" --max-workers=2 `
+  "-Pkotlin.compiler.execution.strategy=in-process"
+.\gradlew.bat :app:jacocoDebugUnitTestReport :app:lintDebug --no-daemon `
+  "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" --max-workers=2 `
+  "-Pkotlin.compiler.execution.strategy=in-process"
+.\gradlew.bat :app:assembleClaimTest :app:assembleClaimTestAndroidTest `
+  -PclaimDeviceTests=true -PbackendE2e=true --no-daemon `
+  "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" --max-workers=2 `
+  "-Pkotlin.compiler.execution.strategy=in-process"
+```
+
+La variante **`co.solventa.mobile.pf2.claimtest`** usa el puerto del dispositivo
+18721 y el issuer `urn:solventa:claims-local`. No reemplaza `.evidencetest` ni
+la aplicación habitual. `ClaimDeviceE2eTest` requiere el stack real
+`tests/claims_local_stack.py` del backend y una fixture privada
+`files/claim-fixture.json`: `email`, `password`, `actor`, `otherEmail`,
+`otherPassword`, `otherActor`, todos sintéticos. No incluirla en Git.
+
+Ejecutar cada método con `am instrument -w`, `backendUrl` igual a
+`http://127.0.0.1:18721/movil/v1` y el runner
+`co.solventa.mobile.pf2.claimtest.test/co.solventa.mobile.espresso.SolventaTestRunner`.
+El proxy de pruebas propio expone `GET /__control/online`, `/offline` y `/drop`.
+`offline` cierra las conexiones sin reenviar; `drop` reenvía el POST de
+siniestro y corta su respuesta **después** de recibir 200/201 del backend.
+No usar Wi-Fi como única inyección de fallo cuando existe un reverse ADB.
+
+| Criterio | Evidencia local |
+| --- | --- |
+| CA1 | Formulario Compose en SM-A217M, Android 16/API 36; póliza real de la cuenta sintética, todos los campos y enlace al siniestro confirmado en evidencia. |
+| CA2 | Validación de campos, fechas y límites en JVM; doble llamada bloqueada en ViewModel y dispositivo; un registro SQL por UUID. |
+| CA3 | Confirmación real 201; respuestas incompletas/inconsistentes y 503 no confirman en JVM. En dispositivo, ACK perdido deja pendiente a pesar del registro remoto. |
+| CA4 | `offlineQueueSurvivesProcessRestartAndRecovers`: fase `offline`, detener solo `.claimtest`, fase `offline-resume` todavía sin conexión; conserva cuerpo, UUID, pólizas y estado pendiente. Reconexión confirma el mismo reporte. |
+| CA5 | `lostAcknowledgementSurvivesProcessRestart`: fase `interrupt`, restituir proxy online y detener solo `.claimtest`, fase `resume`; replay 200 con mismo UUID/ID, una fila SQL. Pruebas JVM verifican corrección de rechazo definitivo y renovación de sesión. |
+
+La prueba física de formulario también cambia de cuenta y verifica que no se
+muestre la cola ni la evidencia de otro actor. Las pruebas de ciclo de vida
+verifican callbacks de conexión y `FLAG_SECURE`. No equivalen a una auditoría
+manual de TalkBack. El mock Jira no pudo descargarse porque el conector
+enmascaró su token; se conservaron tema y componentes existentes.
+
+Entrega inicial local del 4 de noviembre de 2026: **293 pruebas JVM, 292
+aprobadas, 1 optativa omitida, 0 fallos**. Compilación de ambos APK `claimTest`
+y lint debug aprobados (0 errores, 47 advertencias). Las cinco invocaciones
+físicas finales pasaron: formulario/actor/evidencia, 17,441 s; ACK interrumpido,
+7,295 s; recuperación del ACK, 5,445 s; guardado offline, 6,896 s; reinicio
+offline y reconexión, 7,617 s. Dos pasadas completas produjeron seis operaciones
+de reporte y seis filas SQL; los dos ACK perdidos devolvieron después 200 con
+el mismo identificador, sin filas adicionales.
+
+En esa medición, los cinco archivos nuevos tienen 100 % de líneas; sus ramas quedan entre
+87,50 % y 94,37 %. `AuthRepository.kt` conserva 83,75 % de ramas.
+El verificador **global** aún detecta archivos de evidencia de SOL-171 por
+debajo del umbral; el XML anterior de esa tarea ya muestra esas brechas
+(por ejemplo, `EvidenceScreen.kt`: 0 % JVM). No se redujeron umbrales ni
+exclusiones. Estos resultados no afirman CI remoto, producción ni despliegue.
+
+La revisión posterior añadió `ClaimRetryRegressionTest`: antes del cambio
+reprodujo tres fallos (503 interpretado como rechazo definitivo y cinco
+llamadas con cuatro pendientes ante red/sesión fallida). Tras el ajuste,
+**19 pruebas del paquete `feature.claim` pasan, sin omisiones**, junto con
+lint debug. Verifica siete combinaciones HTTP/código ambiguas sin permitir
+cambiar UUID/cuerpo, corte tras una llamada global sin consultar pólizas,
+conservación de los tres pendientes restantes y posibilidad de guardar otro
+reporte. Un rechazo individual permite confirmar los otros tres.
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest --tests "co.solventa.mobile.feature.claim.*" `
+  :app:lintDebug --no-daemon "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" `
+  --max-workers=2 "-Pkotlin.compiler.execution.strategy=in-process"
+```
+
+Esta regresión focalizada no repite la suite física ni recalcula la cobertura
+global de la entrega inicial.
+
+### Revisión del cliente HTTP compartido
+
+Sobre el SHA publicado `6e65fc2e4c09f21a9d9e22052a19260862324f87`,
+la reproducción con cuatro reportes pendientes mostró cinco peticiones ante
+`503` con HTML: cuatro POST y la consulta de pólizas. El parser convertía
+el error HTTP en `PROTOCOL`. Un `403` vacío ya detenía la pasada tras un POST,
+pero perdía el estado HTTP y mostraba `NETWORK`, no `SESSION`.
+
+El cliente conserva ahora el estado HTTP conocido aunque el cuerpo no sea
+JSON, no tenga un código textual o falle su lectura. Un código ausente queda
+en `null`; no inventa códigos de backend. Conserva la causa del fallo de
+lectura/decodificación y los códigos válidos de rechazo de evidencia.
+Los éxitos 200/201 malformados siguen siendo `PROTOCOL`, sin confirmación.
+
+`ClaimRetryRegressionTest` cubre 503 con HTML, 503 con `{}` y 403 vacío:
+un POST, ninguna consulta de pólizas, UUID/cuerpos intactos, ningún recibo
+inventado y posibilidad de guardar otro reporte. `EvidenceHttpFailureTest`
+cubre cuerpos HTML, vacíos, sin código y con código nulo/no textual/vacío,
+rechazos definitivos válidos y conservación de cuatro evidencias pendientes
+ante errores globales o éxitos malformados. Las pruebas existentes mantienen
+la renovación 401, conciliación y cancelación de evidencia.
+
+Resultado local: **45 pruebas JVM aprobadas, sin fallos ni omisiones**,
+lint debug aprobado y ambos APK `claimTest` compilados. Comando focalizado:
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest --tests "co.solventa.mobile.feature.claim.*" `
+  --tests "co.solventa.mobile.feature.evidence.*" :app:lintDebug --no-daemon `
+  "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" --max-workers=2 `
+  "-Pkotlin.compiler.execution.strategy=in-process"
+```
+
+### Investigación del fallo de visibilidad en CI
+
+El artefacto `android-device-test-reports` del
+[run 41893546146](https://github.com/JUANES545/solventa-app-pf2/actions/runs/41893546146)
+registra 36 pruebas y un fallo en
+`AuthHttpFlowTest.registrationPasswordVisibilityTogglesAndBackDoesNotRetainPassword`,
+línea 393. Tras el clic en mostrar contraseña, el nodo 1468 mantiene
+`EditableText` enmascarado, la propiedad `Password` y `Focused=true`.
+No es un fallo de arranque. El log registra la apertura del teclado entre
+19:18:38.287 y 19:18:38.469 UTC, pero no las coordenadas del clic ni una
+traza suficiente para atribuirlo a la animación del teclado.
+
+Antes de añadir el diagnóstico, la prueba, `AuthJourney`,
+`RegistrationScreen` y `LoginScreen` (incluido el control de visibilidad)
+eran idénticos a la base `1ca2d36`.
+El XML de esa base,
+[run 41881743226](https://github.com/JUANES545/solventa-app-pf2/actions/runs/41881743226),
+registra la misma prueba aprobada en 2,931 s. En el físico autorizado,
+SM-A217M/API 36, la prueba original también pasó en 8,39 s con `.claimtest`.
+La instalación usó `adb install -r`; no borró datos, no reemplazó la app
+habitual y no usó emulador ni reverse. El servidor de esa prueba vive en el
+dispositivo, en `127.0.0.1:18080`, y terminó con su teardown.
+
+La causa del fallo remoto sigue sin confirmar. La prueba añade registros
+`PasswordVisibilityTest` antes y después del clic para la próxima ejecución
+de CI: visibilidad y altura IME, límites del campo/control, etiqueta
+mostrar/ocultar, habilitación y presencia de `Password`. No registra
+`EditableText`, contraseñas, tokens ni fixtures. Conserva el clic y las
+aserciones originales; no añade esperas, reintentos ni cambios de producto.
+
+La prueba con diagnóstico pasó en el mismo físico en 8,382 s. Los registros
+mostraron `passwordMarker=true` antes y `false` después, cambio de mostrar a
+ocultar y límites iguales. Solo se ejecutó esa prueba, sin repetir la suite
+física completa ni solicitar un reintento remoto. Una aprobación local no
+sustituye la reproducción en el entorno que falló ni demuestra una causa
+resuelta o un fallo preexistente.
+
+Al finalizar, retirar solo la fixture, la sesión sintética y los marcadores
+de `.claimtest`, su reverse 18721 y los procesos propios. Conservar su cola
+sintética y todos los datos previos de `.evidencetest`. No usar `clear-data`,
+desinstalaciones ni emuladores.
+
 ## SOL-171: evidencia del siniestro y recuperación de cargas
 
 La entrada de evidencia está en la cuenta autenticada. La selección usa

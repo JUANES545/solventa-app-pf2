@@ -1,13 +1,17 @@
 package co.solventa.mobile.espresso
 
+import android.util.Log
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.espresso.Espresso
 import co.solventa.mobile.R
 import co.solventa.mobile.feature.auth.AuthGrant
@@ -389,7 +393,10 @@ class AuthHttpFlowTest : AuthJourney() {
         input(R.string.password, PASSWORD)
         compose.onNodeWithContentDescription(text(R.string.password))
             .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
-        compose.onNodeWithContentDescription(text(R.string.show_password)).performScrollTo().performClick()
+        val toggle = compose.onNodeWithContentDescription(text(R.string.show_password)).performScrollTo()
+        logPasswordVisibility("before-show")
+        toggle.performClick()
+        logPasswordVisibility("after-show")
         assertInput(R.string.password, PASSWORD)
         compose.onNodeWithContentDescription(text(R.string.hide_password)).performScrollTo().performClick()
         compose.onNodeWithContentDescription(text(R.string.password))
@@ -399,5 +406,21 @@ class AuthHttpFlowTest : AuthJourney() {
         awaitText(R.string.sign_in)
         assertInput(R.string.password, "")
         assertEquals(0, server.requestCount)
+    }
+
+    private fun logPasswordVisibility(phase: String) {
+        val password = compose.onNodeWithContentDescription(text(R.string.password)).fetchSemanticsNode()
+        val masked = password.config.contains(SemanticsProperties.Password)
+        val toggles = listOf("show" to R.string.show_password, "hide" to R.string.hide_password).joinToString(" ") { (label, id) ->
+            val nodes = compose.onAllNodesWithContentDescription(text(id)).fetchSemanticsNodes()
+            "$label=${nodes.map { "bounds=${it.boundsInRoot},enabled=${!it.config.contains(SemanticsProperties.Disabled)}" }}"
+        }
+        scenario!!.onActivity { activity ->
+            val decor = activity.window.decorView
+            val insets = ViewCompat.getRootWindowInsets(decor)
+            Log.i("PasswordVisibilityTest", "$phase imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime())} " +
+                "imeBottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom} rootHeight=${decor.height} " +
+                "passwordMarker=$masked passwordBounds=${password.boundsInRoot} $toggles")
+        }
     }
 }

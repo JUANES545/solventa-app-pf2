@@ -70,6 +70,30 @@ class EvidenceViewModelTest {
         assertFalse(model.state.value.locationEnabled)
     }
 
+    @Test fun confirmedReportOpensAuthorizedEvidenceWithoutManualIdentifierEntry() {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setBody(
+                """{"maxCantidad":7,"maxChunkBytes":1024,"maxVideoSeconds":45,"formatos":[{"mimeType":"image/jpeg","maxBytes":1234}]}"""))
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setBody("""{"evidencias":[]}"""))
+            val connected = EvidenceViewModel(app, MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString()))
+            val claim = EvidenceClaim(scope.claimId, "Choque", "2026-03-01T12:30:00Z", "Descripcion sintetica")
+            connected.showClaim(scope.actorId, claim)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (connected.state.value.busy && System.nanoTime() < deadline) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(10)
+            }
+            assertFalse(connected.state.value.busy)
+            assertNull(connected.state.value.error)
+            assertEquals(scope, connected.state.value.scope)
+            assertEquals(7, connected.state.value.policy?.maxCount)
+            assertEquals(listOf(claim), connected.state.value.claims)
+            connected.bindActor("actor-b")
+            assertNull(connected.state.value.scope)
+            androidx.lifecycle.ViewModelStore().apply { put("evidence", connected); clear() }
+        }
+    }
+
     @Test fun revokedPermissionAndChangedActorCannotLeakCoordinatesOrLateCapture() {
         model.open(scope, policy, emptySet())
         await()

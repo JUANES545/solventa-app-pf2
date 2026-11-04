@@ -1,0 +1,31 @@
+<resources>
+    <string name="claim_title">Reportar un siniestro</string>
+    <string name="claim_local_session">Sin conexión al servicio. Puedes consultar tus datos locales y guardar reportes pendientes. Verificaremos la sesión al enviar.</string>
+    <string name="claim_back">Volver a mi cuenta</string>
+    <string name="claim_policy">Póliza vigente</string>
+    <string name="claim_policy_option">%1$s · %2$s\nVigencia: %3$s a %4$s</string>
+    <string name="claim_cached_policies">Pólizas guardadas en este dispositivo. El servidor comprobará su vigencia al enviar.</string>
+    <string name="claim_no_policies">No hay pólizas disponibles. Conéctate y actualiza para consultar tus pólizas vigentes.</string>
+    <string name="claim_type">Tipo de evento</string>
+    <string name="claim_date">Fecha del evento (AAAA-MM-DD)</string>
+    <string name="claim_time">Hora local (HH:mm, formato 24 horas)</string>
+    <string name="claim_place">Ubicación del evento</string>
+    <string name="claim_description">Descripción (10 a 5000 caracteres)</string>
+    <string name="claim_submit">Enviar reporte</string>
+    <string name="claim_new">Reportar otro siniestro</string>
+    <string name="claim_correct">Corregir reporte rechazado</string>
+    <string name="claim_retry">Actualizar y reintentar pendientes</string>
+    <string name="claim_processing">Procesando. No necesitas volver a enviar.</string>
+    <string name="claim_pending">Pendiente de envío. Guardado en este dispositivo; sin confirmación del servidor.</string>
+    <string name="claim_failed">Envío fallido. Conservamos el reporte para reintentar.</string>
+    <string name="claim_confirmed">Enviado · Estado: registrado\nIdentificador: %1$s</string>
+    <string name="claim_error_required">Selecciona una póliza y completa todos los campos.</string>
+    <string name="claim_error_date">Revisa la fecha y hora: deben ser válidas, no futuras y estar dentro de la vigencia de la póliza.</string>
+    <string name="claim_error_description">Escribe una descripción de 10 a 5000 caracteres.</string>
+    <string name="claim_error_length">El tipo admite hasta 100 caracteres y la ubicación hasta 300. Reduce el texto si el reporte supera 16 KB.</string>
+    <string name="claim_error_policy">No pudimos validar la póliza. Actualiza las pólizas y revisa su vigencia.</string>
+    <string name="claim_error_network">No pudimos confirmar la operación. Reintenta cuando tengas conexión.</string>
+    <string name="claim_error_session">Inicia sesión con la misma cuenta para reintentar tus reportes.</string>
+    <string name="claim_error_protocol">La respuesta no confirma el registro. Conservamos el reporte; puedes reintentar.</string>
+    <string name="claim_error_storage">No pudimos guardar el cambio en el dispositivo. Revisa el espacio disponible y reintenta.</string>
+</resources>

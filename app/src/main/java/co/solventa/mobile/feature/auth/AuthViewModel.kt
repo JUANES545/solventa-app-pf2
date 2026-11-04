@@ -17,6 +17,7 @@ data class AuthUiState(
     val error: AuthError? = null,
     val screen: AccessScreen = AccessScreen.LOGIN,
     val email: String = "",
+    val offline: Boolean = false,
 )
 
 @HiltViewModel
@@ -128,10 +129,20 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
                     error = if (user == null && mutableState.value.user != null) AuthError.EXPIRED else null)
             } catch (error: AuthHttpError) {
                 if (error.status == 401) throw AuthProblem(AuthError.EXPIRED)
+                if (error.status >= 500) return@perform localSession()
                 throw error
+            } catch (_: java.io.IOException) {
+                localSession()
             }
         }
     }
+
+    private suspend fun localSession(): AuthUiState {
+        val user = repository.localUser() ?: throw AuthProblem(AuthError.EXPIRED)
+        // Local access never bypasses withSession's server verification for protected requests.
+        return AuthUiState(user = user, email = mutableState.value.email, offline = true, error = AuthError.UNAVAILABLE)
+    }
+
     fun logout() {
         registrationDraft = null
         perform {
