@@ -25,6 +25,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.ui.res.stringResource
+import co.solventa.mobile.feature.evidence.EvidenceHost
+import co.solventa.mobile.feature.evidence.EvidenceViewModel
 
 @Composable
 internal fun SolventaApp(
@@ -34,6 +36,7 @@ internal fun SolventaApp(
     onPhotoReview: (() -> Unit)? = null,
     beforeAccessChange: () -> Unit = {},
     darkTheme: Boolean = isSystemInDarkTheme(),
+    evidence: EvidenceViewModel? = null,
 ) {
     SolventaTheme(darkTheme) {
         val biometricState = biometrics?.state?.collectAsState()?.value
@@ -42,6 +45,7 @@ internal fun SolventaApp(
         } else {
             val state by auth.state.collectAsState()
             val user = state.user
+            val evidenceState = evidence?.state?.collectAsState()?.value
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             DisposableEffect(auth, lifecycle) {
                 val observer = LifecycleEventObserver { _, event ->
@@ -54,6 +58,7 @@ internal fun SolventaApp(
                 }
             }
             LaunchedEffect(user?.id) { biometrics?.bindActor(user?.id) }
+            LaunchedEffect(user?.id) { evidence?.bindActor(user?.id) }
             LaunchedEffect(state.screen) {
                 if (state.screen == AccessScreen.REGISTER_PHOTOS) onPhotoReview?.invoke()
             }
@@ -95,6 +100,8 @@ internal fun SolventaApp(
                         onCancel = { beforeAccessChange(); auth.cancelRegistrationPhotos() })
                     AccessScreen.REGISTERED -> RegistrationSuccessScreen(state.email, onSignIn = auth::showLogin)
                 }
+            } else if (evidence != null && evidenceState?.open == true && evidenceState.actorId == user.id) {
+                EvidenceHost(evidence)
             } else {
                 AccountScreen(user, state.loading || biometricState?.busy == true,
                     { beforeAccessChange(); auth.logout() },
@@ -104,7 +111,7 @@ internal fun SolventaApp(
                             { biometrics.enroll(it, device) }, biometrics::loadCredentials,
                             { biometrics.revoke(it, device) })
                         }
-                    })
+                    }, onEvidence = evidence?.let { { it.showClaims(user.id) } })
             }
 
         }

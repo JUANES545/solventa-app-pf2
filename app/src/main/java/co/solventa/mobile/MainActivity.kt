@@ -16,11 +16,13 @@ import co.solventa.mobile.feature.auth.AuthViewModel
 import co.solventa.mobile.feature.auth.BiometricViewModel
 import co.solventa.mobile.feature.auth.AndroidBiometricSigner
 import co.solventa.mobile.feature.photo.PhotoReviewHost
+import co.solventa.mobile.feature.evidence.EvidenceViewModel
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     private val auth by lazy { ViewModelProvider(this)[AuthViewModel::class.java] }
     private val biometrics by lazy { ViewModelProvider(this)[BiometricViewModel::class.java] }
+    private val evidence by lazy { ViewModelProvider(this)[EvidenceViewModel::class.java] }
     private var signer: AndroidBiometricSigner? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
@@ -35,7 +37,7 @@ class MainActivity : FragmentActivity() {
         setContent {
             PhotoReviewHost(this, auth) { openPhoto, beforeAccessChange ->
                 SolventaApp(auth, if (BuildConfig.BIOMETRIC_LOGIN_ENABLED) biometrics else null, signer,
-                    openPhoto, beforeAccessChange)
+                    openPhoto, beforeAccessChange, evidence = evidence)
             }
         }
     }

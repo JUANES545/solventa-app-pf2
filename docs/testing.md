@@ -1,5 +1,105 @@
 # Pruebas y cobertura Android
 
+## SOL-171: evidencia del siniestro y recuperación de cargas
+
+La entrada de evidencia está en la cuenta autenticada. La selección usa
+`GET /movil/v1/siniestros`; no admite identificadores escritos por el usuario.
+Los límites se consultan en `siniestros/configuracion-evidencias`, sin valores
+de producto alternativos cuando falla el servidor. La captura produce JPEG
+(fotografía o documento) y MP4 sin audio; no importa archivos de la galería.
+Las fotos/documentos permiten recorte rectangular, revisión y repetición.
+El vídeo permite reproducción y repetición, no edición temporal.
+
+Al aceptar, la app elimina EXIF mediante reencodificación y remultiplexa el
+vídeo sin metadatos de ubicación. Solo adjunta coordenadas y fecha de medición
+en JSON cuando están activos tanto la casilla de ubicación como el permiso
+del sistema. La fecha de captura es independiente de la fecha del servidor.
+Rechazar ubicación no bloquea la captura.
+
+Los archivos aceptados y su cola SQLite viven en `noBackupFilesDir`, separados
+por cuenta y siniestro. El UUID de operación, SHA-256, cuerpo de inicio y
+`cargaId` sobreviven al cierre del proceso. Un PUT completo no implica éxito:
+la app exige confirmación del servidor. Después de una interrupción consulta
+el offset antes de enviar más bytes. La renovación de sesión durante una carga
+también vuelve a consultar ese offset. Los confirmados no se vuelven a enviar.
+La reconexión con la pantalla activa, la reanudación de la actividad y la
+apertura de un siniestro recuperado permiten reintentar; también hay un botón
+explícito. Esto cubre la cola de evidencia necesaria para HU41, no una cola
+general ni sincronización en segundo plano.
+
+Un rechazo conocido del servidor queda visible y persistido por archivo, sin
+bloquear los siguientes. Para retirarlo, el usuario confirma la acción; la
+app reconcilia y cancela la carga antes de quitar el archivo local. Si el
+servidor ya lo confirmó, conserva la evidencia. No descarta archivos por un
+timeout o por una confirmación incierta.
+
+### Comprobaciones locales
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug `
+  :app:assembleDebugAndroidTest :app:lintDebug --console=plain
+```
+
+Resultado local del 4 de noviembre de 2026: **276 pruebas JVM, 275 aprobadas,
+1 optativa omitida, 0 fallos**; build debug, APK de instrumentación debug y
+lint debug aprobados. Incluye 19 pruebas nuevas de evidencia: límites exactos,
+recorte/orientación/GPS, consentimiento y cambio de cuenta, reapertura de cola,
+ACK perdido, renovación de token a mitad de carga, respuestas malformadas,
+rechazo seguido de archivo válido y cancelación frente a confirmación
+concurrente. Estos resultados no son una ejecución de CI remoto ni una nueva
+medición de cobertura por archivo.
+
+### Dispositivo físico y backend local real
+
+Usar solo la variante aislada `co.solventa.mobile.pf2.evidencetest`; conserva
+las instalaciones y los datos de otros paquetes. No utilizar emuladores,
+`clear-data`, desinstalaciones ni credenciales personales.
+
+```powershell
+.\gradlew.bat :app:assembleEvidenceTest :app:assembleEvidenceTestAndroidTest `
+  -PevidenceDeviceTests=true -PbackendE2e=true --console=plain
+```
+
+Esta variante usa `http://127.0.0.1:18719/movil/v1` y el issuer local
+`urn:solventa:claims-local`. Solo permite HTTP en los hosts de pruebas ya
+declarados. Antes de instalar, comprobar applicationId, versión y firma;
+para una actualización de este paquete de pruebas, conservar sus datos.
+Conectar exclusivamente el reverse `tcp:18719` al puerto del BFF local.
+No ejecutar `connectedDebugAndroidTest` sobre la instalación de uso personal.
+
+`EvidenceDeviceE2eTest` requiere backend real, una cuenta sintética con
+siniestro autorizado y `files/evidence-fixture.json` privado dentro del paquete:
+`email`, `password`, `actorId`, `claimId`. No guardar esa fixture en Git ni
+imprimir credenciales. Pasar `backendUrl=http://127.0.0.1:18719/movil/v1`.
+Ejecutar cada método por separado con `am instrument -w -e class
+co.solventa.mobile.espresso.EvidenceDeviceE2eTest#<metodo>` y el runner
+`co.solventa.mobile.pf2.evidencetest.test/co.solventa.mobile.espresso.SolventaTestRunner`.
+No ejecutar toda la clase sin preparar la inyección de fallo por fases.
+
+| Criterio | Evidencia física y límites de la comprobación |
+| --- | --- |
+| CA1: captura y permisos | SM-A217M, Android 16/API 36: cámara real, foto, documento y vídeo; denegación de cámara y ubicación comprobada. La lista proviene del backend autenticado. |
+| CA2: revisión/recorte/repetición | `physicalCaptureCropVideoAndConfirmedBackend`: repetición de foto, reducción real de ancho al recortar documento, revisión de vídeo y tres confirmaciones remotas. Pasada final: 24,504 s. |
+| CA3: ubicación opcional | Denegar ubicación permite terminar. La instrumentación añade GPS **sintético** a JPEG y MP4 y comprueba su eliminación antes de enviar; backend real acepta los archivos sin geo. JVM verifica consentimiento positivo y revocación. No se certifica una fijación GPS positiva del teléfono. |
+| CA4: política y resultado | Política HTTP real, validación local y confirmación remota. `serverRejectionDoesNotBlockValidEvidenceAndRemovalIsExplicit`: rechazo 422, archivo posterior confirmado y retirada explícita segura, 6,117 s. |
+| CA5: interrupción/reintento | `durableInterruptedUploadAcrossProcesses`, fase `interrupt`: proxy propio corta el ACK **después** de persistir 110.703 bytes; pendiente sin falsa confirmación, 8,783 s. Tras detener solo el proceso de pruebas, fase `resume`: mismo UUID/cargaId/hash, reintento automático al abrir el siniestro, un confirmado nuevo y anteriores intactos, 4,571 s. |
+
+Para repetir CA5, el proxy debe reenviar al BFF real y cerrar una respuesta
+PUT después de que este acepte los bytes. Verificar que la inyección ocurrió;
+apagar Wi-Fi no corta necesariamente un reverse ADB. Ejecutar `interrupt`,
+restaurar el reverse directo, detener solo el proceso de la variante aislada
+y ejecutar `resume`. No borrar datos entre fases. Una pasada anterior también
+recuperó un fragmento parcial de 1.048.576 bytes; la pasada final perdió el ACK
+del único fragmento de una foto más pequeña, todavía sin confirmar.
+
+Al terminar, retirar solo la fixture de credenciales, sus copias temporales,
+la sesión sintética del almacén `mobile-auth` del paquete aislado, el reverse
+propio y los procesos de proxy identificados. Conservar evidencia
+sintética, cola e informes sanitizados. No detener el backend compartido sin
+coordinarlo. Los adjuntos visuales de Jira no pudieron consultarse porque el
+conector devolvió la URL de descarga con el token enmascarado; se conservaron
+los componentes y la marca existentes. No hubo despliegue ni validación en AWS.
+
 ## Cobertura superior al 80 % por archivo
 
 Desde la raíz del repositorio, con JDK 17, Android SDK y Python 3.9 o posterior:
