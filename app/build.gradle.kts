@@ -15,7 +15,17 @@ jacoco {
     toolVersion = "0.8.13"
 }
 
+val testCoveragePost by tasks.registering(JavaExec::class) {
+    classpath = configurations.detachedConfiguration(dependencies.localGroovy())
+    mainClass.set("groovy.ui.GroovyMain")
+    workingDir(rootProject.projectDir)
+    args("infra/jenkins/test-coverage-post.groovy", "Jenkinsfile")
+}
+
 tasks.withType<Test>().configureEach {
+    if (name == "testDebugUnitTest") {
+        dependsOn(testCoveragePost)
+    }
     extensions.configure<JacocoTaskExtension> {
         // Robolectric loads application classes through an isolated Android classloader.
         isIncludeNoLocationClasses = true
