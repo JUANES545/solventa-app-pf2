@@ -66,7 +66,16 @@ class ClaimRetryRegressionTest {
 
     @Test fun sessionFailureStopsAfterOneReportAndDoesNotFetchPolicies() = globalFailure(403, ClaimError.SESSION)
 
-    private fun globalFailure(status: Int, expected: ClaimError) {
+    @Test fun htmlServiceFailureStopsAfterOneReportAndDoesNotFetchPolicies() =
+        globalFailure(503, ClaimError.NETWORK, "<html>Service unavailable</html>")
+
+    @Test fun serviceFailureWithoutCodeStopsAfterOneReportAndDoesNotFetchPolicies() =
+        globalFailure(503, ClaimError.NETWORK, "{}")
+
+    @Test fun emptyForbiddenResponseStopsAfterOneReportAndRetainsSessionFailure() =
+        globalFailure(403, ClaimError.SESSION, "")
+
+    private fun globalFailure(status: Int, expected: ClaimError, body: String = """{"code":"servicio_no_disponible"}""") {
         MockWebServer().use { server ->
             val originals = ClaimStore(app.noBackupFilesDir).use { store ->
                 store.savePolicies("actor-a", listOf(policy))
@@ -75,7 +84,7 @@ class ClaimRetryRegressionTest {
             }
             server.dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest) =
-                    MockResponse().setResponseCode(status).setBody("""{"code":"servicio_no_disponible"}""")
+                    MockResponse().setResponseCode(status).setBody(body)
             }
             val model = ClaimViewModel(app, MobileClaimApi(MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString())))
             model.show("actor-a"); await(model)

@@ -168,6 +168,7 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
         idempotencyKey: String? = null, bytes: ByteArray? = null, offset: Long? = null,
     ): JSONObject {
         val connection = URL(base + path).openConnection() as HttpURLConnection
+        var failureStatus: Int? = null
         try {
             connection.requestMethod = method
             connection.instanceFollowRedirects = false
@@ -188,6 +189,7 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
             }
             val status = connection.responseCode
             if (status == 401) throw AuthHttpError(status)
+            if (status !in 200..299) failureStatus = status
             if (status == 204 && method == "DELETE") return JSONObject()
             if (status in 200..299 && (status !in setOf(200, 201) || method == "DELETE")) throw EvidenceProblem(EvidenceError.PROTOCOL)
             val response = (if (status in 200..299) connection.inputStream else connection.errorStream
@@ -204,32 +206,37 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
             }
             val json = JSONObject(response)
             if (status !in 200..299) {
-                val code = json.getString("code")
-                val rejection = when (code) {
-                    "limite_tamano" -> EvidenceError.SIZE
-                    "formato_no_permitido", "formato_invalido", "integridad_invalida" -> EvidenceError.FORMAT
-                    "video_fuera_limite" -> EvidenceError.DURATION
-                    "ubicacion_no_autorizada" -> EvidenceError.LOCATION
-                    "limite_cantidad" -> EvidenceError.COUNT
-                    else -> null
-                }
-                throw EvidenceHttpProblem(status, code, rejection != null && status in setOf(409, 413, 415, 422),
-                    rejection ?: when (status) {
-                        403, 404 -> EvidenceError.SESSION
-                        409, 422, 400 -> EvidenceError.PROTOCOL
-                        else -> EvidenceError.NETWORK
-                    })
+                val code = (json.opt("code") as? String)?.takeIf { it.isNotBlank() }
+                throw httpProblem(status, code)
             }
             return json
         } catch (error: EvidenceProblem) {
-            throw error
+            if (error is EvidenceHttpProblem) throw error
+            throw failureStatus?.let { httpProblem(it, cause = error) } ?: error
         } catch (error: JSONException) {
-            throw EvidenceProblem(EvidenceError.PROTOCOL, error)
+            throw failureStatus?.let { httpProblem(it, cause = error) } ?: EvidenceProblem(EvidenceError.PROTOCOL, error)
         } catch (error: IOException) {
-            throw EvidenceProblem(EvidenceError.NETWORK, error)
+            throw failureStatus?.let { httpProblem(it, cause = error) } ?: EvidenceProblem(EvidenceError.NETWORK, error)
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun httpProblem(status: Int, code: String? = null, cause: Throwable? = null): EvidenceHttpProblem {
+        val rejection = when (code) {
+            "limite_tamano" -> EvidenceError.SIZE
+            "formato_no_permitido", "formato_invalido", "integridad_invalida" -> EvidenceError.FORMAT
+            "video_fuera_limite" -> EvidenceError.DURATION
+            "ubicacion_no_autorizada" -> EvidenceError.LOCATION
+            "limite_cantidad" -> EvidenceError.COUNT
+            else -> null
+        }
+        return EvidenceHttpProblem(status, code, rejection != null && status in setOf(409, 413, 415, 422),
+            rejection ?: when (status) {
+                403, 404 -> EvidenceError.SESSION
+                409, 422, 400 -> EvidenceError.PROTOCOL
+                else -> EvidenceError.NETWORK
+            }, cause)
     }
 }
 

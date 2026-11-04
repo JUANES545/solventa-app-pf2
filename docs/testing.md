@@ -116,6 +116,75 @@ reporte. Un rechazo individual permite confirmar los otros tres.
 Esta regresión focalizada no repite la suite física ni recalcula la cobertura
 global de la entrega inicial.
 
+### Revisión del cliente HTTP compartido
+
+Sobre el SHA publicado `6e65fc2e4c09f21a9d9e22052a19260862324f87`,
+la reproducción con cuatro reportes pendientes mostró cinco peticiones ante
+`503` con HTML: cuatro POST y la consulta de pólizas. El parser convertía
+el error HTTP en `PROTOCOL`. Un `403` vacío ya detenía la pasada tras un POST,
+pero perdía el estado HTTP y mostraba `NETWORK`, no `SESSION`.
+
+El cliente conserva ahora el estado HTTP conocido aunque el cuerpo no sea
+JSON, no tenga un código textual o falle su lectura. Un código ausente queda
+en `null`; no inventa códigos de backend. Conserva la causa del fallo de
+lectura/decodificación y los códigos válidos de rechazo de evidencia.
+Los éxitos 200/201 malformados siguen siendo `PROTOCOL`, sin confirmación.
+
+`ClaimRetryRegressionTest` cubre 503 con HTML, 503 con `{}` y 403 vacío:
+un POST, ninguna consulta de pólizas, UUID/cuerpos intactos, ningún recibo
+inventado y posibilidad de guardar otro reporte. `EvidenceHttpFailureTest`
+cubre cuerpos HTML, vacíos, sin código y con código nulo/no textual/vacío,
+rechazos definitivos válidos y conservación de cuatro evidencias pendientes
+ante errores globales o éxitos malformados. Las pruebas existentes mantienen
+la renovación 401, conciliación y cancelación de evidencia.
+
+Resultado local: **45 pruebas JVM aprobadas, sin fallos ni omisiones**,
+lint debug aprobado y ambos APK `claimTest` compilados. Comando focalizado:
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest --tests "co.solventa.mobile.feature.claim.*" `
+  --tests "co.solventa.mobile.feature.evidence.*" :app:lintDebug --no-daemon `
+  "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" --max-workers=2 `
+  "-Pkotlin.compiler.execution.strategy=in-process"
+```
+
+### Investigación del fallo de visibilidad en CI
+
+El artefacto `android-device-test-reports` del
+[run 41893546146](https://github.com/JUANES545/solventa-app-pf2/actions/runs/41893546146)
+registra 36 pruebas y un fallo en
+`AuthHttpFlowTest.registrationPasswordVisibilityTogglesAndBackDoesNotRetainPassword`,
+línea 393. Tras el clic en mostrar contraseña, el nodo 1468 mantiene
+`EditableText` enmascarado, la propiedad `Password` y `Focused=true`.
+No es un fallo de arranque. El log registra la apertura del teclado entre
+19:18:38.287 y 19:18:38.469 UTC, pero no las coordenadas del clic ni una
+traza suficiente para atribuirlo a la animación del teclado.
+
+Antes de añadir el diagnóstico, la prueba, `AuthJourney`,
+`RegistrationScreen` y `LoginScreen` (incluido el control de visibilidad)
+eran idénticos a la base `1ca2d36`.
+El XML de esa base,
+[run 41881743226](https://github.com/JUANES545/solventa-app-pf2/actions/runs/41881743226),
+registra la misma prueba aprobada en 2,931 s. En el físico autorizado,
+SM-A217M/API 36, la prueba original también pasó en 8,39 s con `.claimtest`.
+La instalación usó `adb install -r`; no borró datos, no reemplazó la app
+habitual y no usó emulador ni reverse. El servidor de esa prueba vive en el
+dispositivo, en `127.0.0.1:18080`, y terminó con su teardown.
+
+La causa del fallo remoto sigue sin confirmar. La prueba añade registros
+`PasswordVisibilityTest` antes y después del clic para la próxima ejecución
+de CI: visibilidad y altura IME, límites del campo/control, etiqueta
+mostrar/ocultar, habilitación y presencia de `Password`. No registra
+`EditableText`, contraseñas, tokens ni fixtures. Conserva el clic y las
+aserciones originales; no añade esperas, reintentos ni cambios de producto.
+
+La prueba con diagnóstico pasó en el mismo físico en 8,382 s. Los registros
+mostraron `passwordMarker=true` antes y `false` después, cambio de mostrar a
+ocultar y límites iguales. Solo se ejecutó esa prueba, sin repetir la suite
+física completa ni solicitar un reintento remoto. Una aprobación local no
+sustituye la reproducción en el entorno que falló ni demuestra una causa
+resuelta o un fallo preexistente.
+
 Al finalizar, retirar solo la fixture, la sesión sintética y los marcadores
 de `.claimtest`, su reverse 18721 y los procesos propios. Conservar su cola
 sintética y todos los datos previos de `.evidencetest`. No usar `clear-data`,
