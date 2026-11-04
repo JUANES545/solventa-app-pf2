@@ -131,6 +131,15 @@ class AuthRepository(
         }
     }
 
+    internal suspend fun refreshSession(expectedUserId: String) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val grant = store.read() ?: throw AuthProblem(AuthError.EXPIRED)
+            if (grant.user.id != expectedUserId || grant.refreshExpiresAt <= now()) throw AuthProblem(AuthError.EXPIRED)
+            renew(grant)
+            Unit
+        }
+    }
+
     internal suspend fun beginBiometricLogin(userId: String): Long = mutex.withLock {
         val current = store.read()
         if (current != null && current.user.id != userId) throw AuthProblem(AuthError.EXPIRED)

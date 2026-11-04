@@ -15,7 +15,17 @@ jacoco {
     toolVersion = "0.8.13"
 }
 
+val testCoveragePost by tasks.registering(JavaExec::class) {
+    classpath = configurations.detachedConfiguration(dependencies.localGroovy())
+    mainClass.set("groovy.ui.GroovyMain")
+    workingDir(rootProject.projectDir)
+    args("infra/jenkins/test-coverage-post.groovy", "Jenkinsfile")
+}
+
 tasks.withType<Test>().configureEach {
+    if (name == "testDebugUnitTest") {
+        dependsOn(testCoveragePost)
+    }
     extensions.configure<JacocoTaskExtension> {
         // Robolectric loads application classes through an isolated Android classloader.
         isIncludeNoLocationClasses = true
@@ -71,7 +81,13 @@ android {
         testInstrumentationRunner = "co.solventa.mobile.espresso.SolventaTestRunner"
         val backendE2e = providers.gradleProperty("backendE2e").orNull == "true"
         testInstrumentationRunnerArguments[if (backendE2e) "annotation" else "notAnnotation"] =
-            "co.solventa.mobile.espresso.BackendE2e"
+            if (backendE2e && providers.gradleProperty("evidenceDeviceTests").orNull == "true") {
+                "co.solventa.mobile.espresso.EvidenceDeviceE2e"
+            } else if (backendE2e) {
+                "co.solventa.mobile.espresso.BackendE2e"
+            } else {
+                "co.solventa.mobile.espresso.BackendE2e,co.solventa.mobile.espresso.EvidenceDeviceE2e"
+            }
     }
 
     compileOptions {
@@ -110,6 +126,19 @@ android {
     }
     sourceSets.getByName("biometricTest") {
         res.srcDir("src/debug/res")
+    }
+    buildTypes.create("evidenceTest") {
+        initWith(buildTypes.getByName("debug"))
+        applicationIdSuffix = ".evidencetest"
+        matchingFallbacks += "debug"
+        buildConfigField("String", "AUTH_BASE_URL", "\"http://127.0.0.1:18719/movil/v1\"")
+        buildConfigField("String", "AUTH_ISSUER", "\"urn:solventa:claims-local\"")
+    }
+    sourceSets.getByName("evidenceTest") {
+        res.srcDir("src/debug/res")
+    }
+    if (providers.gradleProperty("evidenceDeviceTests").orNull == "true") {
+        testBuildType = "evidenceTest"
     }
     testCoverage {
         jacocoVersion = "0.8.13"
@@ -154,6 +183,8 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.camera.video)
     implementation(libs.mlkit.face)
     "biometricTestImplementation"(libs.androidx.compose.ui.test.manifest)
+    "evidenceTestImplementation"(libs.androidx.compose.ui.test.manifest)
 }

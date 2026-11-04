@@ -13,10 +13,30 @@
 - Si faltan reportes, la cobertura se marca incompleta. Si el pipeline iba bien, ese problema
   lo hace fallar; si ya falló otra etapa, el reporte parcial se publica como neutral.
   Una cobertura generada no significa que todas las pruebas o el pipeline hayan pasado.
+- Si JUnit lanza una excepción (por ejemplo, existe el directorio pero no contiene XML)
+  o no se puede generar o leer el resumen, el bloque `finally` publica **Cobertura incompleta**
+  con conclusión `FAILURE` y estado `COMPLETED`. Conserva la excepción y el fallo del pipeline,
+  sin inventar porcentajes. Intenta archivar los reportes incluso si falla la publicación del check.
 
 Los resúmenes se construyen desde XML, no desde porcentajes escritos manualmente.
 `python3 -m unittest discover -s scripts -p 'test_*summary.py'` prueba los resúmenes
 sin red ni credenciales. Requiere Python 3.10+ (ya disponible en el agente compartido).
+
+La tarea Gradle `testCoveragePost` ejecuta `infra/jenkins/test-coverage-post.groovy`
+con el Groovy incluido en Gradle, sin instalar herramientas ni añadir librerías a la app.
+Es una dependencia de `testDebugUnitTest`: la ejecutan los comandos existentes de Actions
+y de Jenkins (`jacocoDebugUnitTestReport` depende de esas pruebas).
+Para ejecutarla sola: `./gradlew --no-daemon testCoveragePost`.
+La regresión ejecuta el bloque `post` del Jenkinsfile con pasos simulados: JUnit sin XML,
+errores de resumen, reportes parciales, éxito y fallo de publicación. Comprueba la conclusión
+final y la propagación del error; no sustituye una ejecución en el controlador Jenkins.
+
+En Jenkins, la etapa de pruebas compila primero con `compileDebugUnitTestSources` y después
+ejecuta `jacocoDebugUnitTestReport` en otra invocación `--no-daemon`. Cada invocación conserva
+el límite de 1536 MiB, dos workers y Kotlin `in-process`. El primer proceso termina antes
+de iniciar las pruebas: evita retener el compilador Kotlin junto al worker Robolectric.
+No se excluyen pruebas ni reportes, ni se cambian límites de la app o de Actions.
+La regresión también comprueba que esos dos comandos permanezcan separados y ordenados.
 
 ### Configuración administrativa verificada
 
