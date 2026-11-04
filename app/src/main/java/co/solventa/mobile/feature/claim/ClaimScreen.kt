@@ -38,7 +38,7 @@ import co.solventa.mobile.core.designsystem.SolventaLayout
 import co.solventa.mobile.core.ui.SolventaPage
 
 @Composable
-internal fun ClaimHost(model: ClaimViewModel, onEvidence: (ClaimReport) -> Unit) {
+internal fun ClaimHost(model: ClaimViewModel, onStatus: ((ClaimReport) -> Unit)? = null, onEvidence: (ClaimReport) -> Unit) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val state by model.state.collectAsState()
@@ -63,7 +63,7 @@ internal fun ClaimHost(model: ClaimViewModel, onEvidence: (ClaimReport) -> Unit)
         }
     }
     BackHandler(onBack = model::close)
-    ClaimScreen(state, model::edit, model::submit, model::retry, model::newReport, model::close, onEvidence, model::correct)
+    ClaimScreen(state, model::edit, model::submit, model::retry, model::newReport, model::close, onEvidence, model::correct, onStatus)
 }
 
 @Composable
@@ -71,6 +71,7 @@ internal fun ClaimScreen(
     state: ClaimState, edit: (ClaimDraft) -> Unit, submit: () -> Unit, retry: () -> Unit,
     newReport: () -> Unit, back: () -> Unit, evidence: (ClaimReport) -> Unit,
     correct: (ClaimReport) -> Unit = {},
+    status: ((ClaimReport) -> Unit)? = null,
 ) {
     SolventaPage {
         TextButton(onClick = back) { Text(stringResource(R.string.claim_back)) }
@@ -123,6 +124,9 @@ internal fun ClaimScreen(
                 }
             } else {
                 Text(stringResource(R.string.claim_confirmed, receipt.id), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                status?.let {
+                    Button(onClick = { it(report) }, enabled = !state.busy) { Text(stringResource(R.string.claim_status_view)) }
+                }
                 Button(onClick = { evidence(report) }, enabled = !state.busy) { Text(stringResource(R.string.evidence_entry)) }
             }
         }

@@ -1,5 +1,106 @@
 # Pruebas y cobertura Android
 
+## SOL-173: consulta del estado del siniestro
+
+La cuenta ofrece **Estado de mis siniestros**. La selección usa
+`GET /movil/v1/siniestros`; no pide identificadores escritos. Un reporte
+confirmado también ofrece **Consultar estado**, sin volver a enviarlo.
+El acuse `registrado` solo confirma la recepción del reporte; no sustituye
+el estado de negocio.
+
+La pantalla consulta `GET /movil/v1/siniestros/{id}/estado` y muestra el estado,
+su descripción pública y `actualizadoEn` del servicio, convertido a la hora
+local. No calcula transiciones, no cambia fechas y no conserva un estado
+anterior como resultado de una actualización fallida. Distingue carga, lista
+vacía, error de consulta y siniestro no disponible; conserva el reintento.
+Solo `404 + siniestro_no_encontrado` indica caso no disponible. Otros 404,
+403, 503 y respuestas inválidas no se presentan como una lista vacía o un
+estado válido.
+
+Reutiliza la sesión autenticada y su renovación acotada. El cambio de cuenta,
+la salida y el paso a segundo plano descartan los datos de consulta; las
+respuestas tardías no restauran datos anteriores. Al regresar consulta de
+nuevo. La pantalla mantiene `FLAG_SECURE`; no guarda estados en disco ni
+añade sincronización de reportes, historial editable o cambios de estado.
+
+### Pruebas reproducibles
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest --tests "co.solventa.mobile.feature.claim.*" `
+  --tests "co.solventa.mobile.feature.evidence.*" :app:lintDebug --no-daemon `
+  "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" --max-workers=2 `
+  "-Pkotlin.compiler.execution.strategy=in-process"
+.\gradlew.bat :app:assembleClaimTest :app:assembleClaimTestAndroidTest `
+  -PclaimDeviceTests=true -PbackendE2e=true --no-daemon --max-workers=2
+```
+
+`ClaimStatusApiTest`, `ClaimStatusViewModelTest`, `ClaimStatusScreenTest` y
+`ClaimStatusHostTest` cubren estados y fechas del servidor, identidad de la
+respuesta, errores, 401 con una renovación, aislamiento, respuestas tardías,
+navegación, ciclo de vida y controles con texto ampliado y ambos temas.
+
+Para el físico, usar únicamente `.claimtest` y el backend local real de
+`backend-solventa`, con las migraciones de estado ya integradas. Desde un
+entorno Python preparado para las pruebas de ese backend:
+
+```powershell
+python .\scripts\claim_status_stack.py --backend-dir C:\ruta\backend-solventa `
+  --fixture C:\ruta\privada\claim-status-fixture.json
+```
+
+El helper crea bases temporales, dos cuentas y dos siniestros sintéticos.
+Escucha solo en `127.0.0.1:18721`; `GET /__ready` confirma disponibilidad.
+Copiar la fixture a `files/claim-status-fixture.json` dentro de `.claimtest`,
+sin imprimirla ni guardarla en Git, y configurar exclusivamente el reverse
+18721 en el dispositivo autorizado.
+
+```powershell
+adb -s SERIAL reverse tcp:18721 tcp:18721
+adb -s SERIAL shell am instrument -w `
+  -e backendUrl http://127.0.0.1:18721/movil/v1 `
+  -e class co.solventa.mobile.espresso.ClaimStatusDeviceE2eTest `
+  co.solventa.mobile.pf2.claimtest.test/co.solventa.mobile.espresso.SolventaTestRunner
+```
+
+La prueba usa el formulario real de consulta, modifica la fixture SQL a
+`en_revision` mediante el control local y comprueba la respuesta nueva.
+Inyecta un 503, reintenta, recrea la actividad y compara inexistente/ajeno.
+Cambia a la segunda cuenta y verifica que no aparezca el primer siniestro.
+La prueba de presentación renderiza únicamente datos sintéticos fuera del
+host protegido para capturar ambos temas; no modifica la protección del
+producto ni los ajustes de texto del sistema.
+
+Después, retirar solo la fixture y las dos capturas generadas de `.claimtest`,
+quitar su reverse 18721 y enviar `POST /__control/stop`. El helper elimina su
+fixture y bases temporales y exige cero mutaciones de siniestro desde la app.
+La prueba cierra su sesión sintética. No borrar datos, desinstalar paquetes,
+alterar otras colas ni usar un emulador en el equipo local.
+
+Resultado local del 4 de noviembre de 2026: **316 pruebas JVM, 315 aprobadas,
+1 optativa omitida, 0 fallos**. Lint debug aprobado, sin errores y con
+36 advertencias; ambos APK `claimTest` compilados. Las dos pruebas físicas
+pasaron en SM-A217M/API 36, con el backend real temporal: 10,506 s en la pasada
+final. El helper confirmó cero mutaciones de siniestro desde la app y cerró
+las conexiones SQL antes de retirar las bases en Windows.
+
+| Archivo | Líneas JVM | Ramas JVM |
+| --- | --- | --- |
+| `ClaimStatusViewModel.kt` | 100 % | 94,44 % |
+| `ClaimStatusScreen.kt` | 98,65 % | 95,24 % |
+| `MobileClaimApi.kt` | 100 % | 90,74 % |
+
+Se inspeccionaron capturas físicas de 720 × 1600 en tema claro y tema oscuro
+con texto al doble, sin recortes en los datos ni el botón. La presentación
+JVM cubre 320 dp con texto ampliado. La prueba HTTP existente
+`test_registered_claim_has_shared_status_without_invented_classification`
+también pasó contra el backend integrado, sin modificarlo.
+
+Esta comprobación no acredita producción, PostgreSQL, TalkBack manual ni los
+percentiles de rendimiento de SOL-309. El endpoint de estado existe en el
+backend integrado; falta incorporarlo al catálogo OpenAPI del BFF móvil.
+SOL-309 requiere su propia conciliación y validación. El despliegue de
+Siniestros continúa bloqueado por la persistencia pendiente.
+
 ## SOL-170: reporte móvil y envío pendiente
 
 La cuenta ofrece **Reportar un siniestro**. El formulario consulta las pólizas

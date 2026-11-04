@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="claim_status_title">Estado de mis siniestros</string>
+    <string name="claim_status_view">Consultar estado</string>
+    <string name="claim_status_back">Volver</string>
+    <string name="claim_status_choose">Selecciona el siniestro que quieres consultar.</string>
+    <string name="claim_status_loading">Consultando el servicio…</string>
+    <string name="claim_status_empty">No tienes siniestros registrados.</string>
+    <string name="claim_status_refresh">Actualizar</string>
+    <string name="claim_status_retry">Reintentar</string>
+    <string name="claim_status_updated">Última actualización: %1$s (hora local)</string>
+    <string name="claim_status_event">Fecha del evento: %1$s (hora local)</string>
+    <string name="claim_status_network">No pudimos consultar el servicio. Revisa tu conexión y reintenta.</string>
+    <string name="claim_status_session">No pudimos verificar tu acceso. Vuelve a tu cuenta e inicia sesión para consultar.</string>
+    <string name="claim_status_unavailable">Este siniestro no está disponible para tu cuenta.</string>
+    <string name="claim_status_protocol">La respuesta del servicio no permite mostrar el estado. Reintenta.</string>
+    <string name="claim_status_storage">No pudimos acceder a la sesión guardada en el dispositivo. Vuelve a tu cuenta e inicia sesión.</string>
+    <string name="claim_status_reported">Reportado</string>
+    <string name="claim_status_evaluating">En evaluación</string>
+    <string name="claim_status_reviewing">En revisión</string>
+    <string name="claim_status_inspecting">En inspección</string>
+    <string name="claim_status_approved">Aprobado</string>
+    <string name="claim_status_rejected">Rechazado</string>
+    <string name="claim_status_paid">Pagado</string>
+    <string name="claim_status_closed">Cerrado</string>
+</resources>
