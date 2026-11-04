@@ -105,6 +105,10 @@ class AuthRepository(
         }
     }
 
+    internal suspend fun localUser(): AuthUser? = withContext(Dispatchers.IO) {
+        mutex.withLock { store.read()?.takeIf { it.refreshExpiresAt > now() }?.user }
+    }
+
     private fun renew(grant: AuthGrant): AuthGrant {
         val renewed = api.refresh(grant.refreshToken)
         require(renewed.user.id == grant.user.id)

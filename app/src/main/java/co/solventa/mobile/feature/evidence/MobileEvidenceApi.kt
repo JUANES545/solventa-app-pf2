@@ -111,7 +111,7 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
         }
     }
 
-    private suspend fun <T> session(actor: String, action: (AuthGrant) -> T): T {
+    internal suspend fun <T> session(actor: String, action: (AuthGrant) -> T): T {
         try {
             return try {
                 auth.withSession(actor, action)
@@ -163,7 +163,7 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
         return EvidenceReceipt(item.id, uuid(load.getString("evidenciaId")), item.sha256)
     }
 
-    private fun request(
+    internal fun request(
         method: String, path: String, token: String, body: JSONObject? = null,
         idempotencyKey: String? = null, bytes: ByteArray? = null, offset: Long? = null,
     ): JSONObject {

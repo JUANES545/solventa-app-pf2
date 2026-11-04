@@ -81,12 +81,14 @@ android {
         testInstrumentationRunner = "co.solventa.mobile.espresso.SolventaTestRunner"
         val backendE2e = providers.gradleProperty("backendE2e").orNull == "true"
         testInstrumentationRunnerArguments[if (backendE2e) "annotation" else "notAnnotation"] =
-            if (backendE2e && providers.gradleProperty("evidenceDeviceTests").orNull == "true") {
+            if (backendE2e && providers.gradleProperty("claimDeviceTests").orNull == "true") {
+                "co.solventa.mobile.espresso.ClaimDeviceE2e"
+            } else if (backendE2e && providers.gradleProperty("evidenceDeviceTests").orNull == "true") {
                 "co.solventa.mobile.espresso.EvidenceDeviceE2e"
             } else if (backendE2e) {
                 "co.solventa.mobile.espresso.BackendE2e"
             } else {
-                "co.solventa.mobile.espresso.BackendE2e,co.solventa.mobile.espresso.EvidenceDeviceE2e"
+                "co.solventa.mobile.espresso.BackendE2e,co.solventa.mobile.espresso.EvidenceDeviceE2e,co.solventa.mobile.espresso.ClaimDeviceE2e"
             }
     }
 
@@ -140,6 +142,17 @@ android {
     if (providers.gradleProperty("evidenceDeviceTests").orNull == "true") {
         testBuildType = "evidenceTest"
     }
+    buildTypes.create("claimTest") {
+        initWith(buildTypes.getByName("debug"))
+        applicationIdSuffix = ".claimtest"
+        matchingFallbacks += "debug"
+        buildConfigField("String", "AUTH_BASE_URL", "\"http://127.0.0.1:18721/movil/v1\"")
+        buildConfigField("String", "AUTH_ISSUER", "\"urn:solventa:claims-local\"")
+    }
+    sourceSets.getByName("claimTest") { res.srcDir("src/debug/res") }
+    if (providers.gradleProperty("claimDeviceTests").orNull == "true") {
+        testBuildType = "claimTest"
+    }
     testCoverage {
         jacocoVersion = "0.8.13"
     }
@@ -187,4 +200,5 @@ dependencies {
     implementation(libs.mlkit.face)
     "biometricTestImplementation"(libs.androidx.compose.ui.test.manifest)
     "evidenceTestImplementation"(libs.androidx.compose.ui.test.manifest)
+    "claimTestImplementation"(libs.androidx.compose.ui.test.manifest)
 }

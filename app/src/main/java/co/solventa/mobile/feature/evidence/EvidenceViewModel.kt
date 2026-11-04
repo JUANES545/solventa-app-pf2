@@ -80,6 +80,19 @@ internal class EvidenceViewModel @Inject constructor(
             val items = store.list(scope)
             update { copy(scope = scope, policy = config.policy, items = items, confirmedRemoteIds = ids) }
         }
+
+    }
+
+    fun showClaim(actorId: String, claim: EvidenceClaim) {
+        close()
+        mutable.value = state.value.copy(actorId = actorId, open = true, claims = listOf(claim))
+        operation {
+            val configuration = api.configuration(actorId)
+            val scope = EvidenceScope(actorId, claim.id)
+            val ids = api.confirmedIds(scope)
+            update { copy(configuration = configuration, scope = scope, policy = configuration.policy,
+                items = store.list(scope), confirmedRemoteIds = ids) }
+        }
     }
 
     fun open(scope: EvidenceScope, policy: EvidencePolicy, confirmedRemoteIds: Set<String>) {
