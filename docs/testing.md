@@ -1,5 +1,58 @@
 # Pruebas y cobertura Android
 
+## SOL-236: reconexión y reanudación de envíos
+
+Los hosts de reportes y evidencias comparten `RetryOnReconnect`. El aviso de
+recuperación requiere `INTERNET` y `VALIDATED` en la red predeterminada:
+`onAvailable` por sí solo no acredita acceso a Internet. Un cambio de
+capacidades puede recuperar la misma red sin otro `onAvailable`.
+
+Si llega el aviso durante una operación o mientras se captura una evidencia,
+el host conserva un reintento hasta que la pantalla permita enviarlo. Agrupa
+avisos repetidos y espera a primer plano. Al cambiar de cuenta/siniestro o
+retirar el host, descarta los avisos anteriores y libera el callback. Conserva
+la carga local al abrir y el reintento al regresar a primer plano.
+
+Los emisores existentes mantienen sus claves de idempotencia y su política
+de reconciliación. El host no confirma operaciones, cambia cuerpos, modifica
+el orden de las colas ni inicia un segundo envío mientras el primero sigue
+ocupado. Las peticiones ya iniciadas pueden terminar y guardar su acuse.
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest --tests "*RetryOnReconnectTest" `
+  --tests "*ClaimHostTest" --tests "*EvidenceHostTest" :app:lintDebug `
+  --no-daemon --max-workers=2
+.\gradlew.bat :app:assembleClaimTest :app:assembleClaimTestAndroidTest `
+  -PclaimDeviceTests=true -PbackendE2e=true --no-daemon --max-workers=2
+adb -s SERIAL shell am instrument -w `
+  -e class co.solventa.mobile.espresso.ReconnectDeviceTest `
+  co.solventa.mobile.pf2.claimtest.test/co.solventa.mobile.espresso.SolventaTestRunner
+```
+
+Antes de actualizar los APK físicos, comprobar paquete `.claimtest`, versión
+y firma; no borrar datos ni usar un emulador local. `ReconnectDeviceTest`
+requiere una red validada, pero no cambia Wi-Fi ni datos móviles. Usa sus
+capacidades reales con eventos controlados y un servidor HTTP dentro del
+dispositivo. Simula un fallo retenido durante otro aviso de primer plano,
+comprueba el reintento con el UUID original y retira su directorio temporal.
+No necesita cuentas externas, un reverse ADB ni el backend de producción.
+
+La regresión JVM reproduce una red disponible sin validar, un envío fallido
+y su validación posterior; comprueba el acuse sin pulsar reintentar. También
+cubre avisos mientras está ocupado, segundo plano, cambio de cuenta, callbacks
+tardíos y reconciliación de una evidencia ya aceptada sin reenviar sus bytes.
+
+Resultado local del 5 de noviembre de 2026: **320 pruebas JVM, 319 aprobadas,
+1 optativa omitida y 0 fallos**; lint sin errores, con 36 advertencias.
+`RetryOnReconnect.kt` cubre 45/45 líneas y 28/28 ramas. Los dos tests físicos
+pasaron en SM-A217M/API 36 y repitieron el resultado en 11,226 s, sin datos
+temporales restantes. Se compilaron los APK de aplicación e instrumentación.
+
+Alcance: pantallas de envío activas con sesión y configuración autorizadas.
+No añade ejecución en segundo plano ni completa SOL-193/SOL-328. No acredita
+una caída física de Internet, disponibilidad de producción o políticas de
+conflictos que el backend todavía no haya implementado.
+
 ## SOL-173: consulta del estado del siniestro
 
 La cuenta ofrece **Estado de mis siniestros**. La selección usa

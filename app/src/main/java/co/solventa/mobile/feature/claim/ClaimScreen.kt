@@ -1,7 +1,5 @@
 package co.solventa.mobile.feature.claim
 
-import android.net.ConnectivityManager
-import android.net.Network
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,36 +27,23 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import co.solventa.mobile.R
 import co.solventa.mobile.core.designsystem.SolventaLayout
 import co.solventa.mobile.core.ui.SolventaPage
+import co.solventa.mobile.core.ui.RetryOnReconnect
 
 @Composable
 internal fun ClaimHost(model: ClaimViewModel, onStatus: ((ClaimReport) -> Unit)? = null, onEvidence: (ClaimReport) -> Unit) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val state by model.state.collectAsState()
+    RetryOnReconnect(state.actor, state.open && !state.busy, model::retry)
     DisposableEffect(model, lifecycle) {
         val window = (context as? android.app.Activity)?.window
         val wasSecure = window?.attributes?.flags?.and(WindowManager.LayoutParams.FLAG_SECURE) != 0
         window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) model.retry() }
-        lifecycle.addObserver(observer)
-        val manager = context.getSystemService(ConnectivityManager::class.java)
-        val executor = ContextCompat.getMainExecutor(context)
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                executor.execute { if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) model.retry() }
-            }
-        }
-        manager.registerDefaultNetworkCallback(callback)
         onDispose {
-            manager.unregisterNetworkCallback(callback)
-            lifecycle.removeObserver(observer)
             if (!wasSecure) window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
     }

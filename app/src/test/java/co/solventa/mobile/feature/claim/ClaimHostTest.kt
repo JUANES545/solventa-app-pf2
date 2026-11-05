@@ -3,6 +3,7 @@ package co.solventa.mobile.feature.claim
 import android.app.Application
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
@@ -28,6 +29,74 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [35])
 class ClaimHostTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    private fun await(condition: () -> Boolean) = compose.waitUntil(15_000) {
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        condition()
+    }
+
+    private fun capabilities(validated: Boolean) = org.mockito.Mockito.mock(NetworkCapabilities::class.java).apply {
+        org.mockito.Mockito.`when`(hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).thenReturn(true)
+        org.mockito.Mockito.`when`(hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)).thenReturn(validated)
+    }
+
+    @Test fun validatedConnectionRetriesTheSameUnconfirmedOperation() {
+        val app = RuntimeEnvironment.getApplication()
+        val report = ClaimStore(app.noBackupFilesDir).use { it.enqueue("actor-a", draft.payload(listOf(policy))) }
+        val online = java.util.concurrent.atomic.AtomicBoolean(false)
+        val keys = java.util.concurrent.CopyOnWriteArrayList<String?>()
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): okhttp3.mockwebserver.MockResponse {
+                    if (request.method == "GET") return okhttp3.mockwebserver.MockResponse().setBody("""{"polizas":[]}""")
+                    keys.add(request.getHeader("Idempotency-Key"))
+                    return if (online.get()) okhttp3.mockwebserver.MockResponse().setBody(response(report))
+                    else okhttp3.mockwebserver.MockResponse().setResponseCode(503)
+                }
+            }
+            val model = ClaimViewModel(app, statusApi(server))
+            try {
+                compose.runOnUiThread { model.show("actor-a") }
+                compose.setContent { ClaimHost(model) {} }
+                await { !model.state.value.busy }
+                val manager = app.getSystemService(ConnectivityManager::class.java)
+                val callback = shadowOf(manager).networkCallbacks.single()
+                val network = org.mockito.Mockito.mock(Network::class.java)
+                compose.runOnIdle {
+                    callback.onAvailable(network)
+                    callback.onCapabilitiesChanged(network, capabilities(false))
+                }
+                compose.waitForIdle()
+                await { !model.state.value.busy }
+                assertNull(model.state.value.reports.single().receipt)
+                assertEquals("The host must be in the foreground", Lifecycle.State.RESUMED, compose.activity.lifecycle.currentState)
+                online.set(true)
+                compose.runOnIdle {
+                    callback.onCapabilitiesChanged(network, capabilities(true))
+                }
+                compose.waitForIdle()
+                try {
+                    await { model.state.value.reports.single().receipt != null }
+                } catch (error: androidx.compose.ui.test.ComposeTimeoutException) {
+                    throw AssertionError("Reconnect: posts=${keys.size}, busy=${model.state.value.busy}, error=${model.state.value.error}", error)
+                }
+                await { !model.state.value.busy }
+                assertTrue(keys.size >= 2)
+                assertEquals(setOf(report.operation), keys.toSet())
+                val confirmedCount = keys.size
+                compose.runOnIdle {
+                    callback.onCapabilitiesChanged(network, capabilities(true))
+                }
+                compose.waitForIdle()
+                assertEquals(confirmedCount, keys.size)
+            } finally {
+                compose.runOnUiThread {
+                    model.bindActor(null)
+                    androidx.lifecycle.ViewModelStore().apply { put("claims", model); clear() }
+                }
+            }
+        }
+    }
 
     @Test fun lifecycleNetworkAndDisposalKeepPrivacyAndReleaseCallbacks() {
         val app = RuntimeEnvironment.getApplication()
