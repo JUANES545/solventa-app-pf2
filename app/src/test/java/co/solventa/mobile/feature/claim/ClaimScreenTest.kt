@@ -63,7 +63,7 @@ class ClaimScreenTest {
             assertEquals(listOf(1, 1, 1, 1), listOf(retries, backs, corrections, newReports))
             state.value = state.value.copy(reports = listOf(rejected.copy(error = ClaimError.NETWORK)))
         }
-        compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.claim_pending)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.claim_failed)).performScrollTo().assertIsDisplayed()
     }
 
     @Test fun pendingNeverExposesReceiptAndConfirmedLinksToEvidence() {

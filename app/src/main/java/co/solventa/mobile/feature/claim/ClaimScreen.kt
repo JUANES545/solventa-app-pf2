@@ -101,7 +101,7 @@ internal fun ClaimScreen(
             Text(report.payload.description)
             val receipt = report.receipt
             if (receipt == null) {
-                Text(stringResource(if (report.error == null || report.error == ClaimError.NETWORK)
+                Text(stringResource(if (report.error == null)
                     R.string.claim_pending else R.string.claim_failed))
                 report.error?.let { Text(stringResource(claimErrorText(it)), color = MaterialTheme.colorScheme.error) }
                 if (report.correctable) {

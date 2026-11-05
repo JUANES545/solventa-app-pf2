@@ -1,10 +1,16 @@
 package co.solventa.mobile.feature.evidence
 
 import android.app.Application
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteException
+import co.solventa.mobile.feature.auth.AuthError
+import co.solventa.mobile.feature.auth.AuthHttpError
+import co.solventa.mobile.feature.auth.AuthProblem
 import java.io.File
 import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -78,6 +84,7 @@ class EvidenceQueueTest {
             assertEquals(1, sends)
             assertEquals(item.id, store.list(scope).single().id)
             assertEquals(EvidenceStatus.CONFIRMED, store.list(scope).single().status)
+            assertNull(store.list(scope).single().lastError)
         }
     }
 
@@ -141,6 +148,7 @@ class EvidenceQueueTest {
             val second = add(store)
             val ordered = store.list(scope)
             rejectedId = ordered.first().id
+            store.fail(ordered.first(), EvidenceError.NETWORK)
             val transport = object : EvidenceTransport {
                 override suspend fun confirmed(scope: EvidenceScope, localId: String): EvidenceReceipt? = null
                 override suspend fun upload(item: EvidenceItem, file: File, progress: (Long) -> Unit): EvidenceReceipt {
@@ -159,8 +167,124 @@ class EvidenceQueueTest {
         EvidenceStore(dir).use { store ->
             val rejected = store.list(scope).single { it.id == rejectedId }
             assertEquals(EvidenceError.FORMAT, rejected.rejection)
+            assertNull(rejected.lastError)
             store.removeRejected(rejected)
             assertEquals(EvidenceStatus.CONFIRMED, store.list(scope).single().status)
+        }
+    }
+
+    @Test fun recoverableFailurePersistsOnlyForAttemptedItemWithoutAllowingRemoval() = runBlocking {
+        val dir = folder.newFolder()
+        val failure = EvidenceHttpProblem(503, null, false, EvidenceError.NETWORK)
+        val attempted = EvidenceStore(dir).use { store ->
+            repeat(3) { add(store) }
+            val first = store.list(scope).first()
+            val transport = object : EvidenceTransport {
+                override suspend fun confirmed(scope: EvidenceScope, localId: String): EvidenceReceipt? = throw failure
+                override suspend fun upload(item: EvidenceItem, file: File, progress: (Long) -> Unit): EvidenceReceipt =
+                    throw AssertionError("Reconciliation failed; upload must not run")
+            }
+            try { EvidenceUploader(store, transport).retry(scope, { true }) { _, _, _ -> }; fail() }
+            catch (error: EvidenceHttpProblem) { assertSame(failure, error) }
+            first.id
+        }
+        EvidenceStore(dir).use { store ->
+            val items = store.list(scope)
+            assertEquals(listOf(EvidenceError.NETWORK, null, null), items.map { it.lastError })
+            assertTrue(items.all { it.status == EvidenceStatus.PENDING && it.remoteId == null && it.rejection == null })
+            assertEquals(attempted, items.first().id)
+            assertThrows(IllegalArgumentException::class.java) { store.removeRejected(items.first()) }
+            assertTrue(store.list(scope.copy(actorId = "another")).isEmpty())
+            assertTrue(store.list(scope.copy(claimId = "another")).isEmpty())
+            assertThrows(IllegalStateException::class.java) {
+                store.fail(items.first().copy(scope = scope.copy(actorId = "another")), EvidenceError.SESSION)
+            }
+            assertArrayEquals(byteArrayOf(1, 2, 3), store.file(items.first()).readBytes())
+        }
+    }
+
+    @Test fun cancellationAndUnknownExceptionsPropagateWithoutReplacingTheLastError() = runBlocking {
+        for (failure in listOf(CancellationException("cancelled"), IllegalStateException("unexpected"))) {
+            EvidenceStore(folder.newFolder()).use { store ->
+                add(store)
+                val transport = object : EvidenceTransport {
+                    override suspend fun confirmed(scope: EvidenceScope, localId: String): EvidenceReceipt? = throw failure
+                    override suspend fun upload(item: EvidenceItem, file: File, progress: (Long) -> Unit): EvidenceReceipt =
+                        throw AssertionError("Must not upload")
+                }
+                for (previous in listOf(null, EvidenceError.NETWORK)) {
+                    val item = store.list(scope).single()
+                    if (previous != null) store.fail(item, previous)
+                    try { EvidenceUploader(store, transport).retry(scope, { true }) { _, _, _ -> }; fail() }
+                    catch (error: Exception) { assertSame(failure, error) }
+                    assertEquals(previous, store.list(scope).single().lastError)
+                }
+            }
+        }
+    }
+
+    @Test fun knownFailuresKeepTheirCategoryAndOriginalException() = runBlocking {
+        for ((failure, reason) in listOf(
+            EvidenceProblem(EvidenceError.NETWORK) to EvidenceError.NETWORK,
+            AuthHttpError(401) to EvidenceError.SESSION,
+            AuthProblem(AuthError.EXPIRED) to EvidenceError.SESSION,
+            org.json.JSONException("invalid receipt") to EvidenceError.PROTOCOL,
+            IllegalArgumentException("invalid receipt") to EvidenceError.PROTOCOL,
+            SQLiteException("storage unavailable") to EvidenceError.STORAGE,
+            IOException("file unavailable") to EvidenceError.STORAGE,
+            SecurityException("permission denied") to EvidenceError.PERMISSION,
+        )) {
+            EvidenceStore(folder.newFolder()).use { store ->
+                add(store)
+                val transport = object : EvidenceTransport {
+                    override suspend fun confirmed(scope: EvidenceScope, localId: String): EvidenceReceipt? = null
+                    override suspend fun upload(item: EvidenceItem, file: File, progress: (Long) -> Unit): EvidenceReceipt =
+                        throw failure
+                }
+                try { EvidenceUploader(store, transport).retry(scope, { true }) { _, _, _ -> }; fail() }
+                catch (error: Exception) { assertSame(failure, error) }
+                assertEquals(reason, store.list(scope).single().lastError)
+            }
+        }
+    }
+
+    @Test fun migratingLegacyQueueKeepsFilesReceiptsRejectionsAndUploadIdentity() {
+        val dir = folder.newFolder()
+        val items = EvidenceStore(dir).use { store ->
+            val pending = add(store)
+            val confirmed = add(store)
+            val rejected = add(store)
+            store.saveUploadId(pending, pending.id)
+            store.confirm(confirmed, EvidenceReceipt(confirmed.id, "remote", confirmed.sha256))
+            store.reject(rejected, EvidenceError.FORMAT)
+            store.list(scope)
+        }
+        SQLiteDatabase.openDatabase(File(dir, "claim-evidence/queue.db").path, null, SQLiteDatabase.OPEN_READWRITE).use {
+            it.execSQL("ALTER TABLE evidence RENAME TO current_evidence")
+            it.execSQL("""
+                CREATE TABLE evidence (
+                    id TEXT PRIMARY KEY, actor TEXT NOT NULL, claim_id TEXT NOT NULL,
+                    kind TEXT NOT NULL, captured_at TEXT NOT NULL, latitude REAL, longitude REAL,
+                    measured_at TEXT, bytes INTEGER NOT NULL, sha256 TEXT NOT NULL, duration INTEGER NOT NULL,
+                    remote_id TEXT, upload_id TEXT, rejection TEXT, UNIQUE(actor, claim_id, id)
+                )
+            """.trimIndent())
+            it.execSQL("""
+                INSERT INTO evidence SELECT id, actor, claim_id, kind, captured_at, latitude, longitude,
+                    measured_at, bytes, sha256, duration, remote_id, upload_id, rejection FROM current_evidence
+            """.trimIndent())
+            it.execSQL("DROP TABLE current_evidence")
+        }
+        repeat(2) {
+            EvidenceStore(dir).use { store ->
+                assertEquals(items, store.list(scope))
+                for (item in items) assertArrayEquals(byteArrayOf(1, 2, 3), store.file(item).readBytes())
+                val pending = items.single { it.status == EvidenceStatus.PENDING }
+                assertEquals(pending.id, store.uploadId(pending))
+                for (item in items.filter { it.status != EvidenceStatus.PENDING }) {
+                    assertThrows(IllegalStateException::class.java) { store.fail(item, EvidenceError.NETWORK) }
+                }
+            }
         }
     }
 }

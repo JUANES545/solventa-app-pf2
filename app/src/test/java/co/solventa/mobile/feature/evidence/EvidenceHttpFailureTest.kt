@@ -89,7 +89,9 @@ class EvidenceHttpFailureTest {
                         if (status < 400) assertFalse(error is EvidenceHttpProblem)
                     }
                     assertEquals(before + 1, server.requestCount)
-                    assertEquals(original, store.list(scope))
+                    assertEquals(original.mapIndexed { index, item ->
+                        if (index == 0) item.copy(lastError = expected) else item
+                    }, store.list(scope))
                     assertTrue(store.list(scope).all { it.status == EvidenceStatus.PENDING && it.remoteId == null })
                 }
             }

@@ -1,5 +1,54 @@
 # Pruebas y cobertura Android
 
+## SOL-238: estados de los envíos
+
+La lista distingue un pendiente sin intento fallido, un error de envío,
+una confirmación del servidor y un rechazo definitivo. Los reportes con
+error de red también muestran el estado de error, sin afirmar que el
+servidor los rechazó.
+
+Las evidencias conservan el último error recuperable en `last_error`,
+separado de `rejection`. La migración agrega una columna nullable y conserva
+archivos, acuses y UUID de carga existentes. El error pertenece solo al
+archivo cuyo intento falló; los siguientes permanecen pendientes. Un error
+recuperable no habilita el retiro ni impide reintentar. Un acuse válido o un
+rechazo definitivo limpia ese error. Las cancelaciones y excepciones
+desconocidas se propagan sin cambiarlo.
+
+La regresión JVM falló antes de la corrección porque, al reabrir la cola,
+desaparecía la razón del fallo. Ahora comprueba su persistencia, los estados
+visibles y el retiro exclusivo de rechazos. Las pruebas de cola cubren la
+migración, aislamiento por cuenta/siniestro, fallos parciales, categorías de
+error y recuperación de un acuse perdido sin reenviar el archivo.
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest --tests "*Evidence*Test" `
+  --tests "*ClaimScreenTest" :app:lintDebug --no-daemon --max-workers=2
+.\gradlew.bat :app:assembleClaimTest :app:assembleClaimTestAndroidTest `
+  -PclaimDeviceTests=true -PbackendE2e=true --no-daemon --max-workers=2
+adb -s SERIAL shell am instrument -w `
+  -e class co.solventa.mobile.espresso.EvidenceStatusDeviceTest `
+  co.solventa.mobile.pf2.claimtest.test/co.solventa.mobile.espresso.SolventaTestRunner
+```
+
+`EvidenceStatusDeviceTest` usa SQLite y la pantalla Compose reales con un
+transporte controlado, datos sintéticos y un directorio temporal propio.
+Recrea el modelo tras perder un acuse, comprueba el error por archivo y
+reconcilia la confirmación sin un segundo envío. No usa cuentas externas,
+reverse ADB ni servicios de producción; no borra las colas existentes.
+Comprobar paquete `.claimtest`, versión y firma antes de actualizar los APK.
+
+Resultado local del 5 de noviembre de 2026: **326 pruebas JVM, 325 aprobadas,
+1 optativa omitida y 0 fallos**; lint sin errores, con 36 advertencias.
+`EvidenceUploader.kt` cubre 27/27 líneas y `EvidenceStore.kt`, 127/128.
+Se compilaron los APK de aplicación e instrumentación.
+
+En SM-A217M/API 36, el test físico pasó en 4,729 s y volvió a pasar junto
+a los dos tests de reconexión en 14,237 s con los APK finales. No quedaron directorios temporales
+de estas pruebas. No se comprobó TalkBack ni una caída física de Internet.
+El cambio no agrega un historial ni ejecución en segundo plano y no
+completa SOL-193/SOL-328.
+
 ## SOL-236: reconexión y reanudación de envíos
 
 Los hosts de reportes y evidencias comparten `RetryOnReconnect`. El aviso de

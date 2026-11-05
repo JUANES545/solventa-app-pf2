@@ -24,13 +24,14 @@ internal class EvidenceStore(noBackupDirectory: File) : Closeable {
                 id TEXT PRIMARY KEY, actor TEXT NOT NULL, claim_id TEXT NOT NULL,
                 kind TEXT NOT NULL, captured_at TEXT NOT NULL, latitude REAL, longitude REAL,
                 measured_at TEXT, bytes INTEGER NOT NULL, sha256 TEXT NOT NULL, duration INTEGER NOT NULL,
-                remote_id TEXT, upload_id TEXT, rejection TEXT, UNIQUE(actor, claim_id, id)
+                remote_id TEXT, upload_id TEXT, rejection TEXT, last_error TEXT, UNIQUE(actor, claim_id, id)
             )
         """.trimIndent())
         val columns = database.rawQuery("PRAGMA table_info(evidence)", null).use { cursor ->
             buildSet { while (cursor.moveToNext()) add(cursor.getString(1)) }
         }
         if ("rejection" !in columns) database.execSQL("ALTER TABLE evidence ADD COLUMN rejection TEXT")
+        if ("last_error" !in columns) database.execSQL("ALTER TABLE evidence ADD COLUMN last_error TEXT")
     }
 
     @Synchronized
@@ -117,14 +118,23 @@ internal class EvidenceStore(noBackupDirectory: File) : Closeable {
         val stored = list(item.scope).singleOrNull { it.id == item.id }
             ?: throw EvidenceProblem(EvidenceError.SESSION)
         if (stored.remoteId != null && stored.remoteId != receipt.remoteId) throw EvidenceProblem(EvidenceError.PROTOCOL)
-        check(database.update("evidence", ContentValues().apply { put("remote_id", receipt.remoteId); putNull("rejection") },
+        check(database.update("evidence", ContentValues().apply {
+            put("remote_id", receipt.remoteId); putNull("rejection"); putNull("last_error")
+        },
             "id=? AND actor=? AND claim_id=?", arrayOf(item.id, item.scope.actorId, item.scope.claimId)) == 1)
     }
 
     @Synchronized
     fun reject(item: EvidenceItem, reason: EvidenceError) {
-        check(database.update("evidence", ContentValues().apply { put("rejection", reason.name) },
+        check(database.update("evidence", ContentValues().apply { put("rejection", reason.name); putNull("last_error") },
             "id=? AND actor=? AND claim_id=? AND remote_id IS NULL",
+            arrayOf(item.id, item.scope.actorId, item.scope.claimId)) == 1)
+    }
+
+    @Synchronized
+    fun fail(item: EvidenceItem, reason: EvidenceError) {
+        check(database.update("evidence", ContentValues().apply { put("last_error", reason.name) },
+            "id=? AND actor=? AND claim_id=? AND remote_id IS NULL AND rejection IS NULL",
             arrayOf(item.id, item.scope.actorId, item.scope.claimId)) == 1)
     }
 
@@ -174,7 +184,7 @@ internal class EvidenceStore(noBackupDirectory: File) : Closeable {
                 remote != null -> EvidenceStatus.CONFIRMED
                 rejected != null -> EvidenceStatus.REJECTED
                 else -> EvidenceStatus.PENDING
-            }, remote, rejected)
+            }, remote, rejected, text("last_error")?.let(EvidenceError::valueOf))
     }
 
     @Synchronized override fun close() = database.close()
