@@ -1,4 +1,10 @@
 <resources>
+    <string name="sync_queued_at">En cola desde: %1$s</string>
+    <string name="sync_result_at">Último resultado observado en el dispositivo: %1$s</string>
+    <string name="sync_server_result_at">Fecha del resultado en el servidor: %1$s</string>
+    <string name="sync_conflict">Conflicto de sincronización</string>
+    <string name="sync_error_conflict">El servidor detectó otros datos para esta operación. Conservamos los datos locales sin sobrescribir los del servidor.</string>
+    <string name="claim_corrected">Este reporte tiene una corrección en la cola.</string>
     <string name="claim_title">Reportar un siniestro</string>
     <string name="claim_local_session">Sin conexión al servicio. Puedes consultar tus datos locales y guardar reportes pendientes. Verificaremos la sesión al enviar.</string>
     <string name="claim_back">Volver a mi cuenta</string>

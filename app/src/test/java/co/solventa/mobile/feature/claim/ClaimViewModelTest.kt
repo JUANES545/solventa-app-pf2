@@ -105,7 +105,8 @@ class ClaimViewModelTest {
             model.submit()
             model.correct(rejected)
             await(model)
-            val confirmed = model.state.value.reports.single()
+            val confirmed = model.state.value.reports.single { it.receipt != null }
+            assertEquals(confirmed.operation, model.state.value.reports.first().supersededBy)
             assertNotEquals(rejected.operation, confirmed.operation)
             assertNotNull(confirmed.receipt)
             model.correct(confirmed)

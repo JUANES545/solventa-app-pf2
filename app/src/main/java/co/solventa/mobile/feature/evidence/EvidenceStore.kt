@@ -3,6 +3,7 @@ package co.solventa.mobile.feature.evidence
 import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import co.solventa.mobile.core.SyncResult
 import java.io.Closeable
 import java.io.File
 import java.io.FileOutputStream
@@ -10,8 +11,9 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
+import org.json.JSONObject
 
-internal class EvidenceStore(noBackupDirectory: File) : Closeable {
+internal class EvidenceStore(noBackupDirectory: File, private val now: () -> Instant = Instant::now) : Closeable {
     private val directory = File(noBackupDirectory, "claim-evidence")
     private val database: SQLiteDatabase
 
@@ -32,12 +34,15 @@ internal class EvidenceStore(noBackupDirectory: File) : Closeable {
         }
         if ("rejection" !in columns) database.execSQL("ALTER TABLE evidence ADD COLUMN rejection TEXT")
         if ("last_error" !in columns) database.execSQL("ALTER TABLE evidence ADD COLUMN last_error TEXT")
+        for (column in listOf("queued_at", "last_result_at", "error_code", "server_result")) {
+            if (column !in columns) database.execSQL("ALTER TABLE evidence ADD COLUMN $column TEXT")
+        }
     }
 
     @Synchronized
     fun list(scope: EvidenceScope): List<EvidenceItem> = database.query(
         "evidence", null, "actor=? AND claim_id=?", arrayOf(scope.actorId, scope.claimId),
-        null, null, "captured_at, id",
+        null, null, "rowid",
     ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.item()) } }
 
     @Synchronized
@@ -77,7 +82,7 @@ internal class EvidenceStore(noBackupDirectory: File) : Closeable {
                 output.fd.sync()
             }
             policy.validate(kind, file.length(), durationMillis)
-            val item = EvidenceItem(id, scope, kind, capturedAt, location, file.length(), digest(file), durationMillis)
+            val item = EvidenceItem(id, scope, kind, capturedAt, location, file.length(), digest(file), durationMillis, queuedAt = now())
             database.insertOrThrow("evidence", null, ContentValues().apply {
                 put("id", id); put("actor", scope.actorId); put("claim_id", scope.claimId)
                 put("kind", kind.name); put("captured_at", capturedAt.toString())
@@ -85,6 +90,7 @@ internal class EvidenceStore(noBackupDirectory: File) : Closeable {
                     put("latitude", it.latitude); put("longitude", it.longitude); put("measured_at", it.measuredAt.toString())
                 }
                 put("bytes", item.bytes); put("sha256", item.sha256); put("duration", durationMillis)
+                put("queued_at", item.queuedAt.toString())
             })
             database.setTransactionSuccessful()
             return item
@@ -114,26 +120,40 @@ internal class EvidenceStore(noBackupDirectory: File) : Closeable {
         if (receipt.localId != item.id || receipt.sha256 != item.sha256 || receipt.remoteId.isBlank()) {
             throw EvidenceProblem(EvidenceError.PROTOCOL)
         }
+        require(receipt.serverResult == null || receipt.serverResult.operationId == item.id && receipt.serverResult.httpStatus < 300)
 
         val stored = list(item.scope).singleOrNull { it.id == item.id }
             ?: throw EvidenceProblem(EvidenceError.SESSION)
+        if (stored.sha256 != receipt.sha256) throw EvidenceProblem(EvidenceError.PROTOCOL)
         if (stored.remoteId != null && stored.remoteId != receipt.remoteId) throw EvidenceProblem(EvidenceError.PROTOCOL)
+        if (stored.remoteId != null) return
         check(database.update("evidence", ContentValues().apply {
             put("remote_id", receipt.remoteId); putNull("rejection"); putNull("last_error")
+            put("last_result_at", now().toString()); putNull("error_code")
+            put("server_result", receipt.serverResult?.json()?.toString())
         },
             "id=? AND actor=? AND claim_id=?", arrayOf(item.id, item.scope.actorId, item.scope.claimId)) == 1)
     }
 
     @Synchronized
-    fun reject(item: EvidenceItem, reason: EvidenceError) {
-        check(database.update("evidence", ContentValues().apply { put("rejection", reason.name); putNull("last_error") },
+    fun reject(item: EvidenceItem, reason: EvidenceError, code: String? = null, serverResult: SyncResult? = null) {
+        require(serverResult == null || serverResult.operationId == item.id)
+        check(database.update("evidence", ContentValues().apply {
+            put("rejection", reason.name); putNull("last_error")
+            put("last_result_at", now().toString()); put("error_code", code)
+            put("server_result", serverResult?.json()?.toString())
+        },
             "id=? AND actor=? AND claim_id=? AND remote_id IS NULL",
             arrayOf(item.id, item.scope.actorId, item.scope.claimId)) == 1)
     }
 
     @Synchronized
-    fun fail(item: EvidenceItem, reason: EvidenceError) {
-        check(database.update("evidence", ContentValues().apply { put("last_error", reason.name) },
+    fun fail(item: EvidenceItem, reason: EvidenceError, code: String? = null, serverResult: SyncResult? = null) {
+        require(serverResult == null || serverResult.operationId == item.id)
+        check(database.update("evidence", ContentValues().apply {
+            put("last_error", reason.name); put("last_result_at", now().toString()); put("error_code", code)
+            put("server_result", serverResult?.json()?.toString())
+        },
             "id=? AND actor=? AND claim_id=? AND remote_id IS NULL AND rejection IS NULL",
             arrayOf(item.id, item.scope.actorId, item.scope.claimId)) == 1)
     }
@@ -182,9 +202,12 @@ internal class EvidenceStore(noBackupDirectory: File) : Closeable {
             getLong(getColumnIndexOrThrow("bytes")), text("sha256"), getLong(getColumnIndexOrThrow("duration")),
             when {
                 remote != null -> EvidenceStatus.CONFIRMED
+                rejected == EvidenceError.CONFLICT -> EvidenceStatus.CONFLICT
                 rejected != null -> EvidenceStatus.REJECTED
                 else -> EvidenceStatus.PENDING
-            }, remote, rejected, text("last_error")?.let(EvidenceError::valueOf))
+            }, remote, rejected, text("last_error")?.let(EvidenceError::valueOf),
+            text("queued_at")?.let(Instant::parse), text("last_result_at")?.let(Instant::parse), text("error_code"),
+            text("server_result")?.let { SyncResult.parse(JSONObject(it), text("id")) })
     }
 
     @Synchronized override fun close() = database.close()

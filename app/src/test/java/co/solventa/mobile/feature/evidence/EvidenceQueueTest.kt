@@ -215,9 +215,11 @@ class EvidenceQueueTest {
                 for (previous in listOf(null, EvidenceError.NETWORK)) {
                     val item = store.list(scope).single()
                     if (previous != null) store.fail(item, previous)
+                    val before = store.list(scope).single()
                     try { EvidenceUploader(store, transport).retry(scope, { true }) { _, _, _ -> }; fail() }
                     catch (error: Exception) { assertSame(failure, error) }
                     assertEquals(previous, store.list(scope).single().lastError)
+                    assertEquals(before, store.list(scope).single())
                 }
             }
         }
@@ -277,7 +279,7 @@ class EvidenceQueueTest {
         }
         repeat(2) {
             EvidenceStore(dir).use { store ->
-                assertEquals(items, store.list(scope))
+                assertEquals(items.map { it.copy(queuedAt = null, lastResultAt = null) }, store.list(scope))
                 for (item in items) assertArrayEquals(byteArrayOf(1, 2, 3), store.file(item).readBytes())
                 val pending = items.single { it.status == EvidenceStatus.PENDING }
                 assertEquals(pending.id, store.uploadId(pending))

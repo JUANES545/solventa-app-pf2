@@ -99,10 +99,18 @@ internal fun ClaimScreen(
             HorizontalDivider()
             Text(report.payload.type, style = MaterialTheme.typography.titleMedium)
             Text(report.payload.description)
+            report.queuedAt?.let { Text(stringResource(R.string.sync_queued_at, it.toString()), style = MaterialTheme.typography.bodySmall) }
+            report.lastResultAt?.let { Text(stringResource(R.string.sync_result_at, it.toString()), style = MaterialTheme.typography.bodySmall) }
+            report.serverResult?.let { Text(stringResource(R.string.sync_server_result_at, it.at.toString()), style = MaterialTheme.typography.bodySmall) }
+            report.supersededBy?.let { Text(stringResource(R.string.claim_corrected)) }
             val receipt = report.receipt
             if (receipt == null) {
-                Text(stringResource(if (report.error == null)
-                    R.string.claim_pending else R.string.claim_failed))
+                Text(stringResource(when (report.error) {
+                    null -> R.string.claim_pending
+                    ClaimError.CONFLICT -> R.string.sync_conflict
+                    ClaimError.POLICY, ClaimError.DATE -> R.string.evidence_rejected
+                    else -> R.string.claim_failed
+                }))
                 report.error?.let { Text(stringResource(claimErrorText(it)), color = MaterialTheme.colorScheme.error) }
                 if (report.correctable) {
                     Button(onClick = { correct(report) }, enabled = !state.busy) { Text(stringResource(R.string.claim_correct)) }
@@ -134,4 +142,5 @@ internal fun claimErrorText(error: ClaimError): Int = when (error) {
     ClaimError.SESSION -> R.string.claim_error_session
     ClaimError.PROTOCOL -> R.string.claim_error_protocol
     ClaimError.STORAGE -> R.string.claim_error_storage
+    ClaimError.CONFLICT -> R.string.sync_error_conflict
 }

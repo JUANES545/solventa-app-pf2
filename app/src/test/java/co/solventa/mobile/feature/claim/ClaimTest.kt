@@ -128,7 +128,14 @@ class ClaimTest {
             assertTrue(store.list("actor-a").single().correctable)
             val corrected = store.enqueue("actor-a", payload().copy(place = "Lugar corregido"), report.operation)
             assertNotEquals(report.operation, corrected.operation)
-            assertEquals(corrected, store.list("actor-a").single())
+            assertEquals(corrected, store.list("actor-a").last())
+            val historical = store.list("actor-a").first()
+            assertEquals(report.operation, historical.operation)
+            assertEquals(payload(), historical.payload)
+            assertEquals(ClaimError.POLICY, historical.error)
+            assertEquals(corrected.operation, historical.supersededBy)
+            assertFalse(historical.correctable)
+            assertFalse(historical.retryable)
             assertEquals(payload(), payload().draft().payload(listOf(policy)))
             try { store.confirm(corrected, ClaimReceipt(UUID.randomUUID().toString(), "pendiente")); fail() }
             catch (_: IllegalArgumentException) { }

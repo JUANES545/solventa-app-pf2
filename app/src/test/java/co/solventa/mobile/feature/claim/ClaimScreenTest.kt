@@ -55,6 +55,7 @@ class ClaimScreenTest {
             compose.onNodeWithText(app.getString(claimErrorText(error))).performScrollTo().assertIsDisplayed()
         }
         compose.runOnIdle { state.value = state.value.copy(error = null, editing = false, reports = listOf(rejected)) }
+        compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.evidence_rejected)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.claim_correct)).performScrollTo().performClick()
         compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.claim_retry)).performScrollTo().performClick()
         compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.claim_new)).performScrollTo().performClick()
@@ -64,6 +65,10 @@ class ClaimScreenTest {
             state.value = state.value.copy(reports = listOf(rejected.copy(error = ClaimError.NETWORK)))
         }
         compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.claim_failed)).performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { state.value = state.value.copy(reports = listOf(rejected.copy(error = ClaimError.CONFLICT))) }
+        compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.sync_conflict)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.sync_error_conflict)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.claim_correct)).assertDoesNotExist()
     }
 
     @Test fun pendingNeverExposesReceiptAndConfirmedLinksToEvidence() {
