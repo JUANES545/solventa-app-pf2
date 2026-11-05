@@ -28,6 +28,7 @@
     <string name="evidence_location_wait">Buscando ubicación. Puedes continuar sin ella.</string>
     <string name="evidence_location_none">Sin ubicación. Puedes capturar y adjuntar.</string>
     <string name="evidence_pending">Pendiente de envío</string>
+    <string name="evidence_failed">Error de envío; pendiente de confirmación</string>
     <string name="evidence_rejected">Rechazado por el servidor</string>
     <string name="evidence_remove">Retirar archivo rechazado</string>
     <string name="evidence_remove_info">Cancelaremos esta carga y retiraremos el archivo rechazado de este dispositivo. Después puedes repetir la captura. Si el servidor ya lo confirmó, lo conservaremos.</string>

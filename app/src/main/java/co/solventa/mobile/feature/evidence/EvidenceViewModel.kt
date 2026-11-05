@@ -1,18 +1,14 @@
 package co.solventa.mobile.feature.evidence
 
 import android.app.Application
-import android.database.sqlite.SQLiteException
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import co.solventa.mobile.feature.auth.AuthHttpError
-import co.solventa.mobile.feature.auth.AuthProblem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import java.io.File
 import java.io.IOException
 import java.time.Instant
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -249,24 +245,9 @@ internal class EvidenceViewModel @Inject constructor(
         job = viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { Operation(generation).block() }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: EvidenceProblem) {
-                Operation(generation).update { copy(error = error.reason) }
-            } catch (_: AuthHttpError) {
-                Operation(generation).update { copy(error = EvidenceError.SESSION) }
-            } catch (_: AuthProblem) {
-                Operation(generation).update { copy(error = EvidenceError.SESSION) }
-            } catch (_: org.json.JSONException) {
-                Operation(generation).update { copy(error = EvidenceError.PROTOCOL) }
-            } catch (_: IllegalArgumentException) {
-                Operation(generation).update { copy(error = EvidenceError.PROTOCOL) }
-            } catch (_: SQLiteException) {
-                Operation(generation).update { copy(error = EvidenceError.STORAGE) }
-            } catch (_: IOException) {
-                Operation(generation).update { copy(error = EvidenceError.STORAGE) }
-            } catch (_: SecurityException) {
-                Operation(generation).update { copy(error = EvidenceError.PERMISSION) }
+            } catch (error: Exception) {
+                val reason = evidenceOperationError(error)
+                Operation(generation).update { copy(error = reason) }
             } finally {
                 Operation(generation).update { copy(busy = false) }
             }

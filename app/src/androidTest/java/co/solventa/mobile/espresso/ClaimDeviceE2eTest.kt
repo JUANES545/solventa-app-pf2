@@ -132,7 +132,7 @@ class ClaimDeviceE2eTest {
             val report = model.state.value.reports.single { it.payload.type == draft.type }
             assertNull(report.receipt)
             marker.writeText(report.operation)
-            compose.onNodeWithText(context.getString(R.string.claim_pending)).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText(context.getString(R.string.claim_failed)).performScrollTo().assertIsDisplayed()
         } else {
             assertEquals("resume", phase)
             val report = model.state.value.reports.single { it.operation == marker.readText() }

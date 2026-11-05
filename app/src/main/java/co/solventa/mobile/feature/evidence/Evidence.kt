@@ -1,9 +1,13 @@
 package co.solventa.mobile.feature.evidence
 
+import android.database.sqlite.SQLiteException
+import co.solventa.mobile.feature.auth.AuthHttpError
+import co.solventa.mobile.feature.auth.AuthProblem
 import java.io.File
 import java.io.IOException
 import java.time.Instant
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 
 internal enum class EvidenceKind(val mime: String, val extension: String) {
     PHOTO("image/jpeg", "jpg"), DOCUMENT("image/jpeg", "jpg"), VIDEO("video/mp4", "mp4"),
@@ -50,6 +54,16 @@ internal class EvidenceHttpProblem(
 ) : EvidenceProblem(reason, cause)
 internal enum class EvidenceStatus { PENDING, CONFIRMED, REJECTED }
 
+internal fun evidenceOperationError(error: Exception): EvidenceError = when (error) {
+    is CancellationException -> throw error
+    is EvidenceProblem -> error.reason
+    is AuthHttpError, is AuthProblem -> EvidenceError.SESSION
+    is org.json.JSONException, is IllegalArgumentException -> EvidenceError.PROTOCOL
+    is SQLiteException, is IOException -> EvidenceError.STORAGE
+    is SecurityException -> EvidenceError.PERMISSION
+    else -> throw error
+}
+
 internal data class EvidenceItem(
     val id: String,
     val scope: EvidenceScope,
@@ -62,12 +76,14 @@ internal data class EvidenceItem(
     val status: EvidenceStatus = EvidenceStatus.PENDING,
     val remoteId: String? = null,
     val rejection: EvidenceError? = null,
+    val lastError: EvidenceError? = null,
 ) {
     init {
         require(UUID.fromString(id).toString() == id)
         require(bytes > 0 && sha256.matches(Regex("[0-9a-f]{64}")))
         require((status == EvidenceStatus.CONFIRMED) == !remoteId.isNullOrBlank())
         require((status == EvidenceStatus.REJECTED) == (rejection != null))
+        require(lastError == null || status == EvidenceStatus.PENDING)
     }
 }
 

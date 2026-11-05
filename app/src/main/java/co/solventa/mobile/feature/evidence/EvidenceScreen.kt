@@ -118,11 +118,13 @@ internal fun EvidenceScreen(
                         stringResource(when (item.status) {
                             EvidenceStatus.CONFIRMED -> R.string.evidence_confirmed
                             EvidenceStatus.REJECTED -> R.string.evidence_rejected
-                            EvidenceStatus.PENDING -> R.string.evidence_pending
-                        })))
+                            EvidenceStatus.PENDING -> if (item.lastError == null) R.string.evidence_pending else R.string.evidence_failed
+                        })), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     Text(item.capturedAt.toString(), style = MaterialTheme.typography.bodySmall)
-                    item.rejection?.let {
+                    (item.rejection ?: item.lastError)?.let {
                         Text(stringResource(evidenceErrorMessage(it)), color = MaterialTheme.colorScheme.error)
+                    }
+                    if (item.rejection != null) {
                         TextButton(onClick = { discard = item }, enabled = !state.busy) { Text(stringResource(R.string.evidence_remove)) }
                     }
                 }

@@ -151,19 +151,20 @@ class ReconnectDeviceTest {
         }
     }
 
-    private fun syntheticAuth(actor: String): AuthRepository {
-        val user = AuthUser(actor, "Synthetic", "synthetic@example.test")
-        var grant: AuthGrant? = AuthGrant(user, "synthetic-access", "synthetic-refresh", Long.MAX_VALUE - 1, Long.MAX_VALUE)
-        return AuthRepository(object : AuthApi {
-            override fun register(name: String, email: String, password: String) = user
-            override fun login(email: String, password: String) = checkNotNull(grant)
-            override fun refresh(token: String) = checkNotNull(grant)
-            override fun current(token: String) = user
-            override fun logout(accessToken: String, refreshToken: String) = Unit
-        }, object : AuthStore {
-            override fun read() = grant
-            override fun write(value: AuthGrant) { grant = value }
-            override fun clear() { grant = null }
-        })
-    }
+}
+
+internal fun syntheticAuth(actor: String): AuthRepository {
+    val user = AuthUser(actor, "Synthetic", "synthetic@example.test")
+    var grant: AuthGrant? = AuthGrant(user, "synthetic-access", "synthetic-refresh", Long.MAX_VALUE - 1, Long.MAX_VALUE)
+    return AuthRepository(object : AuthApi {
+        override fun register(name: String, email: String, password: String) = user
+        override fun login(email: String, password: String) = checkNotNull(grant)
+        override fun refresh(token: String) = checkNotNull(grant)
+        override fun current(token: String) = user
+        override fun logout(accessToken: String, refreshToken: String) = Unit
+    }, object : AuthStore {
+        override fun read() = grant
+        override fun write(value: AuthGrant) { grant = value }
+        override fun clear() { grant = null }
+    })
 }

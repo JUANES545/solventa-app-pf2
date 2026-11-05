@@ -27,8 +27,14 @@ internal class EvidenceUploader(private val store: EvidenceStore, private val tr
                     // Persist an already confirmed result even if the actor changed during the request.
                     store.confirm(item, receipt)
                 } catch (error: EvidenceHttpProblem) {
-                    if (!error.permanent) throw error
+                    if (!error.permanent) {
+                        store.fail(item, error.reason)
+                        throw error
+                    }
                     store.reject(item, error.reason)
+                } catch (error: Exception) {
+                    store.fail(item, evidenceOperationError(error))
+                    throw error
                 }
             }
         }
