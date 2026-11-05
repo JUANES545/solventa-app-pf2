@@ -29,6 +29,8 @@ import co.solventa.mobile.feature.evidence.EvidenceHost
 import co.solventa.mobile.feature.evidence.EvidenceViewModel
 import co.solventa.mobile.feature.claim.ClaimViewModel
 import co.solventa.mobile.feature.claim.ClaimHost
+import co.solventa.mobile.feature.claim.ClaimStatusViewModel
+import co.solventa.mobile.feature.claim.ClaimStatusHost
 import co.solventa.mobile.feature.evidence.EvidenceClaim
 
 @Composable
@@ -41,6 +43,7 @@ internal fun SolventaApp(
     darkTheme: Boolean = isSystemInDarkTheme(),
     evidence: EvidenceViewModel? = null,
     claims: ClaimViewModel? = null,
+    claimStatus: ClaimStatusViewModel? = null,
 ) {
     SolventaTheme(darkTheme) {
         val biometricState = biometrics?.state?.collectAsState()?.value
@@ -51,6 +54,7 @@ internal fun SolventaApp(
             val user = state.user
             val evidenceState = evidence?.state?.collectAsState()?.value
             val claimState = claims?.state?.collectAsState()?.value
+            val claimStatusState = claimStatus?.state?.collectAsState()?.value
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             DisposableEffect(auth, lifecycle) {
                 val observer = LifecycleEventObserver { _, event ->
@@ -65,6 +69,7 @@ internal fun SolventaApp(
             LaunchedEffect(user?.id) { biometrics?.bindActor(user?.id) }
             LaunchedEffect(user?.id) { evidence?.bindActor(user?.id) }
             LaunchedEffect(user?.id) { claims?.bindActor(user?.id) }
+            LaunchedEffect(user?.id) { claimStatus?.bindActor(user?.id) }
             LaunchedEffect(state.screen) {
                 if (state.screen == AccessScreen.REGISTER_PHOTOS) onPhotoReview?.invoke()
             }
@@ -106,10 +111,14 @@ internal fun SolventaApp(
                         onCancel = { beforeAccessChange(); auth.cancelRegistrationPhotos() })
                     AccessScreen.REGISTERED -> RegistrationSuccessScreen(state.email, onSignIn = auth::showLogin)
                 }
+            } else if (claimStatus != null && claimStatusState?.open == true && claimStatusState.actor == user.id) {
+                ClaimStatusHost(claimStatus)
             } else if (evidence != null && evidenceState?.open == true && evidenceState.actorId == user.id) {
                 EvidenceHost(evidence)
             } else if (claims != null && claimState?.open == true && claimState.actor == user.id) {
-                ClaimHost(claims) { report ->
+                ClaimHost(claims, onStatus = claimStatus?.let { model ->
+                    { report -> report.receipt?.let { model.show(user.id, it.id) }; Unit }
+                }) { report ->
                     report.receipt?.let { receipt ->
                         evidence?.showClaim(user.id, EvidenceClaim(receipt.id, report.payload.type,
                             report.payload.date.toString(), report.payload.description))
@@ -125,7 +134,8 @@ internal fun SolventaApp(
                             { biometrics.revoke(it, device) })
                         }
                     }, onEvidence = evidence?.let { { it.showClaims(user.id) } },
-                    onClaim = claims?.let { { it.show(user.id) } }, offline = state.offline)
+                    onClaim = claims?.let { { it.show(user.id) } }, offline = state.offline,
+                    onClaimStatus = claimStatus?.let { { it.show(user.id) } })
             }
 
         }

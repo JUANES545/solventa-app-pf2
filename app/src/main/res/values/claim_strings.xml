@@ -18,7 +18,7 @@
     <string name="claim_processing">Procesando. No necesitas volver a enviar.</string>
     <string name="claim_pending">Pendiente de envío. Guardado en este dispositivo; sin confirmación del servidor.</string>
     <string name="claim_failed">Envío fallido. Conservamos el reporte para reintentar.</string>
-    <string name="claim_confirmed">Enviado · Estado: registrado\nIdentificador: %1$s</string>
+    <string name="claim_confirmed">Reporte enviado\nIdentificador: %1$s</string>
     <string name="claim_error_required">Selecciona una póliza y completa todos los campos.</string>
     <string name="claim_error_date">Revisa la fecha y hora: deben ser válidas, no futuras y estar dentro de la vigencia de la póliza.</string>
     <string name="claim_error_description">Escribe una descripción de 10 a 5000 caracteres.</string>

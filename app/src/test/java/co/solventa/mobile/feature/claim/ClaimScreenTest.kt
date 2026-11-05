@@ -70,14 +70,18 @@ class ClaimScreenTest {
         val report = ClaimReport(UUID.randomUUID().toString(), "actor-a", payload())
         val state = mutableStateOf(ClaimState(editing = false, reports = listOf(report)))
         var selected: ClaimReport? = null
+        var queried: ClaimReport? = null
         compose.setContent {
-            SolventaTheme(false) { ClaimScreen(state.value, {}, {}, {}, {}, {}, { selected = it }) }
+            SolventaTheme(false) { ClaimScreen(state.value, {}, {}, {}, {}, {}, { selected = it }, status = { queried = it }) }
         }
         compose.onNodeWithText("Pendiente de envío.", substring = true).performScrollTo().assertIsDisplayed()
         compose.onAllNodes(hasText("Identificador:", substring = true)).assertCountEquals(0)
+        compose.onNodeWithText("Consultar estado").assertDoesNotExist()
         val receipt = ClaimReceipt(UUID.randomUUID().toString(), "registrado")
         compose.runOnIdle { state.value = state.value.copy(reports = listOf(report.copy(receipt = receipt))) }
         compose.onNodeWithText(receipt.id, substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Consultar estado").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(receipt, queried?.receipt) }
         compose.onNodeWithText("Adjuntar evidencia a un siniestro").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(receipt, selected?.receipt) }
     }

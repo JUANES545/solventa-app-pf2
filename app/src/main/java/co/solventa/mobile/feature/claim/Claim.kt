@@ -51,6 +51,12 @@ internal data class ClaimPayload(val policyId: String, val date: Instant, val ty
     }
 }
 internal data class ClaimReceipt(val id: String, val status: String)
+internal enum class ClaimProgress(val code: String) {
+    REPORTED("reportado"), EVALUATING("en_evaluacion"), REVIEWING("en_revision"), INSPECTING("en_inspeccion"),
+    APPROVED("aprobado"), REJECTED("rechazado"), PAID("pagado"), CLOSED("cerrado"),
+}
+internal data class ClaimStatus(val id: String, val progress: ClaimProgress, val description: String, val updatedAt: Instant)
+
 internal data class ClaimReport(
     val operation: String,
     val actor: String,
