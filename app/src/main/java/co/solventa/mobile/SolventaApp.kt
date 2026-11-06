@@ -32,6 +32,9 @@ import co.solventa.mobile.feature.claim.ClaimHost
 import co.solventa.mobile.feature.claim.ClaimStatusViewModel
 import co.solventa.mobile.feature.claim.ClaimStatusHost
 import co.solventa.mobile.feature.evidence.EvidenceClaim
+import co.solventa.mobile.feature.notification.NotificationHost
+import co.solventa.mobile.feature.notification.NotificationNavigation
+import co.solventa.mobile.feature.notification.NotificationViewModel
 
 @Composable
 internal fun SolventaApp(
@@ -44,6 +47,8 @@ internal fun SolventaApp(
     evidence: EvidenceViewModel? = null,
     claims: ClaimViewModel? = null,
     claimStatus: ClaimStatusViewModel? = null,
+    notifications: NotificationViewModel? = null,
+    requestNotificationPermission: () -> Unit = {},
 ) {
     SolventaTheme(darkTheme) {
         val biometricState = biometrics?.state?.collectAsState()?.value
@@ -55,6 +60,7 @@ internal fun SolventaApp(
             val evidenceState = evidence?.state?.collectAsState()?.value
             val claimState = claims?.state?.collectAsState()?.value
             val claimStatusState = claimStatus?.state?.collectAsState()?.value
+            val notificationState = notifications?.state?.collectAsState()?.value
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             DisposableEffect(auth, lifecycle) {
                 val observer = LifecycleEventObserver { _, event ->
@@ -70,6 +76,14 @@ internal fun SolventaApp(
             LaunchedEffect(user?.id) { evidence?.bindActor(user?.id) }
             LaunchedEffect(user?.id) { claims?.bindActor(user?.id) }
             LaunchedEffect(user?.id) { claimStatus?.bindActor(user?.id) }
+            LaunchedEffect(user?.id) { notifications?.bindActor(user?.id) }
+            LaunchedEffect(notificationState?.navigation, user?.id) {
+                val navigation = notificationState?.navigation
+                if (user != null && navigation is NotificationNavigation.Claim) {
+                    claimStatus?.show(user.id, navigation.id)
+                    notifications?.consumeNavigation()
+                }
+            }
             LaunchedEffect(state.screen) {
                 if (state.screen == AccessScreen.REGISTER_PHOTOS) onPhotoReview?.invoke()
             }
@@ -124,6 +138,12 @@ internal fun SolventaApp(
                             report.payload.date.toString(), report.payload.description))
                     }
                 }
+            } else if (
+                notifications != null &&
+                notificationState?.open == true &&
+                notificationState.actor == user.id
+            ) {
+                NotificationHost(notifications, requestNotificationPermission)
             } else {
                 AccountScreen(user, state.loading || biometricState?.busy == true,
                     { beforeAccessChange(); auth.logout() },
@@ -135,7 +155,8 @@ internal fun SolventaApp(
                         }
                     }, onEvidence = evidence?.let { { it.showClaims(user.id) } },
                     onClaim = claims?.let { { it.show(user.id) } }, offline = state.offline,
-                    onClaimStatus = claimStatus?.let { { it.show(user.id) } })
+                    onClaimStatus = claimStatus?.let { { it.show(user.id) } },
+                    onNotifications = notifications?.let { { it.show(user.id) } })
             }
 
         }
