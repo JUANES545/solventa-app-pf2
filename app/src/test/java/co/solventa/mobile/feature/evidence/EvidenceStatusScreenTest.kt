@@ -37,14 +37,15 @@ class EvidenceStatusScreenTest {
     @Test fun onlyDefinitivelyRejectedFilesOfferRemoval() {
         val app = RuntimeEnvironment.getApplication()
         val scope = EvidenceScope("actor-a", "claim-a")
-        val policy = EvidencePolicy(3, mapOf(EvidenceKind.PHOTO to 100L), 0)
+        val policy = EvidencePolicy(4, mapOf(EvidenceKind.PHOTO to 100L), 0)
         val source = File.createTempFile("status-", ".jpg", app.cacheDir).apply { writeBytes(byteArrayOf(1)) }
         EvidenceStore(app.noBackupFilesDir).use { store ->
-            val items = List(3) {
+            val items = List(4) {
                 store.enqueue(scope, EvidenceKind.PHOTO, source, Instant.now(), null, 0, policy, emptySet())
             }
             store.confirm(items[1], EvidenceReceipt(items[1].id, "remote", items[1].sha256))
             store.reject(items[2], EvidenceError.FORMAT)
+            store.reject(items[3], EvidenceError.CONFLICT, "idempotencia_conflictiva")
             assertThrows(IllegalArgumentException::class.java) {
                 store.list(scope).single { it.status == EvidenceStatus.CONFIRMED }.copy(lastError = EvidenceError.NETWORK)
             }
@@ -55,10 +56,11 @@ class EvidenceStatusScreenTest {
             compose.runOnUiThread { model.open(scope, policy, emptySet()) }
             compose.setContent { SolventaTheme(false) { EvidenceScreen(model, model::close, {}) } }
             await { !model.state.value.busy }
-            for (status in listOf(R.string.evidence_pending, R.string.evidence_confirmed, R.string.evidence_rejected)) {
+            for (status in listOf(R.string.evidence_pending, R.string.evidence_confirmed, R.string.evidence_rejected, R.string.sync_conflict)) {
                 compose.onNodeWithText(app.getString(status), substring = true).performScrollTo().assertIsDisplayed()
             }
             compose.onAllNodesWithText(app.getString(R.string.evidence_remove)).assertCountEquals(1)
+            compose.onNodeWithText(app.getString(R.string.sync_error_conflict)).performScrollTo().assertIsDisplayed()
             compose.onNodeWithText(app.getString(R.string.evidence_remove)).performScrollTo().assertIsDisplayed()
         } finally {
             compose.runOnUiThread { ViewModelStore().apply { put("evidence", model); clear() } }

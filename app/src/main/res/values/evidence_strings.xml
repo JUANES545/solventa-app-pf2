@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="evidence_error_invalid_request">El servidor rechazó los datos de esta carga. Puedes retirar el archivo y adjuntarlo de nuevo con los datos corregidos.</string>
     <string name="evidence_title">Evidencia del siniestro</string>
     <string name="evidence_entry">Adjuntar evidencia a un siniestro</string>
     <string name="evidence_choose_claim">Elige uno de tus siniestros registrados.</string>

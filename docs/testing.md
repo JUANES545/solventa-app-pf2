@@ -1,5 +1,224 @@
 # Pruebas y cobertura Android
 
+## SOL-193 / SOL-235 / SOL-239: cola durable e historial de resultados
+
+`ClaimStore` y `EvidenceStore` conservan UUID, cuerpo y acuses en SQLite privado.
+El envío recorre el orden de inserción (`rowid`), no la fecha del evento/captura,
+el UUID ni el reloj del dispositivo. El orden corresponde a cada cola existente:
+reportes por actor y evidencias por actor/siniestro. Un reporte nuevo tampoco
+adelanta pendientes anteriores. Un fallo recuperable detiene esa pasada; un
+rechazo definitivo o conflicto permite continuar con operaciones independientes.
+`RetryOnReconnect` mantiene los disparadores de SOL-236: pantalla activa, apertura
+y regreso a primer plano. No se agregó un servicio en segundo plano.
+
+Las migraciones agregan columnas nullable sin borrar tablas ni archivos:
+
+| Dato | Significado |
+| --- | --- |
+| `queued_at` | Fecha local en que se guardó una operación nueva. |
+| `last_result_at` | Fecha local de observación del último ACK validado, error conocido, rechazo o conflicto. No es una fecha del servidor. |
+| `error_code` | Código HTTP de aplicación del último error/rechazo/conflicto recibido; no guarda cuerpos ni credenciales. |
+| `registered_at` | `registradoEn` del ACK de registro, separado de las fechas locales. |
+| `superseded_by` | UUID de la corrección explícita de un reporte rechazado por póliza/fecha. El original conserva cuerpo, error y fecha; no vuelve a enviarse. |
+| `server_result` | `ultimoResultado` opcional del backend: UUID, fecha UTC persistida, estado HTTP y código. La pantalla distingue esta fecha de la observación local. |
+
+Las filas anteriores mantienen fechas desconocidas como `null`; no se usa la
+fecha de captura como fecha de resultado. Repetir un ACK idéntico no cambia su
+fecha ni crea una fila. Una confirmación elimina el error vigente. Se conserva
+el último resultado por operación, no un diario de todos sus intentos.
+Si el último intento falla por transporte, su resultado no tiene fecha del
+servidor: se muestra la observación local. Las respuestas legacy sin
+`ultimoResultado` o con valor `null` siguen siendo compatibles; un objeto presente pero inválido
+o referido a otro UUID no puede confirmar ni clasificar un rechazo definitivo.
+Cancelar la corrutina o recibir una excepción desconocida no inventa un
+resultado. Las pantallas existentes muestran fecha de encolado, fecha del
+resultado y motivo sin agregar acciones de resolución.
+
+Contrato confirmado con backend: únicamente `409 idempotencia_conflictiva` en
+registro/carga representa colisión de UUID con datos distintos. La app conserva
+esa operación como conflicto, sin editarla, retirarla ni reintentarla
+automáticamente. Un `409` desconocido o el mismo código con otro estado HTTP no
+autoriza esa clasificación. El conflicto no sobrescribe datos centrales ni
+confirma una operación local. El ACK perdido de evidencia se reconcilia antes
+de subir bytes; un PUT exitoso por sí solo no confirma.
+GET de carga puede recuperar el rechazo definitivo de una confirmación perdida
+con su fecha original, sin repetir bytes. Un resultado recuperable como
+`carga_incompleta` permite continuar desde el offset central. El replay aceptado
+puede usar HTTP 200 y conservar `httpStatus: 201` en su resultado original.
+
+La revisión detectó que una fecha de captura adelantada podía producir un
+`400 solicitud_invalida` fijo por UUID y bloquear la cola como si fuera
+recuperable. La regresión reprodujo ese bloqueo antes de la corrección.
+Solo al **iniciar una carga**, ese código/estado con `ultimoResultado` válido
+y coincidente constituye un rechazo definitivo (`INVALID_REQUEST` local).
+No se extiende a GET, contenido, confirmación, otros códigos 400 ni respuestas
+sin prueba durable válida. Se conservan UUID, cuerpo y fecha; la cola continúa
+con el siguiente archivo independiente. El retiro explícito vuelve a comprobar
+el rechazo original por POST; si no existe `upload_id`, no inventa un recurso,
+no envía DELETE y no confirma una evidencia. Un 404 de autorización impide
+retirar el archivo.
+
+Validación posterior a ese hallazgo: la regresión falló antes del cambio
+y después pasaron 33 pruebas focalizadas (`DurableUploadRejectionTest`,
+`ServerSyncResultTest`, `EvidenceApiTest`, `EvidenceHttpFailureTest`,
+`EvidenceQueueTest`, `EvidenceStatusScreenTest`). Lint terminó sin errores,
+con 36 advertencias, y ambos APK se reconstruyeron en 2 min 38 s. La prueba
+HTTP física incorpora también el inicio futuro rechazado y su retiro.
+
+Pruebas focalizadas:
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest --tests "*ClaimQueueHistoryTest" `
+  --tests "*EvidenceQueueHistoryTest" --tests "*ClaimTest" --tests "*EvidenceQueueTest" `
+  --no-daemon --max-workers=2 "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" `
+  "-Pkotlin.compiler.execution.strategy=in-process"
+.\gradlew.bat :app:testDebugUnitTest --tests "*ClaimRetryRegressionTest" `
+  --tests "*ClaimViewModelTest" --tests "*ClaimScreenTest" `
+  --tests "*EvidenceHttpFailureTest" --tests "*EvidenceStatusScreenTest" `
+  --tests "*ServerSyncResultTest" `
+  --tests "*DurableUploadRejectionTest" `
+  --no-daemon --max-workers=2 "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" `
+  "-Pkotlin.compiler.execution.strategy=in-process"
+```
+
+`OfflineQueueDeviceTest` (`@ClaimDeviceE2e`) usa SQLite/Compose reales, un
+transporte controlado y un directorio propio bajo `noBackupFilesDir`; también
+usa ese directorio como caché. Comprueba conflicto y motivo tras recrear el
+modelo, fecha de resultado, FIFO, aislamiento y recuperación de ACK sin segunda
+carga. No toca colas previas, cuentas reales, red del dispositivo ni `FLAG_SECURE`.
+
+```powershell
+.\gradlew.bat :app:assembleClaimTest :app:assembleClaimTestAndroidTest `
+  -PclaimDeviceTests=true -PbackendE2e=true --no-daemon --max-workers=2 `
+  "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" "-Pkotlin.compiler.execution.strategy=in-process"
+adb -s RF8N739C9SJ shell am instrument -w `
+  -e class co.solventa.mobile.espresso.OfflineQueueDeviceTest `
+  co.solventa.mobile.pf2.claimtest.test/co.solventa.mobile.espresso.SolventaTestRunner
+```
+
+Las selecciones JVM pasaron localmente. El coordinador completó después
+las pruebas físicas UI y la integración HTTP real con los APK finales,
+como se detalla más abajo.
+
+Validación completa:
+
+```powershell
+.\gradlew.bat :app:jacocoDebugUnitTestReport :app:lintDebug `
+  --no-daemon --max-workers=2 `
+  "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" "-Pkotlin.compiler.execution.strategy=in-process"
+```
+
+Validación final del coordinador del 5 de noviembre de 2026:
+**342 casos, 341 aprobados, 1 optativo omitido y 0 fallos**.
+`jacocoDebugUnitTestReport` y `lintDebug` terminaron en 2 min 29 s.
+Lint informó **47 advertencias y 0 errores**. Respecto a las 36 advertencias
+de la pasada anterior, solo aumentaron los avisos de versiones disponibles:
+`GradleDependency`, de 20 a 30, y los avisos de AGP, de 2 a 3.
+No aparecieron otras categorías nuevas ni se cambiaron dependencias por ello.
+
+Los APK finales compilados y usados en el dispositivo son:
+`app\build\outputs\apk\claimTest\app-claimTest.apk` y
+`app\build\outputs\apk\androidTest\claimTest\app-claimTest-androidTest.apk`.
+La validación usa el paquete aislado `.claimtest`, sin cambios de versiones
+ni credenciales reales.
+
+Acuerdo CA5/CA6 con SOL-328: el backend conserva rechazos autorizados por
+UUID/huella y devuelve `ultimoResultado`; el replay aceptado tiene precedencia
+sobre nuevas políticas. Una guarda de integridad central devuelve el código
+existente `503 siniestro_no_integro`, que Android mantiene recuperable.
+Además de las pruebas con respuestas controladas, la integración física
+verificó las APIs reales contra el stack efímero con SQLite.
+No se acordaron versiones esperadas,
+`If-Match`, nuevas transiciones móviles ni prohibiciones de anexos por estados.
+Esta evidencia no cubre PostgreSQL, despliegues ni TalkBack. No se inspeccionó
+el mock adjunto de SOL-193 porque su URL tenía el token oculto; no se atribuye
+conformidad visual con ese mock. Las fechas de observación local y las fechas
+persistidas por el servidor conservan los significados separados descritos arriba.
+
+### Integración física con el stack HTTP real SOL-328
+
+`OfflineQueueHttpDeviceTest` usa `MobileAuthApi`, `AuthRepository`,
+`MobileClaimApi`, `MobileEvidenceApi`, SQLite y cifrado Android reales.
+No levanta un servidor simulado ni una Activity/Compose. Reutiliza el stack
+efímero `tests.claims_local_stack.stack` de backend mediante un reverse ADB
+dedicado: puerto 18731 del dispositivo al proxy efímero del host, que reenvía
+al BFF móvil real del stack.
+El arnés backend controla la preparación y limpieza; Android no duplica
+ese fixture ni lo inicia.
+
+El arnés entrega un archivo privado bajo `no_backup` de `.claimtest`, con modo
+600 y nombre propio `sol193-http-fixture-<UUID>.json`. El argumento opcional
+`fixtureFile` contiene solo ese nombre, nunca datos de sesión. Sin argumento
+se usa `sol193-http-fixture.json`. El test falla si falta el archivo; no se
+omite ni declara éxito sin fixture.
+
+Campos obligatorios: `schemaVersion: 1`, `synthetic: true`,
+`dropConfirmationAcks: true`,
+`baseUrl: "http://127.0.0.1:18731/movil/v1"`, `email`, `password`, `policyId`,
+`eventDate` válido y `futureEventDate` futura en UTC. Los datos de cuenta
+deben pertenecer al fixture efímero. No se registran sus valores. El backend
+debe permitir al menos dos evidencias JPEG de 1 KiB; Android genera la imagen
+sintética y usa los límites reales de configuración.
+
+La prueba verifica:
+
+- Fecha futura rechazada: UUID, código y fecha del servidor estables al
+  repetir; otro cuerpo con el mismo UUID produce `409 idempotencia_conflictiva`.
+- Corrección explícita con UUID nuevo: registro válido y replay con un solo
+  siniestro remoto, conservando el rechazo anterior.
+- JPEG confirmado: reapertura local y recuperación del ACK por GET, replay
+  del inicio con el UUID original y listado remoto sin duplicados.
+- Carga anterior con fecha futura: rechazo durable 400 sin carga remota;
+  la siguiente evidencia se procesa, el rechazo conserva su fecha al repetir
+  y el usuario puede retirar el archivo rechazado sin inventar un ACK.
+- Bytes corruptos con huella original: rechazo real
+  `422 integridad_invalida`; GET recupera motivo y fecha antes de reenviar
+  bytes y el archivo válido local sigue intacto.
+
+El proxy acotado del arnés reenvía las confirmaciones al backend real y corta
+su respuesta una vez que conoce el resultado 200 o 422. Bloquea los reintentos
+transparentes de esos dos POST sin volver a reenviarlos, y deja pasar GET.
+Android exige un error de red y recupera después el resultado persistido.
+El arnés verifica que GET conserva código/fecha/acuse de la respuesta perdida.
+No se fabrican respuestas de negocio ni se descartan acuses recibidos en el test.
+El test usa directorio, preferencias y alias
+criptográfico propios y los retira al terminar, sin tocar las colas previas.
+El arnés retira únicamente su config y reverse. Ningún caso depende de datos
+o servicios de producción.
+
+```powershell
+.\gradlew.bat :app:assembleClaimTest :app:assembleClaimTestAndroidTest `
+  -PclaimDeviceTests=true -PbackendE2e=true --no-daemon --max-workers=2 `
+  "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" "-Pkotlin.compiler.execution.strategy=in-process"
+adb -s RF8N739C9SJ shell am instrument -w `
+  -e class co.solventa.mobile.espresso.OfflineQueueHttpDeviceTest `
+  -e fixtureFile sol193-http-fixture-UUID.json `
+  co.solventa.mobile.pf2.claimtest.test/co.solventa.mobile.espresso.SolventaTestRunner
+```
+
+El nombre `UUID` del ejemplo debe sustituirse por el UUID real generado por
+el arnés; el test solo acepta nombres privados con ese formato.
+
+Intento UI del 5 de noviembre de 2026: `OfflineQueueDeviceTest` falló en su
+primera consulta Compose con `No compose hierarchies found`. El coordinador
+comprobó pantalla apagada (`Asleep`) y keyguard activo; el baseline
+`EvidenceStatusDeviceTest` falló igual. No se modificó el test ni el producto
+por ese fallo ambiental. Tras el desbloqueo manual, el coordinador
+verificó pantalla activa y keyguard inactivo; `OfflineQueueDeviceTest`,
+`EvidenceStatusDeviceTest` y `ReconnectDeviceTest` aprobaron sus **cuatro casos
+en 19,061 s** con los APK finales en SM-A217M, sin directorios temporales
+restantes. No hubo cambios de código para corregir el fallo ambiental.
+
+La primera compilación de esta clase terminó en 31 s el 5 de noviembre.
+La corrección posterior del rechazo durable 400 reconstruyó ambos APK.
+El coordinador ejecutó después `OfflineQueueHttpDeviceTest` con el arnés
+`002db18e-6e5a-4235-a6dc-6bcf133f0d21`: **1/1 prueba aprobada en 4,287 s**,
+`http.passed=true`. GET recuperó los ACK 200 y 422 con UUID, código y fecha
+originales; la ejecución incluyó la corrección del inicio durable 400.
+El arnés informó `cleanupPassed=true`: no quedaron reverse ADB, directorios
+temporales ni fixture privada en `no_backup`. Cero tests, ausencia de fixture
+o falta de cortes de ACK se consideran fallo de validación, no éxito.
+
 ## SOL-238: estados de los envíos
 
 La lista distingue un pendiente sin intento fallido, un error de envío,

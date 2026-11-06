@@ -1,5 +1,6 @@
 package co.solventa.mobile.feature.claim
 
+import co.solventa.mobile.core.SyncResult
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -10,7 +11,7 @@ import java.util.UUID
 import org.json.JSONObject
 
 internal data class ClaimPolicy(val id: String, val type: String, val start: LocalDate, val end: LocalDate)
-internal enum class ClaimError { REQUIRED, DATE, DESCRIPTION, LENGTH, POLICY, NETWORK, SESSION, PROTOCOL, STORAGE }
+internal enum class ClaimError { REQUIRED, DATE, DESCRIPTION, LENGTH, POLICY, NETWORK, SESSION, PROTOCOL, STORAGE, CONFLICT }
 internal class ClaimProblem(val reason: ClaimError) : Exception()
 internal data class ClaimDraft(
     val policyId: String = "",
@@ -50,7 +51,7 @@ internal data class ClaimPayload(val policyId: String, val date: Instant, val ty
         return ClaimDraft(policyId, local.toLocalDate().toString(), local.toLocalTime().toString(), type, place, description)
     }
 }
-internal data class ClaimReceipt(val id: String, val status: String)
+internal data class ClaimReceipt(val id: String, val status: String, val registeredAt: Instant? = null, val serverResult: SyncResult? = null)
 internal enum class ClaimProgress(val code: String) {
     REPORTED("reportado"), EVALUATING("en_evaluacion"), REVIEWING("en_revision"), INSPECTING("en_inspeccion"),
     APPROVED("aprobado"), REJECTED("rechazado"), PAID("pagado"), CLOSED("cerrado"),
@@ -63,8 +64,15 @@ internal data class ClaimReport(
     val payload: ClaimPayload,
     val receipt: ClaimReceipt? = null,
     val error: ClaimError? = null,
+    val queuedAt: Instant? = null,
+    val lastResultAt: Instant? = null,
+    val errorCode: String? = null,
+    val supersededBy: String? = null,
+    val serverResult: SyncResult? = null,
 ) {
-    val correctable: Boolean get() = receipt == null && error in setOf(ClaimError.POLICY, ClaimError.DATE)
+    val correctable: Boolean get() = receipt == null && supersededBy == null && error in setOf(ClaimError.POLICY, ClaimError.DATE)
+    val retryable: Boolean get() = receipt == null && supersededBy == null &&
+        error !in setOf(ClaimError.POLICY, ClaimError.DATE, ClaimError.CONFLICT)
 }
 
 internal fun claimUuid(value: String): String = UUID.fromString(value).toString().also { require(it == value) }

@@ -1,6 +1,7 @@
 package co.solventa.mobile.feature.evidence
 
 import co.solventa.mobile.BuildConfig
+import co.solventa.mobile.core.SyncResult
 import co.solventa.mobile.feature.auth.AuthHttpError
 import co.solventa.mobile.feature.auth.AuthRepository
 import co.solventa.mobile.feature.auth.AuthGrant
@@ -9,6 +10,7 @@ import java.io.IOException
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.format.DateTimeParseException
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.currentCoroutineContext
@@ -66,11 +68,11 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
             if (load.getString("estado") == "cancelada") return@session null
             val path = "/siniestros/${uuid(item.scope.claimId)}/cargas/${uuid(load.getString("id"))}"
             try {
-                request("DELETE", path, grant.accessToken)
+                request("DELETE", path, grant.accessToken, operationId = item.id)
                 null
             } catch (error: EvidenceHttpProblem) {
                 if (error.code != "carga_confirmada") throw error
-                receipt(item, request("GET", path, grant.accessToken))
+                receipt(item, request("GET", path, grant.accessToken, operationId = item.id))
             }
         }
 
@@ -98,7 +100,7 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
                         val count = minOf(buffer.size.toLong(), item.bytes - offset).toInt()
                         input.readFully(buffer, 0, count)
                         load = request("PUT", "$path/contenido", grant.accessToken,
-                            bytes = buffer.copyOf(count), offset = offset)
+                            bytes = buffer.copyOf(count), offset = offset, operationId = item.id)
                         verifyLoad(item, load)
                         if (load.getLong("offset") != offset + count) throw EvidenceProblem(EvidenceError.PROTOCOL)
                         offset += count
@@ -106,7 +108,7 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
                     }
                 }
                 coroutine.ensureActive()
-                receipt(item, request("POST", "$path/confirmacion", grant.accessToken))
+                receipt(item, request("POST", "$path/confirmacion", grant.accessToken, operationId = item.id))
             }
         }
     }
@@ -125,23 +127,39 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
             throw EvidenceProblem(EvidenceError.PROTOCOL, error)
         } catch (error: IllegalArgumentException) {
             throw EvidenceProblem(EvidenceError.PROTOCOL, error)
+        } catch (error: DateTimeParseException) {
+            throw EvidenceProblem(EvidenceError.PROTOCOL, error)
         }
     }
 
     private fun load(item: EvidenceItem, store: EvidenceStore, token: String, allowCancelled: Boolean = false): JSONObject {
         val path = "/siniestros/${uuid(item.scope.claimId)}/cargas"
         val saved = store.uploadId(item)
-        val load = if (saved != null) request("GET", "$path/${uuid(saved)}", token)
-        else request("POST", path, token, body = JSONObject().apply {
-            put("mimeType", item.kind.mime); put("tamanoBytes", item.bytes); put("sha256", item.sha256)
-            put("fechaCaptura", item.capturedAt.toString())
-            item.location?.let {
-                put("ubicacion", JSONObject().put("consentimiento", true).put("latitud", it.latitude)
-                    .put("longitud", it.longitude).put("fecha", it.measuredAt.toString()))
+        val load = if (saved != null) request("GET", "$path/${uuid(saved)}", token, operationId = item.id)
+        else try {
+            request("POST", path, token, body = JSONObject().apply {
+                put("mimeType", item.kind.mime); put("tamanoBytes", item.bytes); put("sha256", item.sha256)
+                put("fechaCaptura", item.capturedAt.toString())
+                item.location?.let {
+                    put("ubicacion", JSONObject().put("consentimiento", true).put("latitud", it.latitude)
+                        .put("longitud", it.longitude).put("fecha", it.measuredAt.toString()))
+                }
+            }, idempotencyKey = item.id)
+        } catch (error: EvidenceHttpProblem) {
+            val result = error.serverResult
+            if (error.status == 400 && error.code == "solicitud_invalida" && result != null &&
+                result.operationId == item.id && result.httpStatus == 400 && result.code == error.code) {
+                throw EvidenceHttpProblem(error.status, error.code, true, EvidenceError.INVALID_REQUEST, error, result)
             }
-        }, idempotencyKey = item.id)
+            throw error
+        }
         verifyLoad(item, load, allowCancelled)
         store.saveUploadId(item, uuid(load.getString("id")))
+        val result = SyncResult.fromResponse(load, item.id)
+        if (!allowCancelled && load.getString("estado") != "confirmada" && result != null && result.httpStatus >= 400) {
+            val failure = httpProblem(result.httpStatus, result.code, serverResult = result)
+            if (failure.permanent) throw failure
+        }
         return load
     }
 
@@ -160,12 +178,15 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
         if (load.getString("estado") != "confirmada" || load.getLong("offset") != item.bytes) {
             throw EvidenceProblem(EvidenceError.PROTOCOL)
         }
-        return EvidenceReceipt(item.id, uuid(load.getString("evidenciaId")), item.sha256)
+        val result = SyncResult.fromResponse(load, item.id)
+        require(result == null || result.httpStatus in setOf(200, 201))
+        return EvidenceReceipt(item.id, uuid(load.getString("evidenciaId")), item.sha256, result)
     }
 
     internal fun request(
         method: String, path: String, token: String, body: JSONObject? = null,
         idempotencyKey: String? = null, bytes: ByteArray? = null, offset: Long? = null,
+        operationId: String? = idempotencyKey,
     ): JSONObject {
         val connection = URL(base + path).openConnection() as HttpURLConnection
         var failureStatus: Int? = null
@@ -205,15 +226,21 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
                 data.toString(Charsets.UTF_8.name())
             }
             val json = JSONObject(response)
+            val result = operationId?.let { SyncResult.fromResponse(json, it) }
             if (status !in 200..299) {
                 val code = (json.opt("code") as? String)?.takeIf { it.isNotBlank() }
-                throw httpProblem(status, code)
+                require(result == null || result.httpStatus == status && result.code == code)
+                throw httpProblem(status, code, serverResult = result)
             }
             return json
         } catch (error: EvidenceProblem) {
             if (error is EvidenceHttpProblem) throw error
             throw failureStatus?.let { httpProblem(it, cause = error) } ?: error
         } catch (error: JSONException) {
+            throw failureStatus?.let { httpProblem(it, cause = error) } ?: EvidenceProblem(EvidenceError.PROTOCOL, error)
+        } catch (error: IllegalArgumentException) {
+            throw failureStatus?.let { httpProblem(it, cause = error) } ?: EvidenceProblem(EvidenceError.PROTOCOL, error)
+        } catch (error: DateTimeParseException) {
             throw failureStatus?.let { httpProblem(it, cause = error) } ?: EvidenceProblem(EvidenceError.PROTOCOL, error)
         } catch (error: IOException) {
             throw failureStatus?.let { httpProblem(it, cause = error) } ?: EvidenceProblem(EvidenceError.NETWORK, error)
@@ -222,7 +249,10 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
         }
     }
 
-    private fun httpProblem(status: Int, code: String? = null, cause: Throwable? = null): EvidenceHttpProblem {
+    private fun httpProblem(status: Int, code: String? = null, cause: Throwable? = null, serverResult: SyncResult? = null): EvidenceHttpProblem {
+        if (status == 409 && code == "idempotencia_conflictiva") {
+            return EvidenceHttpProblem(status, code, true, EvidenceError.CONFLICT, cause, serverResult)
+        }
         val rejection = when (code) {
             "limite_tamano" -> EvidenceError.SIZE
             "formato_no_permitido", "formato_invalido", "integridad_invalida" -> EvidenceError.FORMAT
@@ -236,7 +266,7 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
                 403, 404 -> EvidenceError.SESSION
                 409, 422, 400 -> EvidenceError.PROTOCOL
                 else -> EvidenceError.NETWORK
-            }, cause)
+            }, cause, serverResult)
     }
 }
 

@@ -118,13 +118,17 @@ internal fun EvidenceScreen(
                         stringResource(when (item.status) {
                             EvidenceStatus.CONFIRMED -> R.string.evidence_confirmed
                             EvidenceStatus.REJECTED -> R.string.evidence_rejected
+                            EvidenceStatus.CONFLICT -> R.string.sync_conflict
                             EvidenceStatus.PENDING -> if (item.lastError == null) R.string.evidence_pending else R.string.evidence_failed
                         })), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     Text(item.capturedAt.toString(), style = MaterialTheme.typography.bodySmall)
+                    item.queuedAt?.let { Text(stringResource(R.string.sync_queued_at, it.toString()), style = MaterialTheme.typography.bodySmall) }
+                    item.lastResultAt?.let { Text(stringResource(R.string.sync_result_at, it.toString()), style = MaterialTheme.typography.bodySmall) }
+                    item.serverResult?.let { Text(stringResource(R.string.sync_server_result_at, it.at.toString()), style = MaterialTheme.typography.bodySmall) }
                     (item.rejection ?: item.lastError)?.let {
                         Text(stringResource(evidenceErrorMessage(it)), color = MaterialTheme.colorScheme.error)
                     }
-                    if (item.rejection != null) {
+                    if (item.status == EvidenceStatus.REJECTED) {
                         TextButton(onClick = { discard = item }, enabled = !state.busy) { Text(stringResource(R.string.evidence_remove)) }
                     }
                 }
@@ -238,6 +242,8 @@ internal fun evidenceKindMessage(kind: EvidenceKind): Int = when (kind) {
 }
 
 internal fun evidenceErrorMessage(error: EvidenceError): Int = when (error) {
+    EvidenceError.INVALID_REQUEST -> R.string.evidence_error_invalid_request
+    EvidenceError.CONFLICT -> R.string.sync_error_conflict
     EvidenceError.CAMERA -> R.string.evidence_error_camera
     EvidenceError.PERMISSION -> R.string.evidence_error_permission
     EvidenceError.FORMAT -> R.string.evidence_error_format

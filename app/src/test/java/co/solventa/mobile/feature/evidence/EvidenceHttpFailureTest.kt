@@ -55,12 +55,32 @@ class EvidenceHttpFailureTest {
                     assertTrue(error.permanent)
                 }
             }
+
             server.enqueue(MockResponse().setResponseCode(503).setBody("""{"code":"servicio_no_disponible"}"""))
             try { api.request("GET", "/siniestros", "synthetic"); fail() }
             catch (error: EvidenceHttpProblem) {
                 assertEquals(503, error.status)
                 assertEquals("servicio_no_disponible", error.code)
                 assertFalse(error.permanent)
+            }
+        }
+    }
+
+    @Test fun onlyTheAgreedStatusAndConflictCodeBlockAutomaticReplay() {
+        MockWebServer().use { server ->
+            val api = MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString())
+            for ((status, code) in listOf(409 to "idempotencia_conflictiva", 503 to "idempotencia_conflictiva",
+                422 to "idempotencia_conflictiva", 409 to "unknown_conflict", 409 to "offset_invalido")) {
+                server.enqueue(MockResponse().setResponseCode(status).setBody("""{"code":"$code"}"""))
+                try { api.request("POST", "/siniestros", "synthetic"); fail() }
+                catch (error: EvidenceHttpProblem) {
+                    val conflict = status == 409 && code == "idempotencia_conflictiva"
+                    assertEquals(conflict, error.permanent)
+                    assertEquals(conflict, error.reason == EvidenceError.CONFLICT)
+                    assertEquals(code, error.code)
+                    assertEquals(conflict, co.solventa.mobile.feature.claim.claimError(error) ==
+                        co.solventa.mobile.feature.claim.ClaimError.CONFLICT)
+                }
             }
         }
     }
@@ -90,7 +110,7 @@ class EvidenceHttpFailureTest {
                     }
                     assertEquals(before + 1, server.requestCount)
                     assertEquals(original.mapIndexed { index, item ->
-                        if (index == 0) item.copy(lastError = expected) else item
+                        if (index == 0) item.copy(lastError = expected, lastResultAt = store.list(scope).first().lastResultAt) else item
                     }, store.list(scope))
                     assertTrue(store.list(scope).all { it.status == EvidenceStatus.PENDING && it.remoteId == null })
                 }

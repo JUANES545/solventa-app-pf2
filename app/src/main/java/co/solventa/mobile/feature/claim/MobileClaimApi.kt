@@ -2,6 +2,7 @@ package co.solventa.mobile.feature.claim
 
 import co.solventa.mobile.feature.evidence.MobileEvidenceApi
 import co.solventa.mobile.feature.evidence.EvidenceClaim
+import co.solventa.mobile.core.SyncResult
 import java.time.Instant
 import java.time.LocalDate
 import javax.inject.Inject
@@ -43,7 +44,9 @@ internal class MobileClaimApi @Inject constructor(private val http: MobileEviden
             Instant.parse(response.getString("fechaEvento")) == payload.date &&
             response.getString("tipoEvento") == payload.type && response.getString("lugar") == payload.place &&
             response.getString("descripcion") == payload.description && response.getString("estado") == "registrado")
-        Instant.parse(response.getString("registradoEn"))
-        ClaimReceipt(claimUuid(response.getString("id")), response.getString("estado"))
+        val result = SyncResult.fromResponse(response, report.operation)
+        require(result == null || result.httpStatus in setOf(200, 201))
+        ClaimReceipt(claimUuid(response.getString("id")), response.getString("estado"),
+            Instant.parse(response.getString("registradoEn")), result)
     }
 }

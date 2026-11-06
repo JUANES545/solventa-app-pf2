@@ -1,6 +1,7 @@
 package co.solventa.mobile.feature.evidence
 
 import android.database.sqlite.SQLiteException
+import co.solventa.mobile.core.SyncResult
 import co.solventa.mobile.feature.auth.AuthHttpError
 import co.solventa.mobile.feature.auth.AuthProblem
 import java.io.File
@@ -47,12 +48,13 @@ internal data class EvidenceLocation(val latitude: Double, val longitude: Double
     }
 }
 
-internal enum class EvidenceError { CAMERA, PERMISSION, FORMAT, SIZE, DURATION, COUNT, STORAGE, NETWORK, SESSION, LOCATION, PROTOCOL }
+internal enum class EvidenceError { CAMERA, PERMISSION, FORMAT, SIZE, DURATION, COUNT, STORAGE, NETWORK, SESSION, LOCATION, PROTOCOL, CONFLICT, INVALID_REQUEST }
 internal open class EvidenceProblem(val reason: EvidenceError, cause: Throwable? = null) : IOException(reason.name, cause)
 internal class EvidenceHttpProblem(
     val status: Int, val code: String?, val permanent: Boolean, reason: EvidenceError, cause: Throwable? = null,
+    val serverResult: SyncResult? = null,
 ) : EvidenceProblem(reason, cause)
-internal enum class EvidenceStatus { PENDING, CONFIRMED, REJECTED }
+internal enum class EvidenceStatus { PENDING, CONFIRMED, REJECTED, CONFLICT }
 
 internal fun evidenceOperationError(error: Exception): EvidenceError = when (error) {
     is CancellationException -> throw error
@@ -77,17 +79,22 @@ internal data class EvidenceItem(
     val remoteId: String? = null,
     val rejection: EvidenceError? = null,
     val lastError: EvidenceError? = null,
+    val queuedAt: Instant? = null,
+    val lastResultAt: Instant? = null,
+    val errorCode: String? = null,
+    val serverResult: SyncResult? = null,
 ) {
     init {
         require(UUID.fromString(id).toString() == id)
         require(bytes > 0 && sha256.matches(Regex("[0-9a-f]{64}")))
         require((status == EvidenceStatus.CONFIRMED) == !remoteId.isNullOrBlank())
-        require((status == EvidenceStatus.REJECTED) == (rejection != null))
+        require((status in setOf(EvidenceStatus.REJECTED, EvidenceStatus.CONFLICT)) == (rejection != null))
+        require((status == EvidenceStatus.CONFLICT) == (rejection == EvidenceError.CONFLICT))
         require(lastError == null || status == EvidenceStatus.PENDING)
     }
 }
 
-internal data class EvidenceReceipt(val localId: String, val remoteId: String, val sha256: String)
+internal data class EvidenceReceipt(val localId: String, val remoteId: String, val sha256: String, val serverResult: SyncResult? = null)
 
 // A future adapter must return only backend-confirmed receipts, never a successful PUT alone.
 internal interface EvidenceTransport {

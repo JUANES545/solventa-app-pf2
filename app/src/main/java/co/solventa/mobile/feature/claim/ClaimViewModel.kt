@@ -85,9 +85,9 @@ internal class ClaimViewModel @Inject constructor(
         val payload = try { current.draft.payload(current.policies) }
         catch (error: ClaimProblem) { mutable.value = current.copy(error = error.reason); return }
         operation { actor ->
-            val report = store.enqueue(actor, payload, current.correction)
+            store.enqueue(actor, payload, current.correction)
             update { copy(editing = false, draft = ClaimDraft(), correction = null, reports = store.list(actor)) }
-            send(report)
+            sendPending(actor)
         }
     }
 
@@ -95,11 +95,7 @@ internal class ClaimViewModel @Inject constructor(
         if (!state.value.open) return
         operation { actor ->
             update { copy(reports = store.list(actor), policies = store.policies(actor), cachedPolicies = true) }
-            for (report in store.list(actor).filter { it.receipt == null && !it.correctable }) {
-                currentCoroutineContext().ensureActive()
-                val error = send(report)
-                if (error == ClaimError.NETWORK || error == ClaimError.SESSION) return@operation
-            }
+            if (!sendPending(actor)) return@operation
             try {
                 val policies = api.policies(actor)
                 store.savePolicies(actor, policies)
@@ -128,6 +124,14 @@ internal class ClaimViewModel @Inject constructor(
     }
 
     private inner class Operation(private val version: Long) {
+        suspend fun sendPending(actor: String): Boolean {
+            for (report in store.list(actor).filter(ClaimReport::retryable)) {
+                val error = send(report)
+                if (error != null && error !in setOf(ClaimError.POLICY, ClaimError.DATE, ClaimError.CONFLICT)) return false
+            }
+            return true
+        }
+
         fun update(change: ClaimState.() -> ClaimState) {
             while (true) {
                 val current = mutable.value
@@ -144,7 +148,7 @@ internal class ClaimViewModel @Inject constructor(
                 return null
             } catch (error: Exception) {
                 val reason = claimError(error)
-                store.fail(report, reason)
+                store.fail(report, reason, (error as? EvidenceHttpProblem)?.code, (error as? EvidenceHttpProblem)?.serverResult)
                 update { copy(error = reason) }
                 return reason
             } finally {
@@ -165,6 +169,7 @@ internal fun claimError(error: Exception): ClaimError = when (error) {
     is CancellationException -> throw error
     is ClaimProblem -> error.reason
     is EvidenceHttpProblem -> when {
+        error.status == 409 && error.code == "idempotencia_conflictiva" -> ClaimError.CONFLICT
         error.status == 404 && error.code == "poliza_no_encontrada" -> ClaimError.POLICY
         error.status == 422 && error.code == "fecha_evento_invalida" -> ClaimError.DATE
         else -> when (error.status) {

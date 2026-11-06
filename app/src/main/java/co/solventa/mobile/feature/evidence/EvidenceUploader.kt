@@ -28,10 +28,10 @@ internal class EvidenceUploader(private val store: EvidenceStore, private val tr
                     store.confirm(item, receipt)
                 } catch (error: EvidenceHttpProblem) {
                     if (!error.permanent) {
-                        store.fail(item, error.reason)
+                        store.fail(item, error.reason, error.code, error.serverResult)
                         throw error
                     }
-                    store.reject(item, error.reason)
+                    store.reject(item, error.reason, error.code, error.serverResult)
                 } catch (error: Exception) {
                     store.fail(item, evidenceOperationError(error))
                     throw error

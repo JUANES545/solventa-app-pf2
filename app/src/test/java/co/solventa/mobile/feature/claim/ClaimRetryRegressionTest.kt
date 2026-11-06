@@ -131,4 +131,63 @@ class ClaimRetryRegressionTest {
             assertEquals(ClaimError.POLICY, model.state.value.error)
         }
     }
+
+    @Test fun collisionPersistsItsReasonAndDateWithoutResendingOrBlockingLaterReports() {
+        MockWebServer().use { server ->
+            val reports = ClaimStore(app.noBackupFilesDir).use { store ->
+                List(3) { store.enqueue("actor-a", payload().copy(type = "Event $it")) }
+            }
+            val posted = mutableListOf<String>()
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    if (request.method == "GET") return MockResponse().setBody("""{"polizas":[]}""")
+                    val report = reports.single { it.operation == request.getHeader("Idempotency-Key") }
+                    posted += report.operation
+                    return if (report == reports.first()) {
+                        MockResponse().setResponseCode(409).setBody("""{"code":"idempotencia_conflictiva"}""")
+                    } else MockResponse().setBody(response(report))
+                }
+            }
+            val api = MobileClaimApi(MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString()))
+            val model = ClaimViewModel(app, api)
+            model.show("actor-a"); await(model)
+            assertEquals(reports.map { it.operation }, posted)
+            val conflict = model.state.value.reports.first()
+            assertEquals(ClaimError.CONFLICT, conflict.error)
+            assertEquals("idempotencia_conflictiva", conflict.errorCode)
+            assertNotNull(conflict.lastResultAt)
+            assertFalse(conflict.retryable)
+            model.correct(conflict)
+            assertNull(model.state.value.correction)
+            val recreated = ClaimViewModel(app, api)
+            recreated.show("actor-a"); await(recreated)
+            assertEquals(conflict, recreated.state.value.reports.first())
+            assertTrue(recreated.state.value.reports.drop(1).all { it.receipt?.registeredAt != null })
+            assertEquals(3, posted.size)
+            androidx.lifecycle.ViewModelStore().apply { put("first", model); put("second", recreated); clear() }
+        }
+    }
+
+    @Test fun submittingANewReportDoesNotJumpAnOlderPendingOperation() {
+        MockWebServer().use { server ->
+            val first = ClaimStore(app.noBackupFilesDir).use { store ->
+                store.savePolicies("actor-a", listOf(policy))
+                store.enqueue("actor-a", payload())
+            }
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest) =
+                    MockResponse().setResponseCode(503).setBody("""{"code":"servicio_no_disponible"}""")
+            }
+            val model = ClaimViewModel(app, MobileClaimApi(MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString())))
+            model.show("actor-a"); await(model)
+            model.newReport(); model.edit(draft.copy(type = "Newest")); model.submit(); await(model)
+            assertEquals(2, server.requestCount)
+            repeat(2) { assertEquals(first.operation, server.takeRequest().getHeader("Idempotency-Key")) }
+            val newest = model.state.value.reports.last()
+            assertEquals("Newest", newest.payload.type)
+            assertNull(newest.error)
+            assertNull(newest.lastResultAt)
+            androidx.lifecycle.ViewModelStore().apply { put("claims", model); clear() }
+        }
+    }
 }
