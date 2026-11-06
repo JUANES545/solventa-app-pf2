@@ -72,6 +72,24 @@ ejercita la actividad real, HTTP controlado y Android Keystore. El
 se activa por separado; el mismo documento identifica las funcionalidades cubiertas
 y las brechas respecto al enunciado y la arquitectura.
 
+## Avisos móviles (HU22-FE)
+
+La sección **Avisos** consulta el buzón autorizado del BFF móvil, conserva localmente
+solo identificadores vistos/leídos y usa el permiso `POST_NOTIFICATIONS` desde Android
+13. Al habilitar o deshabilitar el canal actualiza las preferencias `push` de pagos,
+siniestros, vencimientos y renovaciones.
+
+Cada UUID se presenta una sola vez como aviso del sistema aunque la sincronización lo
+reciba repetido. El título y el contenido vienen del contrato minimizado; la aplicación
+no muestra el UUID del recurso. Al tocar un aviso, vuelve a autenticar la sesión y exige
+que el mismo aviso y recurso sigan en el buzón autorizado. Los siniestros abren su estado;
+pagos o pólizas sin una pantalla/endpoint móvil disponible muestran un error y no simulan
+acceso exitoso.
+
+La sincronización ocurre al restaurar la sesión, al abrir **Avisos** y al actualizar la
+sección. No se declara entrega remota real mientras el backend no tenga un proveedor
+`push`: el canal Android presenta únicamente novedades recuperadas del buzón autenticado.
+
 
 ## Equipo
 
