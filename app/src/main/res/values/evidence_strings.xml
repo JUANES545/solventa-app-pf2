@@ -36,6 +36,7 @@
     <string name="evidence_confirmed">Confirmado por el servidor</string>
     <string name="evidence_sending">Enviando: %1$d%%. Espera la confirmación del servidor.</string>
     <string name="evidence_retry">Enviar pendientes</string>
+    <string name="evidence_continue_location">Continuar con ubicación</string>
     <string name="evidence_empty">Todavía no has guardado evidencia para este siniestro.</string>
     <string name="evidence_integration_pending">El envío no está disponible. Conservamos tus archivos pendientes en este dispositivo.</string>
     <string name="evidence_item">%1$s · %2$s</string>

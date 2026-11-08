@@ -12,7 +12,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import co.solventa.mobile.core.ui.RetryOnReconnect
 
 @Composable
-internal fun EvidenceHost(model: EvidenceViewModel) {
+internal fun EvidenceHost(
+    model: EvidenceViewModel,
+    onAssistance: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val state by model.state.collectAsState()
@@ -35,5 +38,10 @@ internal fun EvidenceHost(model: EvidenceViewModel) {
             if (!wasSecure) window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
     }
-    EvidenceScreen(model, model::close, if (state.configuration != null) model::retry else null)
+    EvidenceScreen(
+        model,
+        model::close,
+        if (state.configuration != null) model::retry else null,
+        onAssistance,
+    )
 }
