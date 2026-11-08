@@ -35,6 +35,8 @@ import co.solventa.mobile.feature.evidence.EvidenceClaim
 import co.solventa.mobile.feature.notification.NotificationHost
 import co.solventa.mobile.feature.notification.NotificationNavigation
 import co.solventa.mobile.feature.notification.NotificationViewModel
+import co.solventa.mobile.feature.assistance.AssistanceHost
+import co.solventa.mobile.feature.assistance.AssistanceViewModel
 
 @Composable
 internal fun SolventaApp(
@@ -48,6 +50,7 @@ internal fun SolventaApp(
     claims: ClaimViewModel? = null,
     claimStatus: ClaimStatusViewModel? = null,
     notifications: NotificationViewModel? = null,
+    assistance: AssistanceViewModel? = null,
     requestNotificationPermission: () -> Unit = {},
 ) {
     SolventaTheme(darkTheme) {
@@ -61,6 +64,7 @@ internal fun SolventaApp(
             val claimState = claims?.state?.collectAsState()?.value
             val claimStatusState = claimStatus?.state?.collectAsState()?.value
             val notificationState = notifications?.state?.collectAsState()?.value
+            val assistanceState = assistance?.state?.collectAsState()?.value
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             DisposableEffect(auth, lifecycle) {
                 val observer = LifecycleEventObserver { _, event ->
@@ -77,6 +81,7 @@ internal fun SolventaApp(
             LaunchedEffect(user?.id) { claims?.bindActor(user?.id) }
             LaunchedEffect(user?.id) { claimStatus?.bindActor(user?.id) }
             LaunchedEffect(user?.id) { notifications?.bindActor(user?.id) }
+            LaunchedEffect(user?.id) { assistance?.bindActor(user?.id) }
             LaunchedEffect(notificationState?.navigation, user?.id) {
                 val navigation = notificationState?.navigation
                 if (user != null && navigation is NotificationNavigation.Claim) {
@@ -127,8 +132,24 @@ internal fun SolventaApp(
                 }
             } else if (claimStatus != null && claimStatusState?.open == true && claimStatusState.actor == user.id) {
                 ClaimStatusHost(claimStatus)
+            } else if (
+                assistance != null &&
+                assistanceState?.open == true &&
+                assistanceState.actor == user.id
+            ) {
+                AssistanceHost(assistance)
             } else if (evidence != null && evidenceState?.open == true && evidenceState.actorId == user.id) {
-                EvidenceHost(evidence)
+                EvidenceHost(
+                    evidence,
+                    assistance?.let { model ->
+                        evidenceState.scope?.let { scope ->
+                            {
+                                evidence.close()
+                                model.show(user.id, scope.claimId)
+                            }
+                        }
+                    },
+                )
             } else if (claims != null && claimState?.open == true && claimState.actor == user.id) {
                 ClaimHost(claims, onStatus = claimStatus?.let { model ->
                     { report -> report.receipt?.let { model.show(user.id, it.id) }; Unit }

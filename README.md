@@ -35,7 +35,7 @@ Abre la carpeta clonada en Android Studio. Para más detalle, consulta la [guía
 ├── app/src/
 │   ├── main/java/co/solventa/mobile/
 │   │   ├── core/          # Diseño, componentes de UI y utilidades compartidas
-│   │   └── feature/       # Funcionalidades: auth (login y biometría) y photo
+│   │   └── feature/       # Funcionalidades móviles organizadas por historia
 │   ├── test/              # Pruebas unitarias JVM
 │   ├── androidTest/       # Instrumentación Espresso + Compose
 │   └── biometricTest/     # Pruebas de la integración biométrica
@@ -89,6 +89,19 @@ acceso exitoso.
 La sincronización ocurre al restaurar la sesión, al abrir **Avisos** y al actualizar la
 sección. No se declara entrega remota real mientras el backend no tenga un proveedor
 `push`: el canal Android presenta únicamente novedades recuperadas del buzón autenticado.
+
+## Asistencia geolocalizada (HU20-FE)
+
+Desde las evidencias de un siniestro autorizado, **Continuar con ubicación** permite
+consultar prestadores cercanos y solicitar asistencia. La aplicación pide permiso de
+ubicación y ofrece ingreso manual de coordenadas cuando se rechaza o el GPS no está
+disponible. La consulta distingue carga, lista vacía y error, y presenta nombre, tipo
+de servicio y distancia aproximada de cada prestador.
+
+Antes de enviar se confirman el prestador, la ubicación y el siniestro. El identificador
+y el estado solo se muestran después de una respuesta registrada del BFF móvil. Los
+reintentos reutilizan la misma clave de idempotencia mientras la solicitud no cambie,
+y la pantalla usa `FLAG_SECURE` para evitar capturas accidentales de la ubicación.
 
 
 ## Equipo

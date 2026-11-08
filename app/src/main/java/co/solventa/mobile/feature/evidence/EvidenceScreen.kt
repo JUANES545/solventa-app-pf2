@@ -56,6 +56,7 @@ internal fun EvidenceScreen(
     model: EvidenceViewModel,
     onClose: () -> Unit,
     onRetry: (() -> Unit)? = null,
+    onAssistance: (() -> Unit)? = null,
     camera: @Composable (EvidenceViewModel, EvidenceState) -> Unit = { vm, state -> EvidenceCamera(vm, state) },
 ) {
     val state by model.state.collectAsState()
@@ -141,6 +142,15 @@ internal fun EvidenceScreen(
                 if (onRetry == null) Text(stringResource(R.string.evidence_integration_pending))
                 else Button(onClick = onRetry, enabled = !state.busy && state.items.any { it.status == EvidenceStatus.PENDING }) {
                     Text(stringResource(R.string.evidence_retry))
+                }
+                onAssistance?.let { continueToAssistance ->
+                    Button(
+                        onClick = continueToAssistance,
+                        enabled = !state.busy,
+                        modifier = Modifier.fillMaxWidth().testTag("continue-with-location"),
+                    ) {
+                        Text(stringResource(R.string.evidence_continue_location))
+                    }
                 }
             }
             EvidenceStep.CAMERA, EvidenceStep.CAPTURING -> camera(model, state)

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="assistance_title">Solicitar asistencia</string>
+    <string name="assistance_back">Volver</string>
+    <string name="assistance_loading">Consultando información…</string>
+    <string name="assistance_location_info">Confirma dónde necesitas ayuda. Usaremos la ubicación solo para consultar prestadores y atender esta solicitud.</string>
+    <string name="assistance_use_location">Usar mi ubicación</string>
+    <string name="assistance_manual">Ingresar ubicación manualmente</string>
+    <string name="assistance_manual_info">Ingresa las coordenadas del lugar donde necesitas asistencia.</string>
+    <string name="assistance_latitude">Latitud</string>
+    <string name="assistance_longitude">Longitud</string>
+    <string name="assistance_search">Buscar prestadores</string>
+    <string name="assistance_providers">Prestadores cercanos</string>
+    <string name="assistance_empty">No encontramos prestadores disponibles cerca de esta ubicación.</string>
+    <string name="assistance_provider">%1$s\n%2$s · %3$.1f km aprox.</string>
+    <string name="assistance_retry">Volver a consultar</string>
+    <string name="assistance_confirm">Confirma la asistencia</string>
+    <string name="assistance_distance">Distancia aproximada: %1$.1f km</string>
+    <string name="assistance_claim">Siniestro autorizado: %1$s</string>
+    <string name="assistance_location_gps">Ubicación confirmada mediante permiso del dispositivo.</string>
+    <string name="assistance_location_manual">Ubicación ingresada y confirmada manualmente.</string>
+    <string name="assistance_request">Solicitar asistencia</string>
+    <string name="assistance_retry_same">Reintentar la misma solicitud</string>
+    <string name="assistance_confirmed">Asistencia confirmada</string>
+    <string name="assistance_identifier">Identificador: %1$s</string>
+    <string name="assistance_status">Estado: %1$s</string>
+    <string name="assistance_finish">Finalizar</string>
+    <string name="assistance_error_permission">No concediste permiso de ubicación. Puedes ingresarla manualmente.</string>
+    <string name="assistance_error_location">El GPS no está disponible. Puedes ingresar la ubicación manualmente.</string>
+    <string name="assistance_error_invalid_location">Ingresa una latitud entre −90 y 90 y una longitud entre −180 y 180.</string>
+    <string name="assistance_error_provider">El prestador ya no está disponible. Vuelve a consultar.</string>
+    <string name="assistance_error_resource">La póliza o el siniestro ya no está disponible para esta solicitud.</string>
+    <string name="assistance_error_network">No pudimos confirmar la operación. Reintenta la misma solicitud.</string>
+    <string name="assistance_error_session">Inicia sesión nuevamente para solicitar asistencia.</string>
+    <string name="assistance_error_protocol">No pudimos verificar la respuesta del servicio.</string>
+    <string name="assistance_error_conflict">La operación no coincide con la solicitud original. Vuelve y confirma nuevamente.</string>
+</resources>

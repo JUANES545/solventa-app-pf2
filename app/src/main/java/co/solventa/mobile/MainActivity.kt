@@ -25,6 +25,7 @@ import co.solventa.mobile.feature.claim.ClaimViewModel
 import co.solventa.mobile.feature.claim.ClaimStatusViewModel
 import co.solventa.mobile.feature.notification.AndroidNotificationPresenter
 import co.solventa.mobile.feature.notification.NotificationViewModel
+import co.solventa.mobile.feature.assistance.AssistanceViewModel
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -35,6 +36,9 @@ class MainActivity : FragmentActivity() {
     private val claimStatus by lazy { ViewModelProvider(this)[ClaimStatusViewModel::class.java] }
     private val notifications by lazy {
         ViewModelProvider(this)[NotificationViewModel::class.java]
+    }
+    private val assistance by lazy {
+        ViewModelProvider(this)[AssistanceViewModel::class.java]
     }
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -59,6 +63,7 @@ class MainActivity : FragmentActivity() {
                 SolventaApp(auth, if (BuildConfig.BIOMETRIC_LOGIN_ENABLED) biometrics else null, signer,
                     openPhoto, beforeAccessChange, evidence = evidence, claims = claims,
                     claimStatus = claimStatus, notifications = notifications,
+                    assistance = assistance,
                     requestNotificationPermission = ::requestNotificationPermission)
             }
         }
