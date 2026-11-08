@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_channel_name">Avisos de Solventa</string>
+    <string name="notification_channel_description">Pagos, vencimientos, renovaciones y avances de siniestros.</string>
+    <string name="notification_entry">Avisos</string>
+    <string name="notification_title">Avisos</string>
+    <string name="notification_back">Volver a mi cuenta</string>
+    <string name="notification_mark_all_read">Marcar todo como leído</string>
+    <string name="notification_read">LEÍDA</string>
+    <string name="notification_unread">NO LEÍDA</string>
+    <string name="notification_open">Ver detalle</string>
+    <string name="notification_loading">Consultando tus avisos…</string>
+    <string name="notification_empty">No tienes avisos por ahora.</string>
+    <string name="notification_refresh">Actualizar avisos</string>
+    <string name="notification_privacy_notice">Los avisos muestran información mínima. Abre Solventa para consultar el recurso autorizado.</string>
+    <string name="notification_permission_title">Canal móvil</string>
+    <string name="notification_permission_required">Android necesita tu permiso antes de mostrar avisos fuera de la aplicación.</string>
+    <string name="notification_permission_enabled">Los avisos móviles están habilitados en este dispositivo.</string>
+    <string name="notification_permission_disabled">El permiso está concedido, pero desactivaste los avisos móviles en Solventa.</string>
+    <string name="notification_permission_allow">Permitir avisos</string>
+    <string name="notification_permission_turn_on">Activar avisos</string>
+    <string name="notification_permission_turn_off">Desactivar avisos</string>
+    <string name="notification_permission_denied">No se habilitaron avisos móviles. Puedes conceder el permiso desde los ajustes de Android.</string>
+    <string name="notification_resource_unavailable">No pudimos abrir ese recurso. Puede no estar disponible o no pertenecer a tu sesión.</string>
+    <string name="notification_error_network">No pudimos actualizar los avisos. Revisa tu conexión.</string>
+    <string name="notification_error_session">Tu sesión no permite consultar estos avisos. Ingresa nuevamente.</string>
+    <string name="notification_error_unavailable">El recurso ya no está disponible.</string>
+    <string name="notification_error_protocol">El servicio devolvió una respuesta que no podemos mostrar de forma segura.</string>
+    <string name="notification_error_storage">No pudimos guardar el estado de lectura en este dispositivo.</string>
+</resources>
