@@ -33,7 +33,9 @@ import co.solventa.mobile.core.ui.SolventaBrandHeader
 import co.solventa.mobile.core.designsystem.SolventaLayout
 
 @Composable
-fun AccountScreen(user: AuthUser, loading: Boolean, onLogout: () -> Unit, biometricContent: (@Composable () -> Unit)? = null) {
+fun AccountScreen(user: AuthUser, loading: Boolean, onLogout: () -> Unit, biometricContent: (@Composable () -> Unit)? = null,
+    onEvidence: (() -> Unit)? = null, onClaim: (() -> Unit)? = null, offline: Boolean = false,
+    onClaimStatus: (() -> Unit)? = null, onNotifications: (() -> Unit)? = null) {
     var signingOut by remember { mutableStateOf(false) }
     SolventaPage(header = {
             SolventaBrandHeader()
@@ -68,6 +70,28 @@ fun AccountScreen(user: AuthUser, loading: Boolean, onLogout: () -> Unit, biomet
             Text(stringResource(R.string.account_security_title), style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary)
             Text(stringResource(R.string.account_security_body), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (offline) Text(stringResource(R.string.claim_local_session), color = MaterialTheme.colorScheme.onSurfaceVariant)
             biometricContent?.invoke()
+            onNotifications?.let {
+                Button(onClick = it, enabled = !loading,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                    Text(stringResource(R.string.notification_entry))
+                }
+            }
+            onClaim?.let {
+                Button(onClick = it, enabled = !loading, modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                    Text(stringResource(R.string.claim_title))
+                }
+            }
+            onEvidence?.let {
+                Button(onClick = it, enabled = !loading, modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                    Text(stringResource(R.string.evidence_entry))
+                }
+                onClaimStatus?.let {
+                    Button(onClick = it, enabled = !loading, modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                        Text(stringResource(R.string.claim_status_title))
+                    }
+                }
+            }
     }
 }

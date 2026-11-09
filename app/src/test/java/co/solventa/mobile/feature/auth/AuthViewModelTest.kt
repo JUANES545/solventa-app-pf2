@@ -124,6 +124,33 @@ class AuthViewModelTest {
             assertNull(result.user)
             assertNull(stored)
         }
+
+    }
+
+    @Test fun offlineRestoreAllowsOnlyAnUnexpiredLocalActorAndNeverAuthorizesRemoteRequests() = runTest {
+        stored = grant
+        failure = java.io.IOException("offline")
+        val repository = AuthRepository(api, store)
+        val auth = AuthViewModel(repository)
+        auth.restore()
+        val local = auth.state.first { !it.loading }
+        assertEquals(user, local.user)
+        assertTrue(local.offline)
+        assertEquals(AuthError.UNAVAILABLE, local.error)
+        try { repository.withSession(user.id) { fail("Offline identity cannot authorize a request") }; fail() }
+        catch (_: java.io.IOException) { }
+        failure = null
+        auth.restore()
+        assertFalse(auth.state.first { !it.loading }.offline)
+        failure = AuthHttpError(403)
+        auth.restore()
+        assertNull(auth.state.first { !it.loading }.user)
+        stored = grant.copy(refreshExpiresAt = 0)
+        assertNull(repository.localUser())
+        failure = java.io.IOException()
+        auth.restore()
+        assertNull(auth.state.first { !it.loading }.user)
+        assertNull(repository.localUser())
     }
 
     @Test fun photosAndExplicitConfirmationPrecedeASingleRegistrationWithoutSession() = runTest {

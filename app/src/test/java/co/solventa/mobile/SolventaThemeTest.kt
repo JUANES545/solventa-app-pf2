@@ -50,6 +50,27 @@ class SolventaThemeTest {
         compose.runOnIdle { assertEquals(SolventaDarkColors.background, background) }
     }
 
+    @Test fun defaultThemeTracksConfigurationChangesWithoutReplacingItsCaller() {
+        val configuration = androidx.compose.runtime.mutableStateOf(Configuration().apply {
+            uiMode = Configuration.UI_MODE_NIGHT_NO
+        })
+        var background = Color.Unspecified
+        compose.setContent {
+            CompositionLocalProvider(LocalConfiguration providesComputed { configuration.value }) {
+                SolventaTheme { background = MaterialTheme.colorScheme.background }
+            }
+        }
+        compose.runOnIdle {
+            assertEquals(SolventaLightColors.background, background)
+            configuration.value = Configuration(configuration.value).apply { uiMode = Configuration.UI_MODE_NIGHT_YES }
+        }
+        compose.runOnIdle {
+            assertEquals(SolventaDarkColors.background, background)
+            configuration.value = Configuration(configuration.value).apply { uiMode = Configuration.UI_MODE_NIGHT_NO }
+        }
+        compose.runOnIdle { assertEquals(SolventaLightColors.background, background) }
+    }
+
     private fun contrast(a: Color, b: Color): Double {
         val first = a.luminance().toDouble()
         val second = b.luminance().toDouble()

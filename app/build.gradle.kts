@@ -15,7 +15,17 @@ jacoco {
     toolVersion = "0.8.13"
 }
 
+val testCoveragePost by tasks.registering(JavaExec::class) {
+    classpath = configurations.detachedConfiguration(dependencies.localGroovy())
+    mainClass.set("groovy.ui.GroovyMain")
+    workingDir(rootProject.projectDir)
+    args("infra/jenkins/test-coverage-post.groovy", "Jenkinsfile")
+}
+
 tasks.withType<Test>().configureEach {
+    if (name == "testDebugUnitTest") {
+        dependsOn(testCoveragePost)
+    }
     extensions.configure<JacocoTaskExtension> {
         // Robolectric loads application classes through an isolated Android classloader.
         isIncludeNoLocationClasses = true
@@ -31,13 +41,15 @@ tasks.register<JacocoReport>("jacocoDebugUnitTestReport") {
     sourceDirectories.setFrom(files("src/main/java", "src/main/kotlin"))
     val generated = listOf(
         "**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*",
-        "**/Hilt_*.*", "**/*_Factory.*", "**/*_MembersInjector.*",
+        "**/Hilt_*.*", "**/*_Factory.*", "**/*_Factory\$*.*", "**/*_MembersInjector.*",
         "**/*_HiltModules*.*", "**/*_HiltComponents*.*", "**/*_GeneratedInjector.*",
         "**/hilt_aggregated_deps/**", "**/dagger/hilt/internal/**",
     )
     classDirectories.setFrom(files(
-        fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) { exclude(generated) },
-        fileTree(layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes")) { exclude(generated) },
+        // Hilt rewrites entry points before tests execute them.
+        fileTree(layout.buildDirectory.dir("intermediates/classes/debug/transformDebugClassesWithAsm/dirs")) {
+            exclude(generated)
+        },
     ))
     reports {
         xml.required.set(true)
@@ -69,7 +81,15 @@ android {
         testInstrumentationRunner = "co.solventa.mobile.espresso.SolventaTestRunner"
         val backendE2e = providers.gradleProperty("backendE2e").orNull == "true"
         testInstrumentationRunnerArguments[if (backendE2e) "annotation" else "notAnnotation"] =
-            "co.solventa.mobile.espresso.BackendE2e"
+            if (backendE2e && providers.gradleProperty("claimDeviceTests").orNull == "true") {
+                "co.solventa.mobile.espresso.ClaimDeviceE2e"
+            } else if (backendE2e && providers.gradleProperty("evidenceDeviceTests").orNull == "true") {
+                "co.solventa.mobile.espresso.EvidenceDeviceE2e"
+            } else if (backendE2e) {
+                "co.solventa.mobile.espresso.BackendE2e"
+            } else {
+                "co.solventa.mobile.espresso.BackendE2e,co.solventa.mobile.espresso.EvidenceDeviceE2e,co.solventa.mobile.espresso.ClaimDeviceE2e"
+            }
     }
 
     compileOptions {
@@ -109,6 +129,30 @@ android {
     sourceSets.getByName("biometricTest") {
         res.srcDir("src/debug/res")
     }
+    buildTypes.create("evidenceTest") {
+        initWith(buildTypes.getByName("debug"))
+        applicationIdSuffix = ".evidencetest"
+        matchingFallbacks += "debug"
+        buildConfigField("String", "AUTH_BASE_URL", "\"http://127.0.0.1:18719/movil/v1\"")
+        buildConfigField("String", "AUTH_ISSUER", "\"urn:solventa:claims-local\"")
+    }
+    sourceSets.getByName("evidenceTest") {
+        res.srcDir("src/debug/res")
+    }
+    if (providers.gradleProperty("evidenceDeviceTests").orNull == "true") {
+        testBuildType = "evidenceTest"
+    }
+    buildTypes.create("claimTest") {
+        initWith(buildTypes.getByName("debug"))
+        applicationIdSuffix = ".claimtest"
+        matchingFallbacks += "debug"
+        buildConfigField("String", "AUTH_BASE_URL", "\"http://127.0.0.1:18721/movil/v1\"")
+        buildConfigField("String", "AUTH_ISSUER", "\"urn:solventa:claims-local\"")
+    }
+    sourceSets.getByName("claimTest") { res.srcDir("src/debug/res") }
+    if (providers.gradleProperty("claimDeviceTests").orNull == "true") {
+        testBuildType = "claimTest"
+    }
     testCoverage {
         jacocoVersion = "0.8.13"
     }
@@ -135,6 +179,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.mockwebserver)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockito)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.compose.ui.test)
     androidTestImplementation(libs.androidx.test.runner)
@@ -151,6 +196,9 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.camera.video)
     implementation(libs.mlkit.face)
     "biometricTestImplementation"(libs.androidx.compose.ui.test.manifest)
+    "evidenceTestImplementation"(libs.androidx.compose.ui.test.manifest)
+    "claimTestImplementation"(libs.androidx.compose.ui.test.manifest)
 }

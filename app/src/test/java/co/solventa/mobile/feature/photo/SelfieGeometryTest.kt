@@ -71,4 +71,19 @@ class SelfieGeometryTest {
             output, output, RectF(0f, 0f, 120f, 120f), 0f, 0f, 0f))
         assertFalse(small.enoughPixels)
     }
+
+    @Test fun emptyDimensionsAndContentOutsideTheViewportCannotAuthorizeCapture() {
+        val output = OutputTransform(Matrix(), Size(480, 360))
+        val valid = RectF(0f, 0f, 120f, 120f)
+        for (face in listOf(RectF(0f, 0f, 0f, 120f), RectF(0f, 0f, 120f, 0f))) {
+            assertNull(SelfieGeometry.position(face, output, output, valid, 0f, 0f, 0f))
+        }
+        for (oval in listOf(RectF(0f, 0f, 0f, 120f), RectF(0f, 0f, 120f, 0f))) {
+            assertNull(SelfieGeometry.position(valid, output, output, oval, 0f, 0f, 0f))
+        }
+        assertFalse(requireNotNull(SelfieGeometry.position(RectF(0f, 0f, 100f, 99f),
+            output, output, valid, 0f, 0f, 0f)).enoughPixels)
+        val offscreen = OutputTransform(Matrix().apply { setTranslate(10_000f, 10_000f) }, Size(480, 360))
+        assertNull(SelfieGeometry.content(selfieFrame(), offscreen, 320, 480))
+    }
 }

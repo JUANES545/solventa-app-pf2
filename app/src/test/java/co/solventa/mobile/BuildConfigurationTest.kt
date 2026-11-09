@@ -7,7 +7,12 @@ import org.junit.Test
 class BuildConfigurationTest {
     @Test
     fun applicationIdDoesNotReplaceThePreviousPrototype() {
-        if (BuildConfig.BUILD_TYPE == "biometricTest") {
+        if (BuildConfig.BUILD_TYPE == "evidenceTest") {
+            assertEquals("co.solventa.mobile.pf2.evidencetest", BuildConfig.APPLICATION_ID)
+            assertEquals("http://127.0.0.1:18719/movil/v1", BuildConfig.AUTH_BASE_URL)
+            assertEquals("urn:solventa:claims-local", BuildConfig.AUTH_ISSUER)
+            assertTrue(BuildConfig.DEBUG)
+        } else if (BuildConfig.BUILD_TYPE == "biometricTest") {
             assertEquals("co.solventa.mobile.pf2.biometrictest", BuildConfig.APPLICATION_ID)
             assertEquals("http://127.0.0.1:18717/movil/v1", BuildConfig.AUTH_BASE_URL)
             assertEquals("https://identidad.solventa.test", BuildConfig.AUTH_ISSUER)

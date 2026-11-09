@@ -114,4 +114,14 @@ class BiometricProtocolTest {
         assertEquals(32, decodeBase64Url(fixture.getString("desafioId"), 32).size)
         assertThrows(IllegalArgumentException::class.java) { decodeBase64Url(base64Url(ByteArray(33)), 32) }
     }
+
+    @Test fun challengeRejectsBlankIssuerNonUtcTimeShortNonceAndNonAsciiMessage() {
+        assertThrows(IllegalArgumentException::class.java) { decode(issuer = " ") }
+        assertThrows(IllegalArgumentException::class.java) {
+            decode(challenge().put("expiraEn", Instant.ofEpochMilli(epoch).atOffset(java.time.ZoneOffset.ofHours(1)).toString()))
+        }
+        assertThrows(IllegalArgumentException::class.java) { decode(challenge().put("desafioId", base64Url(ByteArray(31)))) }
+        assertThrows(IllegalArgumentException::class.java) { decode(challenge().put("mensaje", base64Url(byteArrayOf(-1)))) }
+        assertThrows(IllegalArgumentException::class.java) { canonicalUuid("ABCDEFAB-1111-4111-8111-111111111111") }
+    }
 }

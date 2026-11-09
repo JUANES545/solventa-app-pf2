@@ -143,4 +143,68 @@ class SelfieAnalyzerTest {
         analyzer.close()
         assertEquals(1, detectorCloses)
     }
+
+    @Test fun stableDetectedFaceCapturesOnceAndClosesFollowingFrames() {
+        val face = org.mockito.Mockito.mock(Face::class.java)
+        org.mockito.Mockito.`when`(face.boundingBox).thenReturn(android.graphics.Rect(220, 110, 420, 370))
+        val detector = org.mockito.Mockito.mock(FaceDetector::class.java)
+        org.mockito.Mockito.`when`(detector.process(org.mockito.Mockito.any(InputImage::class.java)))
+            .thenAnswer { com.google.android.gms.tasks.Tasks.forResult(listOf(face)) }
+        val matrix = Matrix().apply { setRectToRect(android.graphics.RectF(-1f, -1f, 1f, 1f),
+            android.graphics.RectF(0f, 0f, 320f, 240f), Matrix.ScaleToFit.FILL) }
+        var now = 0L
+        var frames = 0
+        var lastHint: SelfieHint? = null
+        val analyzer = SelfieAnalyzer(detector, Executor { it.run() },
+            { OutputTransform(matrix, Size(480, 360)) }, { 320 to 240 }, { true },
+            { hint, oval -> lastHint = hint; assertNotNull(oval) }, { captures++ }, { errors++ },
+            clock = { now }, input = {
+                InputImage.fromBitmap(Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888), 0)
+            })
+        for (time in 0L..1980L step 180) {
+            now = time
+            analyzer.analyze(selfieFrame(timestamp = time + 1, onClose = { frames++ }))
+        }
+        assertEquals(SelfieHint.CAPTURING, lastHint)
+        assertEquals(1, captures)
+        assertEquals(0, errors)
+        assertEquals(12, frames)
+        org.mockito.Mockito.verify(detector).close()
+    }
+
+    @Test fun missingTransformTimesOutRatherThanCapturingOutsideThePreview() {
+        val detector = org.mockito.Mockito.mock(FaceDetector::class.java)
+        org.mockito.Mockito.`when`(detector.process(org.mockito.Mockito.any(InputImage::class.java)))
+            .thenAnswer { com.google.android.gms.tasks.Tasks.forResult(emptyList<Face>()) }
+        var now = 0L
+        var frames = 0
+        val analyzer = SelfieAnalyzer(detector, Executor { it.run() }, { null }, { 320 to 240 }, { true },
+            { hint, oval -> assertEquals(SelfieHint.PREPARING, hint); assertNull(oval); hints++ },
+            { captures++ }, { errors++ }, clock = { now }, input = {
+                InputImage.fromBitmap(Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888), 0)
+            })
+        analyzer.analyze(selfieFrame(onClose = { frames++ }))
+        now = 3001
+        analyzer.analyze(selfieFrame(timestamp = 2, onClose = { frames++ }))
+        assertEquals(1, hints)
+        assertEquals(1, errors)
+        assertEquals(0, captures)
+        assertEquals(2, frames)
+        org.mockito.Mockito.verify(detector).close()
+    }
+
+    @Test fun invalidInputAndCallbackFailuresCloseTheFrameAndDetector() {
+        for (failure in listOf(IllegalArgumentException("invalid"), IllegalStateException("closed"))) {
+            val detector = org.mockito.Mockito.mock(FaceDetector::class.java)
+            var frames = 0
+            var failures = 0
+            val analyzer = SelfieAnalyzer(detector, Executor { it.run() }, { null }, { 320 to 240 }, { true },
+                { _, _ -> fail("Unexpected hint") }, { fail("Unexpected capture") }, { failures++ },
+                input = { throw failure })
+            analyzer.analyze(selfieFrame(onClose = { frames++ }))
+            assertEquals(1, failures)
+            assertEquals(1, frames)
+            org.mockito.Mockito.verify(detector).close()
+        }
+    }
 }
