@@ -25,6 +25,12 @@ El contrato de referencia está en `contracts/openapi/bff-movil-v1.yaml` de la r
    con un único reintento de la consulta y acceso serializado a tokens en toda la app.
 6. Cerrar con `DELETE /sesiones/actual`, enviando el refresh token para revocarlo y
    limpiando almacenamiento local. Si no se confirma el cierre remoto, comunicarlo.
+7. Mientras permanece en primer plano, retirar el actor y volver al login al vencer
+   el refresh, sin esperar otro `onResume`. Un deadline local se cancela y reprograma
+   con cada renovación; no consulta el servidor ni llama logout. El rechazo definitivo
+   de la renovación o de la sesión autoritativa también invalida el acceso global.
+   Las colas y evidencias persistidas por actor se conservan; las vistas y sus datos
+   en memoria se desvinculan mediante el flujo principal de la aplicación.
 
 Las respuestas 503/fallos de red no eliminan el grant persistido al restaurar una
 sesión. Un refresh rechazado/expirado sí exige nuevo ingreso. No se siguen redirects
@@ -41,7 +47,8 @@ Solo las variantes debug y aislada permiten HTTP a los hosts loopback declarados
   público exacto, sin fallback local; un 404/503 informa indisponibilidad y
   permite seguir usando contraseña.
   La recuperación de contraseña sigue deshabilitada.
-- La sesión se valida al volver a primer plano; no se agregó polling periódico ni
+- La sesión se valida al volver a primer plano y caduca localmente incluso sin salir
+  de la actividad. No se agregó polling periódico ni
   un interceptor para futuros servicios de negocio que todavía no existen.
 - Cerrar sesión revoca el refresh, pero no promete revocación inmediata de un JWT
   ya emitido; esa política corresponde al servidor.
