@@ -1,0 +1,11 @@
+<resources>
+    <string name="notification_remove_local">Eliminar aviso</string>
+    <string name="notification_mark_read">Marcar como leído</string>
+    <string name="notification_undo">Deshacer</string>
+    <string name="notification_removed">Aviso eliminado</string>
+    <string name="notification_marked">Aviso marcado como leído</string>
+    <string name="notification_details_show">Ver detalle</string>
+    <string name="notification_details_hide">Ocultar detalle</string>
+    <string name="notification_settings">Abrir ajustes</string>
+    <string name="notification_permission_settings_required">Habilita las notificaciones de Solventa en los ajustes de Android.</string>
+</resources>

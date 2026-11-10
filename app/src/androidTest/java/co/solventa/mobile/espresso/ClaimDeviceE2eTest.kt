@@ -95,9 +95,15 @@ class ClaimDeviceE2eTest {
         compose.onNodeWithText(context.getString(R.string.claim_submit)).performScrollTo().performClick()
         compose.onNodeWithText(context.getString(R.string.claim_error_required)).performScrollTo().assertIsDisplayed()
         val draft = form("Formulario fisico SOL170 ${UUID.randomUUID()}")
-        compose.onNode(hasText(draft.policyId, substring = true)).performScrollTo().performClick()
-        for ((label, value) in listOf(R.string.claim_type to draft.type, R.string.claim_date to draft.date,
-            R.string.claim_time to draft.time, R.string.claim_place to draft.place, R.string.claim_description to draft.description)) {
+        compose.onNodeWithTag("claim-policy-${draft.policyId}")
+            .performScrollTo().performClick()
+        compose.runOnIdle { model.edit(model.state.value.draft.copy(date = draft.date, time = draft.time)) }
+        for (label in listOf(R.string.claim_date, R.string.claim_time)) {
+            compose.onNodeWithText(context.getString(label)).performScrollTo().performClick()
+            compose.onNodeWithText(context.getString(R.string.ui_choose_confirm)).performClick()
+        }
+        for ((label, value) in listOf(R.string.claim_type to draft.type,
+            R.string.claim_place to draft.place, R.string.claim_description to draft.description)) {
             compose.onNodeWithText(context.getString(label)).performScrollTo().performTextInput(value)
         }
         compose.onNodeWithText(context.getString(R.string.claim_submit)).performScrollTo().performClick()
@@ -111,7 +117,7 @@ class ClaimDeviceE2eTest {
         }
         compose.onAllNodesWithText(report.receipt!!.id, substring = true).onFirst()
             .performScrollTo().assertIsDisplayed()
-        compose.onAllNodesWithText(context.getString(R.string.evidence_entry)).onFirst().performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.claim_add_evidence)).performScrollTo().performClick()
         compose.waitUntil(30_000) { evidence.state.value.scope != null && !evidence.state.value.busy }
         assertEquals(report.receipt.id, evidence.state.value.scope!!.claimId)
         assertNotNull(evidence.state.value.policy)

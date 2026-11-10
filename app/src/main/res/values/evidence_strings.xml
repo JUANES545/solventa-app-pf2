@@ -9,13 +9,18 @@
     <string name="evidence_query_service">El servicio de siniestros no está disponible temporalmente. Vuelve a consultar más tarde.</string>
     <string name="evidence_query_protocol">La respuesta no permite verificar tus siniestros. Vuelve a consultar; no podemos confirmar si tienes registros.</string>
     <string name="evidence_resource_unavailable">Este recurso no está disponible para tu cuenta. Vuelve a consultar tus siniestros.</string>
-    <string name="evidence_remote_registered">El servidor registra %1$d archivos de este siniestro. No hay archivos guardados en este dispositivo.</string>
+    <plurals name="evidence_remote_registered">
+        <item quantity="one">%1$d archivo adjunto</item>
+        <item quantity="other">%1$d archivos adjuntos</item>
+    </plurals>
     <string name="evidence_reload">Volver a consultar</string>
     <string name="evidence_photo">Tomar fotografía</string>
     <string name="evidence_document">Escanear documento</string>
     <string name="evidence_video">Grabar vídeo</string>
     <string name="evidence_video_silent">Vídeo sin audio</string>
     <string name="evidence_take">Capturar</string>
+    <string name="evidence_camera_front">Usar cámara frontal</string>
+    <string name="evidence_camera_back">Usar cámara trasera</string>
     <string name="evidence_stop">Detener grabación</string>
     <string name="evidence_recording">Grabando: %1$d s</string>
     <string name="evidence_review">Revisar captura</string>
@@ -32,9 +37,10 @@
     <string name="evidence_location_ready">Ubicación disponible</string>
     <string name="evidence_location_wait">Buscando ubicación. Puedes continuar sin ella.</string>
     <string name="evidence_location_none">Sin ubicación. Puedes capturar y adjuntar.</string>
+    <string name="evidence_location_retry">Reintentar ubicación</string>
     <string name="evidence_pending">Pendiente de envío</string>
     <string name="evidence_failed">Error de envío; pendiente de confirmación</string>
-    <string name="evidence_rejected">Rechazado por el servidor</string>
+    <string name="evidence_rejected">Rechazado</string>
     <string name="evidence_remove">Retirar archivo rechazado</string>
     <string name="evidence_remove_info">Cancelaremos esta carga y retiraremos el archivo rechazado de este dispositivo. Después puedes repetir la captura. Si el servidor ya lo confirmó, lo conservaremos.</string>
     <string name="evidence_confirmed">Confirmado por el servidor</string>
@@ -48,10 +54,9 @@
     <string name="evidence_kind_document">Documento</string>
     <string name="evidence_kind_video">Vídeo</string>
     <string name="evidence_limit">Máximo %1$d archivos por siniestro.</string>
-    <string name="evidence_format_limit">%1$s: hasta %2$,d bytes</string>
     <string name="evidence_video_limit">Duración máxima: %1$d s</string>
     <string name="evidence_error_camera">No pudimos completar la captura. Vuelve a intentarlo.</string>
-    <string name="evidence_error_permission">Permite el acceso a la cámara para capturar evidencia. Puedes volver sin perder los archivos pendientes.</string>
+    <string name="evidence_error_permission">Necesitas permiso de cámara para capturar el archivo.</string>
     <string name="evidence_error_format">El archivo no tiene un formato permitido o no se puede leer.</string>
     <string name="evidence_error_size">El archivo está vacío o supera el tamaño permitido.</string>
     <string name="evidence_error_duration">El vídeo supera la duración permitida o no se puede leer.</string>
@@ -59,6 +64,6 @@
     <string name="evidence_error_storage">No pudimos leer o guardar el archivo. Revisa el espacio del dispositivo y vuelve a intentarlo.</string>
     <string name="evidence_error_network">El envío se interrumpió. Conservamos los pendientes para reintentar.</string>
     <string name="evidence_error_session">Inicia sesión con la cuenta de esta evidencia para continuar.</string>
-    <string name="evidence_error_location">No pudimos obtener la ubicación. Puedes continuar sin ella.</string>
+    <string name="evidence_error_location">Ubicación no disponible</string>
     <string name="evidence_error_protocol">No pudimos verificar la confirmación del servidor. El archivo sigue pendiente.</string>
 </resources>

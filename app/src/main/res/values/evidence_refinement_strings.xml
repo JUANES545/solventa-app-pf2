@@ -1,0 +1,8 @@
+<resources>
+    <string name="evidence_edit_crop">Recortar imagen</string>
+    <string name="evidence_cancel_crop">Cancelar recorte</string>
+    <string name="evidence_choose_photo">Elegir foto</string>
+    <string name="evidence_local_preview">Foto del siniestro</string>
+    <string name="evidence_preview_unavailable">Vista previa no disponible</string>
+    <string name="ui_refreshing">Actualizando</string>
+</resources>

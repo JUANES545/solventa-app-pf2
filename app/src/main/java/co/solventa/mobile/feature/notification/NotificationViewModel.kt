@@ -10,6 +10,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 
 internal enum class NotificationMessage { PERMISSION_DENIED, RESOURCE_UNAVAILABLE }
 
@@ -25,9 +27,12 @@ internal data class NotificationUiState(
     val items: List<NotificationItem> = emptyList(),
     val permissionGranted: Boolean = false,
     val pushEnabled: Boolean = false,
+    val pushPreferencesKnown: Boolean = false,
     val error: NotificationError? = null,
     val message: NotificationMessage? = null,
     val navigation: NotificationNavigation? = null,
+    val undo: NotificationUndo? = null,
+    val removedItem: NotificationItem? = null,
 )
 
 @HiltViewModel
@@ -48,6 +53,10 @@ internal class NotificationViewModel @Inject constructor(
         if (actor == state.value.actor) return
         generation++
         job?.cancel()
+        if (state.value.actor != null) {
+            pendingTarget = null
+            presenter.clear()
+        }
         mutable.value = NotificationUiState(
             actor = actor,
             permissionGranted = presenter.permissionGranted(),
@@ -57,7 +66,9 @@ internal class NotificationViewModel @Inject constructor(
 
     fun show(actor: String) {
         if (actor != state.value.actor) bindActor(actor)
-        mutable.value = state.value.copy(open = true, message = null)
+        mutable.value = state.value.copy(
+            open = true, message = null, permissionGranted = presenter.permissionGranted(),
+        )
         synchronize(actor)
     }
 
@@ -78,24 +89,30 @@ internal class NotificationViewModel @Inject constructor(
             try {
                 val notifications = api.notifications(actor).sortedByDescending { it.deliveredAt }
                 val preferences = api.preferences(actor)
+                coroutineContext.ensureActive()
+                if (version != generation || actor != state.value.actor) return@launch
                 val pushByKind = preferences
                     .filter { it.channel == NotificationChannel.PUSH }
                     .associate { it.kind to it.enabled }
                 val permission = presenter.permissionGranted()
-                val fresh = store.recordSeen(actor, notifications.mapTo(mutableSetOf()) { it.id })
-                if (permission) {
-                    notifications
-                        .filter { it.id in fresh && pushByKind[it.kind] == true }
-                        .forEach(presenter::show)
+                val discarded = store.discarded(actor)
+                synchronized(store) {
+                    val fresh = store.recordSeen(actor, notifications.mapTo(mutableSetOf()) { it.id })
+                    if (permission) {
+                        notifications
+                            .filter { it.id in fresh && it.id !in discarded && pushByKind[it.kind] == true }
+                            .forEach(presenter::show)
+                    }
                 }
                 val read = store.read(actor)
                 update(version) {
                     copy(
                         busy = false,
                         loadingNotifications = false,
-                        items = notifications.map { NotificationItem(it, it.id in read) },
+                        items = notifications.filterNot { it.id in discarded }.map { NotificationItem(it, it.id in read) },
                         permissionGranted = permission,
                         pushEnabled = NotificationKind.entries.all { pushByKind[it] == true },
+                        pushPreferencesKnown = true,
                         error = null,
                     )
                 }
@@ -106,20 +123,27 @@ internal class NotificationViewModel @Inject constructor(
                 update(version) { copy(busy = false, loadingNotifications = false, error = problem.reason) }
             } catch (_: SecurityException) {
                 update(version) {
-                    copy(
-                        busy = false,
-                        loadingNotifications = false,
-                        permissionGranted = false,
-                        message = NotificationMessage.PERMISSION_DENIED,
-                    )
+                    copy(busy = false, loadingNotifications = false, permissionGranted = false,
+                        message = NotificationMessage.PERMISSION_DENIED)
                 }
+            } catch (_: Exception) {
+                update(version) { copy(busy = false, loadingNotifications = false, error = NotificationError.STORAGE) }
             }
         }
     }
 
-    fun permissionResult(granted: Boolean) {
+    fun refreshPermission() {
+        val granted = presenter.permissionGranted()
         mutable.value = state.value.copy(
             permissionGranted = granted,
+            message = if (granted && state.value.message == NotificationMessage.PERMISSION_DENIED) null
+                else state.value.message,
+        )
+    }
+
+    fun permissionResult(granted: Boolean) {
+        mutable.value = state.value.copy(
+            permissionGranted = presenter.permissionGranted(),
             message = if (granted) null else NotificationMessage.PERMISSION_DENIED,
         )
         setPush(granted)
@@ -158,14 +182,62 @@ internal class NotificationViewModel @Inject constructor(
                         busy = false,
                         permissionGranted = presenter.permissionGranted(),
                         pushEnabled = NotificationKind.entries.all { pushByKind[it] == true },
+                        pushPreferencesKnown = true,
                     )
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (problem: NotificationProblem) {
                 update(version) { copy(busy = false, error = problem.reason) }
+            } catch (_: Exception) {
+                update(version) { copy(busy = false, error = NotificationError.NETWORK) }
             }
         }
+    }
+
+    fun markRead(item: NotificationItem) = change(item, discard = false)
+
+    fun discard(item: NotificationItem) = change(item, discard = true)
+
+    private fun change(item: NotificationItem, discard: Boolean) {
+        val actor = state.value.actor ?: return
+        if (item !in state.value.items || (!discard && item.read)) return
+        try {
+            val undo = if (discard) store.change(actor, item.notification.id, discarded = true)
+                else store.change(actor, item.notification.id, read = true)
+            mutable.value = state.value.copy(
+                items = if (discard) state.value.items - item else state.value.items.map {
+                    if (it.notification.id == item.notification.id) it.copy(read = true) else it
+                },
+                undo = undo,
+                removedItem = if (discard) item else null,
+                error = null,
+            )
+        } catch (problem: NotificationProblem) {
+            mutable.value = state.value.copy(error = problem.reason)
+        }
+    }
+
+    fun undo(change: NotificationUndo) {
+        val actor = state.value.actor ?: return
+        if (change != state.value.undo) return
+        try {
+            if (store.undo(actor, change)) {
+                val restored = state.value.removedItem
+                mutable.value = state.value.copy(
+                    items = (state.value.items + listOfNotNull(restored)).map {
+                        if (it.notification.id == change.id) it.copy(read = change.read) else it
+                    }.distinctBy { it.notification.id }.sortedByDescending { it.notification.deliveredAt },
+                )
+            }
+            clearUndo(change)
+        } catch (problem: NotificationProblem) {
+            mutable.value = state.value.copy(error = problem.reason)
+        }
+    }
+
+    fun clearUndo(change: NotificationUndo) {
+        if (state.value.undo == change) mutable.value = state.value.copy(undo = null, removedItem = null)
     }
 
     fun markAllRead() {

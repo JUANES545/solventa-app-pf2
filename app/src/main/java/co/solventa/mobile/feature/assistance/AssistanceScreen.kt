@@ -1,9 +1,6 @@
 package co.solventa.mobile.feature.assistance
 
-import android.Manifest
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
@@ -25,10 +22,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
@@ -39,7 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import co.solventa.mobile.R
 import co.solventa.mobile.core.designsystem.SolventaLayout
-import co.solventa.mobile.core.location.hasLocationPermission
+import co.solventa.mobile.core.location.LocationPermission
 import co.solventa.mobile.core.ui.SolventaPage
 import co.solventa.mobile.core.ui.SolventaScreenHeader
 import co.solventa.mobile.core.ui.SolventaSkeletonList
@@ -56,27 +55,33 @@ internal fun AssistanceScreen(
 ) {
     val state by model.state.collectAsState()
     if (!state.open) return
-    val context = LocalContext.current
-    val permissions = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions(),
-    ) {
-        if (hasLocationPermission(context)) model.locate() else model.permissionDenied()
-    }
+    var permissionRequest by remember { mutableStateOf<AssistanceState?>(null) }
     AssistanceContent(
         state = state,
         onClose = onClose,
         onBack = model::back,
         onLocate = {
-            if (hasLocationPermission(context)) model.locate()
-            else permissions.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
+            permissionRequest = model.state.value.takeIf { it.step == AssistanceStep.LOCATION && !it.busy }
         },
-        onManualOption = model::permissionDenied,
+        onManualOption = model::chooseManualLocation,
         onManualInput = model::manualInput,
         onSearch = model::useManualLocation,
         onSelect = model::select,
         onRetryProviders = model::retryProviders,
         onSubmit = model::submit,
     )
+    permissionRequest?.takeIf { it === state }?.let { requested ->
+        LocationPermission(
+            onGranted = {
+                permissionRequest = null
+                if (model.state.value === requested) model.locate()
+            },
+            onCancel = {
+                permissionRequest = null
+                if (model.state.value === requested) model.permissionDenied()
+            },
+        )
+    }
 }
 
 @Composable
@@ -100,6 +105,8 @@ internal fun AssistanceContent(
         }
     }
     SolventaPage(
+        onRefresh = if (state.step == AssistanceStep.PROVIDERS) onRetryProviders else null,
+        isRefreshing = state.busy,
         headerAlignment = Alignment.Start,
         header = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -129,7 +136,7 @@ internal fun AssistanceContent(
                     .semantics { liveRegion = LiveRegionMode.Assertive },
             )
         }
-        if (state.busy && (state.step != AssistanceStep.PROVIDERS || state.providers.isNotEmpty())) {
+        if (state.busy && state.step != AssistanceStep.PROVIDERS) {
             CircularProgressIndicator(Modifier.testTag("assistance-loading"))
             Text(stringResource(when (state.step) {
                 AssistanceStep.PROVIDERS -> R.string.operational_refreshing
@@ -190,9 +197,6 @@ internal fun AssistanceContent(
                     modifier = Modifier.semantics { heading() },
                     style = MaterialTheme.typography.titleLarge,
                 )
-                if (!state.busy && state.providers.isNotEmpty() && state.error != null) {
-                    Text(stringResource(R.string.operational_refresh_failed))
-                }
                 if (state.busy && state.providers.isEmpty()) {
                     SolventaSkeletonList(stringResource(R.string.operational_loading_providers))
                 } else if (initialLoadError) {
@@ -207,26 +211,21 @@ internal fun AssistanceContent(
                     }
                 }
                 state.providers.forEach { provider ->
-                    Card(
-                        onClick = { onSelect(provider) },
-                        enabled = !state.busy,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                        modifier = Modifier.fillMaxWidth().testTag("assistance-provider-${provider.id}"),
-                    ) {
-                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(provider.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                            Text(provider.serviceType.replace('_', ' '), style = MaterialTheme.typography.bodyMedium)
-                            Text(stringResource(R.string.assistance_distance, provider.approximateDistanceKm),
-                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    co.solventa.mobile.core.ui.SolventaRefreshing(state.busy) {
+                        Card(
+                            onClick = { onSelect(provider) },
+                            enabled = !state.busy,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                            modifier = Modifier.fillMaxWidth().testTag("assistance-provider-${provider.id}"),
+                        ) {
+                            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(provider.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                                Text(provider.serviceType.replace('_', ' '), style = MaterialTheme.typography.bodyMedium)
+                                Text(stringResource(R.string.assistance_distance, provider.approximateDistanceKm),
+                                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
-                }
-                TextButton(
-                    onClick = onRetryProviders,
-                    enabled = !state.busy,
-                    modifier = Modifier.heightIn(min = SolventaLayout.controlHeight).testTag("assistance-retry-providers"),
-                ) {
-                    Text(stringResource(R.string.assistance_retry), textAlign = TextAlign.Center)
                 }
             }
             AssistanceStep.CONFIRMATION -> {

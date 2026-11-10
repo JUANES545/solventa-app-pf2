@@ -1,32 +1,26 @@
 package co.solventa.mobile.feature.photo
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.widget.Toast
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.window.SecureFlagPolicy
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
 import co.solventa.mobile.BuildConfig
 import co.solventa.mobile.core.designsystem.SolventaTheme
+import co.solventa.mobile.core.ui.CameraPermission
 import co.solventa.mobile.feature.auth.AuthViewModel
 import co.solventa.mobile.feature.auth.AccessScreen
 
@@ -88,8 +82,10 @@ internal fun PhotoReviewHost(
                     camera(model, state)
                 }
             }
-            if (state.step == PhotoStep.PERMISSION) key(state.generation) {
-                CameraPermission(state.generation, model::permissionResult)
+            if (state.step == PhotoStep.PERMISSION) {
+                CameraPermission(state.generation,
+                    onGranted = { model.permissionResult(state.generation, true) },
+                    onCancel = { model.permissionResult(state.generation, false) })
             }
         }
     }
@@ -108,20 +104,5 @@ internal fun PhotoReviewDialog(onClose: () -> Unit, content: @Composable () -> U
             provider.window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
         }
         content()
-    }
-}
-
-@Composable
-private fun CameraPermission(generation: Long, onResult: (Long, Boolean) -> Unit) {
-    val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        onResult(generation, it)
-    }
-    LaunchedEffect(generation) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            onResult(generation, true)
-        } else {
-            launcher.launch(Manifest.permission.CAMERA)
-        }
     }
 }

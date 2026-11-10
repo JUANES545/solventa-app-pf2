@@ -58,6 +58,13 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
         (0 until entries.length()).map { uuid(entries.getJSONObject(it).getString("id")) }.toSet()
     }
 
+    suspend fun removeDemoConfirmed(scope: EvidenceScope, remoteId: String) {
+        check(BuildConfig.BUILD_TYPE == "mock")
+        session(scope.actorId) { grant ->
+            request("DELETE", "/siniestros/${uuid(scope.claimId)}/evidencias/${uuid(remoteId)}", grant.accessToken)
+        }
+    }
+
     fun transport(store: EvidenceStore, configuration: EvidenceConfiguration): EvidenceTransport = object : EvidenceTransport {
         override suspend fun cancel(item: EvidenceItem): EvidenceReceipt? = session(item.scope.actorId) { grant ->
             val load = try {

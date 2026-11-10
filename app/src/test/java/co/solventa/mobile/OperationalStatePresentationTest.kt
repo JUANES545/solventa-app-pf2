@@ -35,10 +35,116 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
+@OptIn(ExperimentalTestApi::class)
 @Config(application = Application::class, sdk = [35], qualifiers = "w320dp-h640dp")
 class OperationalStatePresentationTest {
     @get:Rule val compose = createComposeRule()
     private val app get() = RuntimeEnvironment.getApplication()
+
+    @Test fun evidenceActionsKeepDurationButRemoveTechnicalCaptionsAndInlineLocationErrors() {
+        var choices = 0
+        val state = EvidenceState(open = true, scope = EvidenceScope("actor", "claim"),
+            policy = EvidencePolicy(5, EvidenceKind.entries.associateWith { 10_485_760L }, 60_000),
+            error = EvidenceError.LOCATION)
+        compose.setContent {
+            SolventaTheme(false) {
+                EvidenceContent(state, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+                    onChoosePhoto = { choices++ })
+            }
+        }
+        compose.onAllNodesWithText("bytes", substring = true).assertCountEquals(0)
+        compose.onNodeWithText(app.getString(R.string.evidence_error_location)).assertDoesNotExist()
+        compose.onNodeWithText(app.getString(R.string.evidence_video_limit, 60)).assertDoesNotExist()
+        compose.onNodeWithTag("choose-evidence-photo").assertDoesNotExist()
+        compose.onNodeWithText(app.getString(R.string.evidence_gallery_photo)).performScrollTo().performClick()
+        compose.onNodeWithTag("evidence-source-camera").assertIsDisplayed()
+        compose.onNodeWithTag("evidence-source-file").assertHeightIsAtLeast(48.dp).performClick()
+        assertEquals(1, choices)
+    }
+
+    @Test fun refreshingDoesNotMoveOrResizeTheClaimCard() {
+        val busy = mutableStateOf(false)
+        val claim = EvidenceClaim("stable-card", "Choque", "2026-11-09T15:00:00Z", "Daño lateral.")
+        compose.setContent {
+            SolventaTheme(false) {
+                SolventaPage {
+                    ClaimCard(claim, null, busy.value, listOf(claim)) {}
+                }
+            }
+        }
+        val card = compose.onNodeWithTag("claim-${claim.id}")
+        val bounds = card.getUnclippedBoundsInRoot()
+        compose.runOnIdle { busy.value = true }
+        assertEquals(bounds, card.getUnclippedBoundsInRoot())
+        card.assertIsNotEnabled()
+        compose.onNodeWithContentDescription(app.getString(R.string.ui_refreshing)).assertIsDisplayed()
+        compose.runOnIdle { busy.value = false }
+        assertEquals(bounds, card.getUnclippedBoundsInRoot())
+        card.assertIsEnabled()
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun reviewShowsThePhotoFirstAndRequiresApplyingOrCancellingAnExplicitCrop() {
+        val bitmap = android.graphics.Bitmap.createBitmap(96, 64, android.graphics.Bitmap.Config.ARGB_8888)
+        val state = EvidenceState(open = true, step = EvidenceStep.REVIEW, scope = EvidenceScope("actor", "claim"),
+            policy = EvidencePolicy(5, mapOf(EvidenceKind.PHOTO to 100_000L), 0),
+            draft = EvidenceDraft(java.io.File("unused.jpg"), EvidenceKind.PHOTO, Instant.now(), 0),
+            preview = EvidencePreview(bitmap))
+        var applied: EvidenceCrop? = null
+        compose.setContent {
+            SolventaTheme(false) {
+                EvidenceContent(state, {}, {}, {}, {}, {}, {}, { applied = it }, {}, {}, {}, {},
+                    camera = {}, locationChoice = { EvidenceLocationChoice(state, false, {}) })
+            }
+        }
+        compose.onNodeWithText(app.getString(R.string.evidence_crop_left)).assertDoesNotExist()
+        val photo = compose.onNodeWithContentDescription(app.getString(R.string.evidence_review)).getUnclippedBoundsInRoot()
+        val edit = compose.onNodeWithText(app.getString(R.string.evidence_edit_crop)).getUnclippedBoundsInRoot()
+        assertTrue("Crop action must not cover the photo", edit.top >= photo.bottom)
+        compose.onNodeWithText(app.getString(R.string.evidence_gallery_attach)).performScrollTo().assertIsEnabled()
+        compose.onNodeWithContentDescription(app.getString(R.string.evidence_location))
+            .performScrollTo().assertIsOff().assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithTag("continue-with-location").assertDoesNotExist()
+        compose.onNodeWithText(app.getString(R.string.evidence_edit_crop)).performScrollTo().performClick()
+        compose.onNodeWithContentDescription(app.getString(R.string.evidence_crop_left)).performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(.2f) }
+        compose.onNodeWithText(app.getString(R.string.evidence_gallery_attach)).performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText(app.getString(R.string.evidence_crop)).performScrollTo().performClick()
+        assertEquals(.2f, checkNotNull(applied).left)
+        compose.onNodeWithText(app.getString(R.string.evidence_cancel_crop)).performScrollTo().performClick()
+        compose.onNodeWithText(app.getString(R.string.evidence_crop_left)).assertDoesNotExist()
+        compose.onNodeWithText(app.getString(R.string.evidence_gallery_attach)).performScrollTo().assertIsEnabled()
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun photoThumbnailsCannotCarryOverToAnotherAccountAndCorruptionIsExplicit() {
+        val scope = EvidenceScope(UUID.randomUUID().toString(), UUID.randomUUID().toString())
+        val current = mutableStateOf(scope)
+        val source = java.io.File.createTempFile("thumbnail-test-", ".jpg", app.cacheDir)
+        val bitmap = android.graphics.Bitmap.createBitmap(96, 64, android.graphics.Bitmap.Config.ARGB_8888)
+        source.outputStream().use { assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, it)) }
+        bitmap.recycle()
+        val store = EvidenceStore(app.noBackupFilesDir)
+        val item = store.enqueue(scope, EvidenceKind.PHOTO, source, Instant.now(), null, 0,
+            EvidencePolicy(5, mapOf(EvidenceKind.PHOTO to 100_000L), 0), emptySet())
+        try {
+            compose.setContent { SolventaTheme(false) { EvidenceThumbnail(current.value) } }
+            compose.waitUntil(5_000) { compose.onAllNodesWithTag("evidence-thumbnail").fetchSemanticsNodes().isNotEmpty() }
+            compose.runOnIdle { current.value = scope.copy(actorId = UUID.randomUUID().toString()) }
+            compose.onNodeWithTag("evidence-thumbnail").assertDoesNotExist()
+            store.file(item).writeBytes(byteArrayOf(1, 2, 3))
+            compose.runOnIdle { current.value = scope }
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithText(app.getString(R.string.evidence_preview_unavailable)).fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithTag("evidence-thumbnail").assertDoesNotExist()
+        } finally {
+            store.reject(item, EvidenceError.STORAGE)
+            store.removeRejected(item)
+            store.close()
+            assertTrue(source.delete())
+        }
+    }
 
     @Test fun loadingAndFailedPoliciesDoNotLookLikeAnEmptyResult() {
         val state = mutableStateOf(ClaimState(busy = true, loadingPolicies = true, cachedPolicies = false))
@@ -47,7 +153,6 @@ class OperationalStatePresentationTest {
         }
         compose.onNodeWithContentDescription(app.getString(R.string.operational_loading_policies))
             .performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(app.getString(R.string.claim_processing)).assertDoesNotExist()
         compose.onNodeWithText(app.getString(R.string.claim_no_policies)).assertDoesNotExist()
         compose.runOnIdle { state.value = state.value.copy(busy = false, loadingPolicies = false, error = ClaimError.NETWORK) }
         compose.onNodeWithContentDescription(app.getString(R.string.operational_loading_policies)).assertDoesNotExist()
@@ -70,8 +175,7 @@ class OperationalStatePresentationTest {
         }
         compose.onNodeWithText(app.getString(R.string.assistance_error_network)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("assistance-empty").assertDoesNotExist()
-        compose.onNodeWithTag("assistance-retry-providers").performScrollTo()
-            .assertHeightIsAtLeast(48.dp).performClick()
+        compose.onNodeWithTag("page-refresh").performCustomAccessibilityActionWithLabel("Actualizar")
         compose.runOnIdle { assertEquals(1, retries); state.value = state.value.copy(error = null) }
         compose.onNodeWithTag("assistance-empty").performScrollTo().assertIsDisplayed()
     }
@@ -87,14 +191,16 @@ class OperationalStatePresentationTest {
             SolventaTheme(false) {
                 NotificationScreen(
                     NotificationUiState(busy = true, loadingNotifications = true, items = listOf(NotificationItem(notification, false))),
-                    {}, {}, {}, {}, {}, {},
+                    {}, {}, {}, {}, {},
                 )
             }
         }
-        compose.onNodeWithText(app.getString(R.string.operational_refreshing)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription(app.getString(R.string.ui_refreshing)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(R.string.operational_refreshing)).assertDoesNotExist()
         compose.onNodeWithContentDescription(app.getString(R.string.notification_loading)).assertDoesNotExist()
         compose.onNodeWithText(notification.title).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(app.getString(R.string.notification_refresh)).performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText(app.getString(R.string.notification_refresh)).assertDoesNotExist()
+        assertTrue(compose.onNodeWithTag("page-refresh").fetchSemanticsNode().config[SemanticsActions.CustomActions].isEmpty())
         compose.onNodeWithText(app.getString(R.string.notification_empty)).assertDoesNotExist()
     }
 
@@ -140,7 +246,6 @@ class OperationalStatePresentationTest {
         compose.setContent {
             SolventaTheme(false) { ClaimScreen(ClaimState(busy = true), {}, {}, {}, {}, {}, {}) }
         }
-        compose.onNodeWithText(app.getString(R.string.claim_processing)).assertIsDisplayed()
         compose.onNodeWithContentDescription(app.getString(R.string.operational_loading_policies)).assertDoesNotExist()
         compose.onNodeWithText(app.getString(R.string.claim_submit)).performScrollTo().assertIsNotEnabled()
     }
@@ -148,7 +253,7 @@ class OperationalStatePresentationTest {
     @Test fun notificationQueryEmptyFailureAndPermissionSaveHaveDifferentFeedback() {
         val state = mutableStateOf(NotificationUiState(busy = true, loadingNotifications = true))
         compose.setContent {
-            SolventaTheme(true) { NotificationScreen(state.value, {}, {}, {}, {}, {}, {}) }
+            SolventaTheme(true) { NotificationScreen(state.value, {}, {}, {}, {}, {}) }
         }
         val loading = app.getString(R.string.notification_loading)
         val empty = app.getString(R.string.notification_empty)
@@ -234,9 +339,13 @@ class OperationalStatePresentationTest {
         }
         compose.onNodeWithTag("claim-${claim.id}").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithContentDescription(loading).assertDoesNotExist()
-        compose.onNodeWithText(app.getString(R.string.operational_refreshing)).performScrollTo().assertIsDisplayed()
-        compose.runOnIdle { state.value = state.value.copy(loadingClaims = false) }
-        compose.onNodeWithText(app.getString(R.string.evidence_loading)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription(app.getString(R.string.ui_refreshing)).performScrollTo().assertIsDisplayed()
+        compose.runOnIdle {
+            state.value = state.value.copy(loadingClaims = false, scope = EvidenceScope("actor", claim.id),
+                policy = EvidencePolicy(5, mapOf(EvidenceKind.PHOTO to 100_000L), 0))
+        }
+        compose.onNodeWithContentDescription(app.getString(R.string.ui_refreshing)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(R.string.evidence_loading)).assertDoesNotExist()
         compose.onNodeWithContentDescription(loading).assertDoesNotExist()
     }
 
@@ -250,7 +359,7 @@ class OperationalStatePresentationTest {
         }
         compose.onNodeWithText(app.getString(R.string.claim_status_reviewing)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription(app.getString(R.string.claim_status_loading)).assertDoesNotExist()
-        compose.onNodeWithText(app.getString(R.string.operational_refreshing)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription(app.getString(R.string.ui_refreshing)).performScrollTo().assertIsDisplayed()
         val displayDate = app.getString(R.string.operational_date_device_zone, claimStatusDate(date), ZoneId.systemDefault().id)
         compose.onNodeWithText(app.getString(R.string.claim_status_updated, displayDate)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(date.toString(), substring = true).assertDoesNotExist()
@@ -258,7 +367,7 @@ class OperationalStatePresentationTest {
         compose.onNodeWithText("${app.getString(R.string.operational_updated_instant)}: $date")
             .performScrollTo().assertIsDisplayed()
         compose.runOnIdle { state.value = state.value.copy(busy = false, error = ClaimStatusError.NETWORK) }
-        compose.onNodeWithText(app.getString(R.string.operational_refresh_failed)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(R.string.claim_status_network)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(app.getString(R.string.claim_status_reviewing)).performScrollTo().assertIsDisplayed()
     }
 
@@ -269,12 +378,16 @@ class OperationalStatePresentationTest {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
                 SolventaTheme(false) {
                     Box(Modifier.requiredSize(320.dp, 480.dp)) {
-                        ClaimScreen(ClaimState(editing = false), {}, {}, {}, {}, {}, {})
+                        AssistanceContent(AssistanceState(open = true, step = AssistanceStep.CONFIRMATION,
+                            error = AssistanceError.NETWORK, claimId = "11111111-1111-4111-8111-111111111101",
+                            selected = AssistanceProvider("11111111-1111-4111-8111-111111111102", "Taller", "asistencia_vial", 2.4),
+                            location = AssistanceLocation(4.6, -74.0, AssistanceLocationOrigin.MANUAL, Instant.EPOCH)),
+                            {}, {}, {}, {}, { _, _ -> }, {}, {}, {}, {})
                     }
                 }
             }
         }
-        val label = app.getString(R.string.claim_retry)
+        val label = app.getString(R.string.assistance_retry_same)
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithText(label, useUnmergedTree = true)
             .performScrollTo()
@@ -305,7 +418,7 @@ class OperationalStatePresentationTest {
         }
     }
 
-    @Test fun identicalRowsHaveDifferentVisibleReferencesAndFullLocalDetails() {
+    @Test fun identicalRowsKeepDifferentReferencesWithoutExposingTechnicalDetails() {
         val first = EvidenceClaim("11111111-1111-4111-8111-111111111111",
             "Daño en el vehículo", "2026-11-09T15:00:00Z", "Daño en la puerta.")
         val second = first.copy(id = "11111111-2111-4111-8111-111111111111")
@@ -320,8 +433,7 @@ class OperationalStatePresentationTest {
                 operationalReference(reference, peers)), substring = true).performScrollTo().assertIsDisplayed()
         }
         compose.onNodeWithText(app.getString(R.string.ui_reference, second.id)).assertDoesNotExist()
-        compose.onAllNodesWithText(app.getString(R.string.ui_show_details)).onLast().performScrollTo().performClick()
-        compose.onNodeWithText(app.getString(R.string.ui_reference, second.id)).performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText(app.getString(R.string.ui_show_details)).assertCountEquals(0)
     }
 
     @Test fun assistanceKeepsAuthorizedContextAndFullReceiptOnlyInExpandedDetails() {

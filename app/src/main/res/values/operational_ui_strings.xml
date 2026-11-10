@@ -1,5 +1,4 @@
 <resources>
-    <string name="claim_history_title">Tus reportes</string>
     <string name="claim_event_section">Datos del evento</string>
     <string name="claim_policy_reference">Póliza: %1$s</string>
     <string name="claim_policy_validity">Vigencia: %1$s a %2$s</string>

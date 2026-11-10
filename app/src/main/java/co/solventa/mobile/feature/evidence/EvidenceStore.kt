@@ -169,6 +169,28 @@ internal class EvidenceStore(noBackupDirectory: File, private val now: () -> Ins
     }
 
     @Synchronized
+    fun removePending(item: EvidenceItem) {
+        val stored = list(item.scope).single { it.id == item.id }
+        require(stored.status == EvidenceStatus.PENDING && stored.remoteId == null)
+        removeFileAndRow(stored)
+    }
+
+    @Synchronized
+    fun removeDemoConfirmed(item: EvidenceItem) {
+        check(co.solventa.mobile.BuildConfig.BUILD_TYPE == "mock")
+        val stored = list(item.scope).single { it.id == item.id }
+        require(stored.status == EvidenceStatus.CONFIRMED && stored.remoteId == item.remoteId)
+        removeFileAndRow(stored)
+    }
+
+    private fun removeFileAndRow(item: EvidenceItem) {
+        val file = File(directory, "${item.id}.${item.kind.extension}")
+        if (file.exists() && !file.delete()) throw IOException("Evidence cleanup failed")
+        check(database.delete("evidence", "id=? AND actor=? AND claim_id=?",
+            arrayOf(item.id, item.scope.actorId, item.scope.claimId)) == 1)
+    }
+
+    @Synchronized
     fun uploadId(item: EvidenceItem): String? = database.rawQuery(
         "SELECT upload_id FROM evidence WHERE id=? AND actor=? AND claim_id=?",
         arrayOf(item.id, item.scope.actorId, item.scope.claimId),

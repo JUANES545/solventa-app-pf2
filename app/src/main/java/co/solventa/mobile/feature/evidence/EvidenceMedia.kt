@@ -13,6 +13,7 @@ import java.nio.ByteBuffer
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -38,6 +39,32 @@ internal class EvidenceMedia(cacheDirectory: File) {
         if (file.exists() && !file.delete()) throw IOException("Evidence draft cleanup failed")
     }
 
+    fun importPhoto(input: InputStream, policy: EvidencePolicy): File = importFile(input, EvidenceKind.PHOTO, policy)
+
+    fun importFile(input: InputStream, kind: EvidenceKind, policy: EvidencePolicy): File {
+        val limit = policy.maxBytes[kind] ?: throw EvidenceProblem(EvidenceError.FORMAT)
+        val target = create(kind)
+        try {
+            target.outputStream().use { output ->
+                val buffer = ByteArray(64 * 1024)
+                var size = 0L
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    size += count
+                    if (size > limit) throw EvidenceProblem(EvidenceError.SIZE)
+                    output.write(buffer, 0, count)
+                }
+            }
+            inspect(target, kind, policy).bitmap?.recycle()
+            if (kind == EvidenceKind.VIDEO) stripVideoMetadata(target, policy)
+            return target
+        } catch (error: Exception) {
+            delete(target)
+            throw error
+        }
+    }
+
     fun inspect(file: File, kind: EvidenceKind, policy: EvidencePolicy): EvidencePreview {
         require(file.parentFile == directory)
         if (!file.isFile || file.length() !in 1..(policy.maxBytes[kind] ?: 0)) throw EvidenceProblem(EvidenceError.SIZE)
@@ -52,6 +79,11 @@ internal class EvidenceMedia(cacheDirectory: File) {
                 val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
                 if (retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE) != "video/mp4" ||
                     retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) != "yes") {
+                    throw EvidenceProblem(EvidenceError.FORMAT)
+                }
+                val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toLongOrNull() ?: 0
+                val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toLongOrNull() ?: 0
+                if (width <= 0 || height <= 0 || width > 16_000_000L / height) {
                     throw EvidenceProblem(EvidenceError.FORMAT)
                 }
                 policy.validate(kind, file.length(), duration)
@@ -155,7 +187,7 @@ internal class EvidenceMedia(cacheDirectory: File) {
         }
     }
 
-    private fun image(file: File, maxEdge: Int): Bitmap {
+    internal fun image(file: File, maxEdge: Int): Bitmap {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         file.inputStream().use { BitmapFactory.decodeStream(it, null, bounds) }
         // Bound native allocations independently of the server's byte limit.

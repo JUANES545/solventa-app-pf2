@@ -1,0 +1,4 @@
+<resources>
+    <string name="claim_sample_description" translatable="false">El vehículo recibió un golpe en el costado derecho. La puerta y el guardabarros presentan daños visibles. Adjunto fotografías para su revisión.</string>
+    <string name="mock_app_name">Solventa Flujos</string>
+</resources>

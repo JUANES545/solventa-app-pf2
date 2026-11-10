@@ -27,6 +27,25 @@ class NotificationStoreTest {
         assertEquals(setOf(notificationId), restored.read(actor))
     }
 
+    @Test
+    fun discardAndReadPersistPerActorAndStaleUndoCannotOverwriteANewerAction() {
+        val store = AndroidNotificationStore(context)
+        val other = "22222222-2222-4222-8222-222222222222"
+        val removed = store.change(actor, notificationId, discarded = true)
+        val restored = AndroidNotificationStore(context)
+        assertEquals(setOf(notificationId), restored.discarded(actor))
+        assertTrue(restored.discarded(other).isEmpty())
+        restored.change(other, notificationId, discarded = true)
+        assertTrue(!restored.undo(other, removed))
+        assertTrue(restored.undo(actor, removed))
+        assertTrue(restored.discarded(actor).isEmpty())
+        val read = restored.change(actor, notificationId, read = true)
+        restored.markAllRead(actor, setOf(notificationId))
+        assertTrue(!restored.undo(actor, read))
+        assertEquals(setOf(notificationId), restored.read(actor))
+        assertTrue(restored.read(other).isEmpty())
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun invalidActorCannotCreateAnUnscopedPreferenceKey() {
         AndroidNotificationStore(context).recordSeen("../otro", setOf(notificationId))
