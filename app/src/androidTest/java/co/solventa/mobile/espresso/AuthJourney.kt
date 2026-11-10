@@ -99,7 +99,7 @@ abstract class AuthJourney {
             throw failure
         }
         compose.waitUntil(20_000) {
-            listOf(R.string.sign_in, R.string.sign_out).any {
+            listOf(R.string.sign_in, R.string.home_title).any {
                 compose.onAllNodesWithText(text(it)).fetchSemanticsNodes().isNotEmpty()
             }
         }
@@ -137,6 +137,14 @@ abstract class AuthJourney {
     }
 
     protected fun text(id: Int) = context.getString(id)
+
+    protected fun openAccount() {
+        compose.waitUntil(20_000) {
+            compose.onAllNodesWithText(text(R.string.account_title)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription(text(R.string.account_title)).performClick()
+        awaitText(R.string.sign_out)
+    }
 
     protected fun awaitText(id: Int) {
         compose.waitUntil(20_000) {

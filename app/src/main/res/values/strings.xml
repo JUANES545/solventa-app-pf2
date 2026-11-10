@@ -21,6 +21,8 @@
     <string name="biometric_confirm_body">Usa la huella o rostro de este teléfono.</string>
     <string name="biometric_login">Ingresar con biometría</string>
     <string name="biometric_enable">Habilitar acceso biométrico</string>
+    <string name="biometric_enrollment_title">Acceso biométrico</string>
+    <string name="biometric_enable_confirm">Habilitar</string>
     <string name="biometric_manage">Ver credenciales</string>
     <string name="biometric_current_password">Contraseña actual</string>
     <string name="biometric_enrollment_consent">Autorizas la huella o rostro de este teléfono para entrar a tu cuenta. Android no distingue quién usa la biometría registrada. Confirma tu contraseña para vincular el acceso. No verifica tu identidad civil.</string>

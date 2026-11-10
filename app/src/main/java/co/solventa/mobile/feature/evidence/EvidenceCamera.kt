@@ -2,8 +2,7 @@ package co.solventa.mobile.feature.evidence
 
 import android.Manifest
 import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraInfoUnavailableException
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -19,26 +18,42 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import co.solventa.mobile.R
+import co.solventa.mobile.core.designsystem.SolventaLayout
+import co.solventa.mobile.core.ui.CameraPermission
 import java.util.concurrent.ExecutionException
 
 @Composable
@@ -50,12 +65,12 @@ internal fun EvidenceCamera(model: EvidenceViewModel, state: EvidenceState) {
     var permitted by remember(generation) {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        permitted = granted
-        if (!granted) model.cameraFailed(null, generation, EvidenceError.PERMISSION)
+    if (!permitted) {
+        CameraPermission(generation, onGranted = { permitted = true }, onCancel = {
+            if (model.state.value.generation == generation) model.back()
+        })
+        return
     }
-    LaunchedEffect(generation) { if (!permitted) permission.launch(Manifest.permission.CAMERA) }
-    if (!permitted) return
 
     val video = state.kind == EvidenceKind.VIDEO
     val view = remember(generation) { PreviewView(context).apply {
@@ -71,20 +86,37 @@ internal fun EvidenceCamera(model: EvidenceViewModel, state: EvidenceState) {
     val capture = remember(generation) { VideoCapture.withOutput(recorder) }
     var recording by remember(generation) { mutableStateOf<Recording?>(null) }
     var ready by remember(generation) { mutableStateOf(false) }
+    var front by remember(generation) { mutableStateOf(false) }
+    var canSwitch by remember(generation) { mutableStateOf(false) }
     var seconds by remember(generation) { mutableLongStateOf(0) }
     val executor = ContextCompat.getMainExecutor(context)
-    DisposableEffect(generation, owner) {
+    DisposableEffect(generation, owner, front) {
+        ready = false
         var disposed = false
         var provider: ProcessCameraProvider? = null
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             if (!disposed) try {
-                provider = future.get().also {
-                    preview.setSurfaceProvider(view.surfaceProvider)
-                    if (video) it.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture)
-                    else it.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, photo)
-                    ready = true
+                val cameraProvider = future.get()
+                provider = cameraProvider
+                val hasBack = cameraProvider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
+                val hasFront = cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
+                canSwitch = hasBack && hasFront
+                val selector = when {
+                    front && hasFront -> CameraSelector.DEFAULT_FRONT_CAMERA
+                    hasBack -> CameraSelector.DEFAULT_BACK_CAMERA
+                    hasFront -> CameraSelector.DEFAULT_FRONT_CAMERA
+                    else -> {
+                        model.cameraFailed(null, generation)
+                        return@addListener
+                    }
                 }
+                preview.setSurfaceProvider(view.surfaceProvider)
+                if (video) cameraProvider.bindToLifecycle(owner, selector, preview, capture)
+                else cameraProvider.bindToLifecycle(owner, selector, preview, photo)
+                ready = true
+            } catch (_: CameraInfoUnavailableException) {
+                model.cameraFailed(null, generation)
             } catch (_: ExecutionException) {
                 model.cameraFailed(null, generation)
             } catch (_: SecurityException) {
@@ -105,17 +137,43 @@ internal fun EvidenceCamera(model: EvidenceViewModel, state: EvidenceState) {
             provider?.unbind(preview, photo, capture)
         }
     }
-    AndroidView(factory = { view }, modifier = Modifier.fillMaxWidth().height(300.dp))
+    Box(Modifier.fillMaxWidth().height(300.dp)) {
+        AndroidView(factory = { view }, modifier = Modifier.matchParentSize())
+        if (canSwitch) FilledIconButton(
+            onClick = {
+                val current = model.state.value
+                if (ready && recording == null && current.generation == generation &&
+                    current.step == EvidenceStep.CAMERA && !current.busy) {
+                    ready = false
+                    front = !front
+                }
+            },
+            enabled = ready && !state.busy && state.step == EvidenceStep.CAMERA && recording == null,
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface),
+            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(48.dp)
+                .testTag("evidence-switch-camera"),
+        ) {
+            Icon(painterResource(R.drawable.camera_switch),
+                stringResource(if (front) R.string.evidence_camera_back else R.string.evidence_camera_front))
+        }
+    }
+    if (!ready) {
+        CircularProgressIndicator()
+        Text(stringResource(R.string.evidence_capture_wait), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    }
     if (state.kind == EvidenceKind.DOCUMENT) Text(stringResource(R.string.evidence_document_guide))
     if (video) Text(stringResource(R.string.evidence_video_silent))
     if (recording != null) Text(stringResource(R.string.evidence_recording, seconds))
     Button(enabled = ready && !state.busy && (state.step == EvidenceStep.CAMERA || recording != null),
+        modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight),
         onClick = {
             val active = recording
             if (active != null) {
                 active.stop()
                 recording = null
-            } else {
+            } else if (ready) {
                 val draft = model.beginCapture()
                 if (draft != null) {
                     try {

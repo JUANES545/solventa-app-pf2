@@ -19,8 +19,10 @@ import co.solventa.mobile.R
 import co.solventa.mobile.core.SyncResult
 import co.solventa.mobile.core.designsystem.SolventaTheme
 import co.solventa.mobile.feature.evidence.*
+import co.solventa.mobile.feature.claim.claimStatusDate
 import java.io.File
 import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
 import org.junit.Assert.*
 import org.junit.Rule
@@ -90,9 +92,24 @@ class OfflineQueueDeviceTest {
             }
             compose.waitUntil(15_000) { !models.value.state.value.busy }
             assertEquals(saved, models.value.state.value.items)
-            compose.onAllNodesWithText(context.getString(R.string.sync_queued_at, queuedAt.toString())).assertCountEquals(2)
-            compose.onAllNodesWithText("Último resultado observado en el dispositivo:", substring = true).assertCountEquals(2)
-            compose.onNodeWithText(context.getString(R.string.sync_server_result_at, queuedAt.plusSeconds(10).toString()))
+            for (item in saved) {
+                val localDate = context.getString(R.string.operational_date_device_zone,
+                    claimStatusDate(item.capturedAt), ZoneId.systemDefault().id)
+                compose.onNodeWithText(context.getString(R.string.operational_captured_date, localDate))
+                    .performScrollTo().assertIsDisplayed()
+            }
+            compose.onAllNodesWithText(context.getString(R.string.ui_show_details)).assertCountEquals(2)
+            repeat(2) {
+                compose.onAllNodesWithText(context.getString(R.string.ui_show_details))[0]
+                    .performScrollTo().performClick()
+            }
+            compose.onAllNodesWithText("${context.getString(R.string.operational_queued_instant)}: $queuedAt")
+                .assertCountEquals(2)
+            for ((observedAt, items) in saved.groupBy { it.lastResultAt }) {
+                compose.onAllNodesWithText("${context.getString(R.string.operational_observed_instant)}: $observedAt")
+                    .assertCountEquals(items.size)
+            }
+            compose.onNodeWithText("${context.getString(R.string.operational_server_instant)}: ${queuedAt.plusSeconds(10)}")
                 .performScrollTo().assertIsDisplayed()
             compose.onNodeWithText(context.getString(R.string.sync_conflict), substring = true).performScrollTo().assertIsDisplayed()
             compose.onNodeWithText(context.getString(R.string.sync_error_conflict)).performScrollTo().assertIsDisplayed()
@@ -104,7 +121,7 @@ class OfflineQueueDeviceTest {
             }
             compose.onNodeWithText(context.getString(R.string.evidence_confirmed), substring = true).performScrollTo().assertIsDisplayed()
             compose.onNodeWithText(context.getString(R.string.evidence_error_network)).assertDoesNotExist()
-            compose.onNodeWithText(context.getString(R.string.evidence_retry)).performScrollTo().assertIsNotEnabled()
+            compose.onNodeWithText(context.getString(R.string.evidence_retry)).assertDoesNotExist()
             assertEquals(1, uploads)
             assertEquals(listOf(original[0].id, original[1].id, original[1].id), lookups)
             EvidenceStore(directory).use { store ->
@@ -122,7 +139,7 @@ class OfflineQueueDeviceTest {
                 models.value = newModel().also { it.open(scope, policy, emptySet()) }
             }
             compose.waitUntil(15_000) { !models.value.state.value.busy }
-            compose.onNodeWithText(context.getString(R.string.evidence_retry)).performScrollTo().assertIsNotEnabled()
+            compose.onNodeWithText(context.getString(R.string.evidence_retry)).assertDoesNotExist()
             assertEquals(EvidenceStatus.CONFLICT, models.value.state.value.items.first().status)
         } finally {
             compose.runOnUiThread { clearModel() }

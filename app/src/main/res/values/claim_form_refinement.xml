@@ -1,0 +1,15 @@
+<resources>
+    <string name="ui_choose_date">Elegir fecha</string>
+    <string name="ui_choose_time">Elegir hora</string>
+    <string name="ui_choose_confirm">Aceptar</string>
+    <string name="ui_choose_cancel">Cancelar</string>
+    <string name="ui_time_keyboard">Escribir hora</string>
+    <string name="ui_time_dial">Usar reloj</string>
+    <string name="claim_use_location">Usar ubicación actual</string>
+    <string name="claim_locating">Buscando ubicación</string>
+    <string name="claim_location_failed">No encontramos tu ubicación. Revisa el GPS o escribe la dirección.</string>
+    <string name="claim_location_coordinates">Sin dirección disponible. Revisa las coordenadas.</string>
+    <string name="claim_location_address_kept">Sin dirección disponible. Conservamos tu texto.</string>
+    <string name="claim_place_hint">Dirección o lugar donde ocurrió</string>
+    <string name="claim_sample_description" translatable="false"></string>
+</resources>

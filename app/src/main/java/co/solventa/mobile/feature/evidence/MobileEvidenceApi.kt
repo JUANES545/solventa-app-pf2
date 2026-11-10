@@ -1,5 +1,6 @@
 package co.solventa.mobile.feature.evidence
 
+import android.util.Log
 import co.solventa.mobile.BuildConfig
 import co.solventa.mobile.core.SyncResult
 import co.solventa.mobile.feature.auth.AuthHttpError
@@ -10,6 +11,7 @@ import java.io.IOException
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.Instant
 import java.time.format.DateTimeParseException
 import java.util.UUID
 import javax.inject.Inject
@@ -29,7 +31,7 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
         (0 until entries.length()).map { index ->
             val item = entries.getJSONObject(index)
             EvidenceClaim(uuid(item.getString("id")), item.getString("tipoEvento"), item.getString("fechaEvento"),
-                item.getString("descripcion"))
+                item.getString("descripcion")).also { Instant.parse(it.date) }
         }
     }
 
@@ -54,6 +56,13 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
     suspend fun confirmedIds(scope: EvidenceScope): Set<String> = session(scope.actorId) { grant ->
         val entries = request("GET", "/siniestros/${uuid(scope.claimId)}/evidencias", grant.accessToken).getJSONArray("evidencias")
         (0 until entries.length()).map { uuid(entries.getJSONObject(it).getString("id")) }.toSet()
+    }
+
+    suspend fun removeDemoConfirmed(scope: EvidenceScope, remoteId: String) {
+        check(BuildConfig.BUILD_TYPE == "mock")
+        session(scope.actorId) { grant ->
+            request("DELETE", "/siniestros/${uuid(scope.claimId)}/evidencias/${uuid(remoteId)}", grant.accessToken)
+        }
     }
 
     fun transport(store: EvidenceStore, configuration: EvidenceConfiguration): EvidenceTransport = object : EvidenceTransport {
@@ -209,6 +218,15 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
                 connection.outputStream.use { it.write(payload) }
             }
             val status = connection.responseCode
+            if (method == "GET" && status >= 400) {
+                val resource = when (path) {
+                    "/siniestros" -> "claims"
+                    "/siniestros/configuracion-evidencias" -> "configuration"
+                    "/siniestros/polizas" -> "policies"
+                    else -> "claim-resource"
+                }
+                Log.w("EvidenceHttp", "Query failed resource=$resource status=$status")
+            }
             if (status == 401) throw AuthHttpError(status)
             if (status !in 200..299) failureStatus = status
             if (status == 204 && method == "DELETE") return JSONObject()
@@ -250,6 +268,9 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
     }
 
     private fun httpProblem(status: Int, code: String? = null, cause: Throwable? = null, serverResult: SyncResult? = null): EvidenceHttpProblem {
+        if (status == 404 && code in setOf("siniestro_no_encontrado", "evidencia_no_encontrada", "carga_no_encontrada")) {
+            return EvidenceHttpProblem(status, code, false, EvidenceError.UNAVAILABLE, cause, serverResult)
+        }
         if (status == 409 && code == "idempotencia_conflictiva") {
             return EvidenceHttpProblem(status, code, true, EvidenceError.CONFLICT, cause, serverResult)
         }
@@ -263,7 +284,7 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
         }
         return EvidenceHttpProblem(status, code, rejection != null && status in setOf(409, 413, 415, 422),
             rejection ?: when (status) {
-                403, 404 -> EvidenceError.SESSION
+                403 -> EvidenceError.SESSION
                 409, 422, 400 -> EvidenceError.PROTOCOL
                 else -> EvidenceError.NETWORK
             }, cause, serverResult)

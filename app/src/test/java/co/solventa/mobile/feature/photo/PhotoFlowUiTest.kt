@@ -343,6 +343,7 @@ class PhotoFlowUiTest(private val dark: Boolean, private val landscape: Boolean)
         assertNotNull(grant)
         if (!biometricFlow) return
         await { biometrics.state.value.actorUserId == actor.id }
+        compose.onNodeWithContentDescription("Mi cuenta").performClick()
         assertNull(biometricCredential)
         assertEquals(0, biometricSignatures)
         click("Habilitar acceso biométrico")
@@ -351,7 +352,7 @@ class PhotoFlowUiTest(private val dark: Boolean, private val landscape: Boolean)
         assertNotNull(auth.state.value.user)
         click("Habilitar acceso biométrico")
         compose.onNodeWithContentDescription("Contraseña actual").performScrollTo().performTextInput("password")
-        compose.onNode(hasText("Habilitar acceso biométrico") and hasClickAction() and hasAnyAncestor(isDialog()))
+        compose.onNode(hasText("Habilitar") and hasClickAction() and hasAnyAncestor(isDialog()))
             .performClick()
         await { biometricCredential != null && !biometrics.state.value.busy }
         assertEquals(actor.id, biometricCredential?.userId)

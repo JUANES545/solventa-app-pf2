@@ -4,10 +4,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,8 +31,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import co.solventa.mobile.R
 import co.solventa.mobile.core.designsystem.SolventaLayout
+import co.solventa.mobile.core.ui.SolventaSection
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -52,27 +57,34 @@ internal fun BiometricAccountSection(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(SolventaLayout.sectionGap)) {
-    Text(stringResource(R.string.biometric_title), Modifier.semantics { heading() },
-        style = MaterialTheme.typography.titleLarge)
+    SolventaSection(title = stringResource(R.string.biometric_title)) {
+    if (state.busy) {
+        CircularProgressIndicator()
+        Text(stringResource(R.string.biometric_processing), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    }
     if (state.localCredential == null) {
-        TextButton(onClick = { confirming = true }, enabled = enabled && !state.busy) {
-            Text(stringResource(R.string.biometric_enable))
+        OutlinedButton(onClick = { confirming = true }, enabled = enabled && !state.busy,
+            modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight),
+            shape = SolventaLayout.controlShape) {
+            Text(stringResource(R.string.biometric_enable), textAlign = TextAlign.Center)
         }
     } else if (state.localCredential.userId == state.actorUserId) {
         Text(stringResource(R.string.biometric_linked))
     } else {
         Text(stringResource(R.string.biometric_other_account))
     }
-    TextButton(onClick = onLoad, enabled = enabled && !state.busy) {
-        Text(stringResource(R.string.biometric_manage))
+    TextButton(onClick = onLoad, enabled = enabled && !state.busy,
+        modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+        Text(stringResource(R.string.biometric_manage), textAlign = TextAlign.Center)
     }
     state.credentials.forEach { credential ->
         val label = credential.id.take(8)
-        Text(stringResource(if (credential.active) R.string.biometric_credential_active else R.string.biometric_credential_revoked, label))
+        Text(stringResource(if (credential.active) R.string.biometric_credential_active else R.string.biometric_credential_revoked, label),
+            style = MaterialTheme.typography.bodyLarge)
         if (credential.active || state.localCredential?.credentialId == credential.id) {
-            TextButton(onClick = { onRevoke(credential.id) }, enabled = enabled && !state.busy) {
-                Text(stringResource(R.string.biometric_revoke, label))
+            TextButton(onClick = { onRevoke(credential.id) }, enabled = enabled && !state.busy,
+                modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                Text(stringResource(R.string.biometric_revoke, label), textAlign = TextAlign.Center)
             }
         }
     }
@@ -83,7 +95,7 @@ internal fun BiometricAccountSection(
     if (confirming) {
         AlertDialog(
             onDismissRequest = { password = ""; confirming = false },
-            title = { Text(stringResource(R.string.biometric_enable), Modifier.semantics { heading() }) },
+            title = { Text(stringResource(R.string.biometric_enrollment_title), Modifier.semantics { heading() }) },
             text = {
                 Column(Modifier.imePadding().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(SolventaLayout.sectionGap)) {
@@ -98,16 +110,18 @@ internal fun BiometricAccountSection(
                 }
             },
             confirmButton = {
-                TextButton(enabled = password.isNotEmpty() && enabled && !state.busy, onClick = {
+                TextButton(enabled = password.isNotEmpty() && enabled && !state.busy,
+                    modifier = Modifier.heightIn(min = SolventaLayout.controlHeight), onClick = {
                     val transient = password
                     password = ""
                     confirming = false
                     onEnroll(transient)
-                }) { Text(stringResource(R.string.biometric_enable)) }
+                }) { Text(stringResource(R.string.biometric_enable_confirm), textAlign = TextAlign.Center) }
             },
             dismissButton = {
-                TextButton(onClick = { password = ""; confirming = false }) {
-                    Text(stringResource(R.string.biometric_not_now))
+                TextButton(onClick = { password = ""; confirming = false },
+                    modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) {
+                    Text(stringResource(R.string.biometric_not_now), textAlign = TextAlign.Center)
                 }
             },
         )

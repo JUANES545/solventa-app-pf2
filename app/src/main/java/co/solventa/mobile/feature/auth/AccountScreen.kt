@@ -14,6 +14,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,28 +40,24 @@ fun AccountScreen(user: AuthUser, loading: Boolean, onLogout: () -> Unit, biomet
     var signingOut by remember { mutableStateOf(false) }
     SolventaPage(header = {
             SolventaBrandHeader()
-            Text(stringResource(R.string.home_title), Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(stringResource(R.string.session_greeting, user.name), modifier = Modifier.fillMaxWidth().semantics { heading() },
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.account_title), modifier = Modifier.fillMaxWidth().semantics { heading() },
+                style = MaterialTheme.typography.headlineSmall)
     }, actions = {
-        Button(onClick = { signingOut = true; onLogout() }, enabled = !loading,
+        OutlinedButton(onClick = { signingOut = true; onLogout() }, enabled = !loading,
             modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight), shape = SolventaLayout.controlShape) {
             if (loading) {
                 CircularProgressIndicator(Modifier.width(20.dp).height(20.dp), strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary)
+                    color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
             }
             Text(stringResource(if (loading) {
                 if (signingOut) R.string.signing_out else R.string.session_checking
-            } else R.string.sign_out))
+            } else R.string.sign_out), textAlign = TextAlign.Center)
         }
     }) {
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.account_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.name), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(user.name, style = MaterialTheme.typography.bodyLarge)
                     Text(stringResource(R.string.email), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -68,7 +65,7 @@ fun AccountScreen(user: AuthUser, loading: Boolean, onLogout: () -> Unit, biomet
                 }
             }
             Text(stringResource(R.string.account_security_title), style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary)
+                modifier = Modifier.padding(top = 8.dp).semantics { heading() })
             Text(stringResource(R.string.account_security_body), color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (offline) Text(stringResource(R.string.claim_local_session), color = MaterialTheme.colorScheme.onSurfaceVariant)
             biometricContent?.invoke()
@@ -87,10 +84,10 @@ fun AccountScreen(user: AuthUser, loading: Boolean, onLogout: () -> Unit, biomet
                 Button(onClick = it, enabled = !loading, modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
                     Text(stringResource(R.string.evidence_entry))
                 }
-                onClaimStatus?.let {
-                    Button(onClick = it, enabled = !loading, modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
-                        Text(stringResource(R.string.claim_status_title))
-                    }
+            }
+            onClaimStatus?.let {
+                Button(onClick = it, enabled = !loading, modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                    Text(stringResource(R.string.claim_status_title))
                 }
             }
     }

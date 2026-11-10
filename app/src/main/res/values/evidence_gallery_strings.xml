@@ -1,0 +1,37 @@
+<resources>
+    <string name="evidence_gallery_title">Archivos adjuntos</string>
+    <string name="evidence_gallery_empty">Añade fotos, vídeos o documentos del siniestro.</string>
+    <string name="evidence_gallery_add">Añadir archivo</string>
+    <string name="evidence_gallery_photo">Fotografía</string>
+    <string name="evidence_gallery_video">Vídeo</string>
+    <string name="evidence_gallery_document">Documento</string>
+    <string name="evidence_gallery_capture">Usar cámara</string>
+    <string name="evidence_gallery_choose">Elegir archivo</string>
+    <string name="evidence_gallery_cancel">Cancelar</string>
+    <string name="evidence_gallery_close">Cerrar</string>
+    <string name="evidence_gallery_saved">Adjunto</string>
+    <string name="evidence_gallery_pending">Por enviar</string>
+    <string name="evidence_gallery_failed">Reintentar envío</string>
+    <string name="evidence_gallery_rejected">No enviado</string>
+    <string name="evidence_gallery_details">Ver detalles</string>
+    <string name="evidence_gallery_hide_details">Ocultar detalles</string>
+    <string name="evidence_gallery_remove">Eliminar archivo</string>
+    <string name="evidence_gallery_remove_question">¿Eliminar este archivo?</string>
+    <string name="evidence_gallery_remove_info">El archivo dejará de aparecer entre los adjuntos de este siniestro.</string>
+    <string name="evidence_gallery_remote">Archivo adjunto</string>
+    <string name="evidence_gallery_date">Fecha: %1$s</string>
+    <string name="evidence_gallery_size">Tamaño: %1$s</string>
+    <string name="evidence_gallery_duration">Duración: %1$d s</string>
+    <string name="evidence_gallery_digest">Huella SHA-256: %1$s</string>
+    <string name="evidence_gallery_location">Ubicación: %1$s, %2$s</string>
+    <string name="evidence_gallery_sending">Enviando: %1$d%%</string>
+    <string name="evidence_gallery_play">Reproducir vídeo</string>
+    <string name="evidence_gallery_review">Revisar archivo</string>
+    <string name="evidence_gallery_attach">Adjuntar archivo</string>
+    <string name="evidence_gallery_replace">Cambiar archivo</string>
+    <string name="evidence_gallery_invalid">No pudimos leer este archivo. Elige otro.</string>
+    <string name="evidence_gallery_size_error">Elige un archivo más ligero.</string>
+    <string name="evidence_gallery_duration_error">Elige un vídeo más corto.</string>
+    <string name="evidence_gallery_count_error">Retira un archivo antes de añadir otro.</string>
+    <string name="evidence_gallery_storage_error">No pudimos guardar el archivo. Vuelve a intentarlo.</string>
+</resources>

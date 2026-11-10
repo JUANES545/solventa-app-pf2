@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createComposeRule
 import co.solventa.mobile.MainActivity
 import co.solventa.mobile.SolventaApplication
@@ -27,6 +28,9 @@ class MainActivityResumeTest {
     private var expired = false
     private var calls = 0
     private var registerCalls = 0
+    private var now: () -> Long = System::currentTimeMillis
+    private var accessLifetime = 3_600_000L
+    private var refreshLifetime = 86_400_000L
     private val user = AuthUser("account-a", "Cliente", "synthetic@example.org")
     private val api = object : AuthApi {
         override fun register(name: String, email: String, password: String): AuthUser {
@@ -36,8 +40,8 @@ class MainActivityResumeTest {
         }
         override fun login(email: String, password: String): AuthGrant {
             calls++
-            return AuthGrant(user, "access", "refresh", System.currentTimeMillis() + 3_600_000,
-                System.currentTimeMillis() + 86_400_000)
+            return AuthGrant(user, "access", "refresh", now() + accessLifetime,
+                now() + refreshLifetime)
         }
         override fun current(token: String): AuthUser {
             calls++
@@ -56,7 +60,7 @@ class MainActivityResumeTest {
         override fun write(grant: AuthGrant) { this@MainActivityResumeTest.grant = grant }
         override fun clear() { grant = null }
     }
-    private val auth = AuthViewModel(AuthRepository(api, store))
+    private val auth = AuthViewModel(AuthRepository(api, store) { now() })
 
     private fun await(condition: () -> Boolean) {
         compose.waitUntil(10_000) {
@@ -74,6 +78,37 @@ class MainActivityResumeTest {
                 else -> error("Unexpected ViewModel")
             } as T
         }
+    }
+
+    @Test fun resumedActivityClosesActorAndPhotosAtDeadlineWithoutAnotherResume() {
+        now = android.os.SystemClock::uptimeMillis
+        accessLifetime = 120_000
+        refreshLifetime = 180_000
+        val controller = Robolectric.buildActivity(MainActivity::class.java)
+        val activity = controller.get()
+        ViewModelProvider(activity, factory())[AuthViewModel::class.java]
+        ViewModelProvider(activity, factory())[PhotoReviewViewModel::class.java]
+        auth.login(user.email, "password")
+        await { auth.state.value.user != null && !auth.state.value.loading }
+        controller.create().start().resume().visible()
+        await { !auth.state.value.loading }
+        compose.waitForIdle()
+        val photo = ViewModelProvider(activity)[PhotoReviewViewModel::class.java]
+        photo.bindActor(user.id)
+        photo.open()
+        shadowOf(Looper.getMainLooper()).idle()
+        val file = PhotoFiles(activity.cacheDir).create()
+        assertTrue(photo.state.value.open)
+        val previousCalls = calls
+        shadowOf(Looper.getMainLooper()).idleFor(180_000, TimeUnit.MILLISECONDS)
+        await { auth.state.value.user == null && !photo.state.value.open && photo.state.value.actorId == null }
+        assertEquals(AuthError.EXPIRED, auth.state.value.error)
+        assertNull(grant)
+        assertFalse(file.exists())
+        assertEquals(previousCalls, calls)
+        compose.onNodeWithText("Ingresar", substring = false).performScrollTo().assertIsDisplayed()
+        controller.pause().stop().destroy()
+        shadowOf(Looper.getMainLooper()).idle()
     }
 
     @Test fun authenticatedResumeRevalidatesAndClosesPhotoAfterSessionRevocation() {

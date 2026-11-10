@@ -28,6 +28,7 @@ internal data class ClaimState(
     val actor: String? = null,
     val open: Boolean = false,
     val busy: Boolean = false,
+    val loadingPolicies: Boolean = false,
     val editing: Boolean = true,
     val draft: ClaimDraft = ClaimDraft(),
     val policies: List<ClaimPolicy> = emptyList(),
@@ -35,6 +36,7 @@ internal data class ClaimState(
     val reports: List<ClaimReport> = emptyList(),
     val error: ClaimError? = null,
     val correction: String? = null,
+    val locationRevision: Long = 0,
 )
 
 @HiltViewModel
@@ -53,7 +55,7 @@ internal class ClaimViewModel @Inject constructor(
         if (actor == state.value.actor) return
         generation++
         job?.cancel()
-        mutable.value = ClaimState(actor = actor)
+        mutable.value = ClaimState(actor = actor, locationRevision = state.value.locationRevision + 1)
     }
 
     fun show(actor: String) {
@@ -63,20 +65,23 @@ internal class ClaimViewModel @Inject constructor(
     }
 
     fun close() {
-        mutable.value = state.value.copy(open = false)
+        mutable.value = state.value.copy(open = false, locationRevision = state.value.locationRevision + 1)
     }
 
     fun edit(draft: ClaimDraft) {
-        if (!state.value.busy && state.value.editing) mutable.value = state.value.copy(draft = draft, error = null)
+        if (!state.value.busy && state.value.editing) mutable.value = state.value.copy(draft = draft, error = null,
+            locationRevision = state.value.locationRevision + if (draft.place != state.value.draft.place) 1 else 0)
     }
 
     fun newReport() {
-        if (!state.value.busy) mutable.value = state.value.copy(editing = true, draft = ClaimDraft(), error = null, correction = null)
+        if (!state.value.busy) mutable.value = state.value.copy(editing = true, draft = ClaimDraft(), error = null, correction = null,
+            locationRevision = state.value.locationRevision + 1)
     }
 
     fun correct(report: ClaimReport) {
         if (state.value.busy || report !in state.value.reports || !report.correctable) return
-        mutable.value = state.value.copy(editing = true, draft = report.payload.draft(), correction = report.operation, error = null)
+        mutable.value = state.value.copy(editing = true, draft = report.payload.draft(), correction = report.operation, error = null,
+            locationRevision = state.value.locationRevision + 1)
     }
 
     fun submit() {
@@ -91,11 +96,16 @@ internal class ClaimViewModel @Inject constructor(
         }
     }
 
-    fun retry() {
+    fun retry() = refresh(sendReports = true)
+
+    fun refreshPolicies() = refresh(sendReports = false)
+
+    private fun refresh(sendReports: Boolean) {
         if (!state.value.open) return
         operation { actor ->
             update { copy(reports = store.list(actor), policies = store.policies(actor), cachedPolicies = true) }
-            if (!sendPending(actor)) return@operation
+            if (sendReports && !sendPending(actor)) return@operation
+            update { copy(loadingPolicies = true) }
             try {
                 val policies = api.policies(actor)
                 store.savePolicies(actor, policies)
@@ -112,14 +122,14 @@ internal class ClaimViewModel @Inject constructor(
         val actor = current.actor ?: return
         if (current.busy) return
         val operation = Operation(generation)
-        mutable.value = current.copy(busy = true, error = null)
+        mutable.value = current.copy(busy = true, error = null, locationRevision = current.locationRevision + 1)
         job = viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { operation.block(actor) }
             } catch (error: Exception) {
                 val reason = claimError(error)
                 operation.update { copy(error = reason) }
-            } finally { operation.update { copy(busy = false) } }
+            } finally { operation.update { copy(busy = false, loadingPolicies = false) } }
         }
     }
 

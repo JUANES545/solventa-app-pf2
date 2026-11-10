@@ -78,6 +78,10 @@ android {
         buildConfigField("String", "AUTH_ISSUER", "\"https://65qgzhody9.execute-api.us-east-2.amazonaws.com\"")
         buildConfigField("boolean", "BIOMETRIC_LOGIN_ENABLED", "true")
         buildConfigField("boolean", "PHOTO_REVIEW_ENABLED", "true")
+        buildConfigField("boolean", "SCREEN_CAPTURE_ALLOWED", "false")
+        buildConfigField("boolean", "CLAIM_SAMPLE_ENABLED", "false")
+        buildConfigField("String", "CLAIM_INITIAL_DATE", "\"\"")
+        buildConfigField("boolean", "DEMO_LOCATION", "false")
         testInstrumentationRunner = "co.solventa.mobile.espresso.SolventaTestRunner"
         val backendE2e = providers.gradleProperty("backendE2e").orNull == "true"
         testInstrumentationRunnerArguments[if (backendE2e) "annotation" else "notAnnotation"] =
@@ -113,9 +117,11 @@ android {
         initWith(buildTypes.getByName("release"))
         signingConfig = signingConfigs.getByName("debug")
         matchingFallbacks += "release"
+        buildConfigField("boolean", "SCREEN_CAPTURE_ALLOWED", "true")
     }
     buildTypes.getByName("debug") {
         enableUnitTestCoverage = true
+        buildConfigField("boolean", "SCREEN_CAPTURE_ALLOWED", "true")
     }
     buildTypes.create("biometricTest") {
         initWith(buildTypes.getByName("debug"))
@@ -152,6 +158,21 @@ android {
     sourceSets.getByName("claimTest") { res.srcDir("src/debug/res") }
     if (providers.gradleProperty("claimDeviceTests").orNull == "true") {
         testBuildType = "claimTest"
+    }
+    buildTypes.create("mock") {
+        initWith(buildTypes.getByName("debug"))
+        applicationIdSuffix = ".mock"
+        matchingFallbacks += "debug"
+        buildConfigField("String", "AUTH_BASE_URL", "\"http://127.0.0.1:18725/movil/v1\"")
+        buildConfigField("String", "AUTH_ISSUER", "\"urn:solventa:mock\"")
+        buildConfigField("boolean", "CLAIM_SAMPLE_ENABLED", "true")
+        buildConfigField("String", "CLAIM_INITIAL_DATE", "\"2026-11-03\"")
+        buildConfigField("boolean", "DEMO_LOCATION", "true")
+    }
+    if (providers.gradleProperty("mockDeviceTests").orNull == "true") {
+        testBuildType = "mock"
+        defaultConfig.testInstrumentationRunnerArguments["backendUrl"] = "http://127.0.0.1:18725/movil/v1"
+        defaultConfig.testInstrumentationRunnerArguments["class"] = "co.solventa.mobile.mock.MockFlowsDeviceTest"
     }
     testCoverage {
         jacocoVersion = "0.8.13"
@@ -201,4 +222,6 @@ dependencies {
     "biometricTestImplementation"(libs.androidx.compose.ui.test.manifest)
     "evidenceTestImplementation"(libs.androidx.compose.ui.test.manifest)
     "claimTestImplementation"(libs.androidx.compose.ui.test.manifest)
+    "mockImplementation"(libs.mockwebserver)
+    "mockImplementation"(libs.androidx.compose.ui.test.manifest)
 }

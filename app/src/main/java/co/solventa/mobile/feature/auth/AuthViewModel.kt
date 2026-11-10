@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -26,6 +28,39 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
     val state = mutableState.asStateFlow()
     private class RegistrationDraft(val name: String, val email: String, val password: String, val withPhotos: Boolean)
     private var registrationDraft: RegistrationDraft? = null
+    private var operation = 0L
+    private var operationSessionRevision = -1L
+
+    init {
+        viewModelScope.launch {
+            repository.session.collectLatest { session ->
+                if (session.user != null) {
+                    while (repository.session.value == session) {
+                        val remaining = repository.remainingSessionMillis(session)
+                        if (remaining == 0L) {
+                            expireAccess()
+                            try {
+                                repository.expireSession(session)
+                            } catch (problem: AuthProblem) {
+                                expireAccess(problem.reason)
+                            }
+                            break
+                        }
+                        delay(remaining)
+                    }
+                } else if (session.expired && repository.session.value == session &&
+                    (!mutableState.value.loading || session.revision > operationSessionRevision)) {
+                    expireAccess(session.error ?: AuthError.EXPIRED)
+                }
+            }
+        }
+    }
+
+    private fun expireAccess(error: AuthError = AuthError.EXPIRED) {
+        operation++
+        registrationDraft = null
+        mutableState.value = AuthUiState(error = error)
+    }
 
     fun login(email: String, password: String) {
         if (mutableState.value.loading) return
@@ -162,12 +197,22 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
     private fun perform(action: suspend () -> AuthUiState) {
         if (mutableState.value.loading) return
         mutableState.value = mutableState.value.copy(loading = true, error = null)
+        operationSessionRevision = repository.session.value.revision
+        val expectedOperation = ++operation
         viewModelScope.launch {
             try {
-                mutableState.value = action()
+                val result = action()
+                if (operation == expectedOperation) {
+                    val session = repository.session.value
+                    mutableState.value = if (result.user != null &&
+                        (session.user?.id != result.user.id || repository.remainingSessionMillis(session) == 0L)) {
+                        AuthUiState(error = AuthError.EXPIRED)
+                    } else result
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                if (operation != expectedOperation) return@launch
                 val reason = when (error) {
                     is AuthProblem -> error.reason
                     is AuthHttpError -> when (error.status) {

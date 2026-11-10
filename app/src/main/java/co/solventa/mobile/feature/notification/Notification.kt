@@ -55,6 +55,14 @@ internal data class NotificationPreference(
 
 internal data class NotificationItem(val notification: MobileNotification, val read: Boolean)
 
+internal data class NotificationUndo(
+    val actor: String,
+    val id: String,
+    val revision: Long,
+    val read: Boolean,
+    val discarded: Boolean,
+)
+
 internal data class NotificationTarget(
     val notificationId: String,
     val resource: NotificationResource,
@@ -77,9 +85,13 @@ internal interface NotificationLocalStore {
     fun recordSeen(actor: String, ids: Set<String>): Set<String>
     fun markRead(actor: String, id: String)
     fun markAllRead(actor: String, ids: Set<String>)
+    fun discarded(actor: String): Set<String>
+    fun change(actor: String, id: String, read: Boolean? = null, discarded: Boolean? = null): NotificationUndo
+    fun undo(actor: String, change: NotificationUndo): Boolean
 }
 
 internal interface NotificationPresenter {
     fun permissionGranted(): Boolean
     fun show(notification: MobileNotification)
+    fun clear() {}
 }

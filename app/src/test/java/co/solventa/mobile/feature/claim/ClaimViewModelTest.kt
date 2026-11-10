@@ -2,6 +2,7 @@ package co.solventa.mobile.feature.claim
 
 import android.app.Application
 import android.os.Looper
+import co.solventa.mobile.BuildConfig
 import co.solventa.mobile.feature.evidence.MobileEvidenceApi
 import co.solventa.mobile.feature.evidence.evidenceAuth
 import java.util.concurrent.TimeUnit
@@ -29,6 +30,42 @@ class ClaimViewModelTest {
             Thread.sleep(10)
         }
         assertFalse("Operation did not finish", model.state.value.busy)
+        assertFalse(model.state.value.loadingPolicies)
+    }
+
+    @Test fun newReportRestoresOnlyTheConfiguredInitialDateWithoutChangingAnEditedDate() {
+        val api = MobileClaimApi(MobileEvidenceApi(evidenceAuth(), "http://127.0.0.1:18725/movil/v1"))
+        val model = ClaimViewModel(app, api)
+        model.bindActor("a")
+        assertEquals(BuildConfig.CLAIM_INITIAL_DATE, model.state.value.draft.date)
+        assertEquals("", model.state.value.draft.time)
+        model.edit(model.state.value.draft.copy(date = "2026-11-01", place = "Lugar manual"))
+        assertEquals("2026-11-01", model.state.value.draft.date)
+        assertEquals("Lugar manual", model.state.value.draft.place)
+        model.newReport()
+        assertEquals(BuildConfig.CLAIM_INITIAL_DATE, model.state.value.draft.date)
+        assertEquals("", model.state.value.draft.time)
+        assertEquals("", model.state.value.draft.place)
+    }
+
+    @Test fun locationRevisionInvalidatesReplacedDraftsAndActorEvenWithTheSamePlace() {
+        val api = MobileClaimApi(MobileEvidenceApi(evidenceAuth(), "http://127.0.0.1:18725/movil/v1"))
+        val model = ClaimViewModel(app, api)
+        model.bindActor("a")
+        val initial = model.state.value.locationRevision
+        model.edit(ClaimDraft(description = "Otro texto"))
+        assertEquals(initial, model.state.value.locationRevision)
+        model.edit(model.state.value.draft.copy(place = "Manual"))
+        assertEquals(initial + 1, model.state.value.locationRevision)
+        model.newReport()
+        assertEquals(initial + 2, model.state.value.locationRevision)
+        model.newReport()
+        assertEquals(initial + 3, model.state.value.locationRevision)
+        model.close()
+        assertEquals(initial + 4, model.state.value.locationRevision)
+        model.bindActor("b")
+        model.bindActor("a")
+        assertEquals(initial + 6, model.state.value.locationRevision)
     }
 
     @Test fun doubleSubmitFailureRetryAndActorChangeRetainOneDurableOperation() {
@@ -55,12 +92,16 @@ class ClaimViewModelTest {
             model.edit(draft)
             model.submit(); model.submit()
             assertTrue(model.state.value.busy)
+            assertFalse(model.state.value.loadingPolicies)
             await(model)
             assertEquals(1, posts)
             val report = model.state.value.reports.single()
             assertEquals(ClaimError.NETWORK, report.error)
             assertNull(report.receipt)
             assertFalse(model.state.value.editing)
+            model.refreshPolicies(); await(model)
+            assertEquals("Pull-to-refresh must not send a pending report", 1, posts)
+            assertEquals(report.operation, model.state.value.reports.single().operation)
             model.close()
             model.bindActor("actor-b")
             assertTrue(model.state.value.reports.isEmpty())

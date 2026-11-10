@@ -83,7 +83,8 @@ class PhotoDialogLayoutTest {
             val provider = dialogView.parent as DialogWindowProvider
             assertEquals(WindowManager.LayoutParams.MATCH_PARENT, provider.window.attributes.width)
             assertEquals(WindowManager.LayoutParams.MATCH_PARENT, provider.window.attributes.height)
-            assertTrue(provider.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
+            assertEquals(!co.solventa.mobile.BuildConfig.SCREEN_CAPTURE_ALLOWED,
+                provider.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
         }
         val button = compose.onNode(hasText("Abrir cámara") and hasClickAction())
         val node = button.fetchSemanticsNode()

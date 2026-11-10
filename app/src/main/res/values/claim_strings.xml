@@ -1,30 +1,24 @@
 <resources>
-    <string name="sync_queued_at">En cola desde: %1$s</string>
-    <string name="sync_result_at">Último resultado observado en el dispositivo: %1$s</string>
     <string name="sync_server_result_at">Fecha del resultado en el servidor: %1$s</string>
     <string name="sync_conflict">Conflicto de sincronización</string>
     <string name="sync_error_conflict">El servidor detectó otros datos para esta operación. Conservamos los datos locales sin sobrescribir los del servidor.</string>
-    <string name="claim_corrected">Este reporte tiene una corrección en la cola.</string>
     <string name="claim_title">Reportar un siniestro</string>
     <string name="claim_local_session">Sin conexión al servicio. Puedes consultar tus datos locales y guardar reportes pendientes. Verificaremos la sesión al enviar.</string>
-    <string name="claim_back">Volver a mi cuenta</string>
+    <string name="claim_back">Volver al inicio</string>
     <string name="claim_policy">Póliza vigente</string>
-    <string name="claim_policy_option">%1$s · %2$s\nVigencia: %3$s a %4$s</string>
-    <string name="claim_cached_policies">Pólizas guardadas en este dispositivo. El servidor comprobará su vigencia al enviar.</string>
+    <string name="claim_cached_policies">Pólizas guardadas en este teléfono.</string>
     <string name="claim_no_policies">No hay pólizas disponibles. Conéctate y actualiza para consultar tus pólizas vigentes.</string>
     <string name="claim_type">Tipo de evento</string>
-    <string name="claim_date">Fecha del evento (AAAA-MM-DD)</string>
-    <string name="claim_time">Hora local (HH:mm, formato 24 horas)</string>
+    <string name="claim_date">Fecha del evento</string>
+    <string name="claim_time">Hora local</string>
     <string name="claim_place">Ubicación del evento</string>
-    <string name="claim_description">Descripción (10 a 5000 caracteres)</string>
+    <string name="claim_description">Descripción</string>
     <string name="claim_submit">Enviar reporte</string>
-    <string name="claim_new">Reportar otro siniestro</string>
-    <string name="claim_correct">Corregir reporte rechazado</string>
+    <string name="claim_new">Nuevo reporte</string>
+    <string name="claim_correct">Corregir</string>
     <string name="claim_retry">Actualizar y reintentar pendientes</string>
-    <string name="claim_processing">Procesando. No necesitas volver a enviar.</string>
-    <string name="claim_pending">Pendiente de envío. Guardado en este dispositivo; sin confirmación del servidor.</string>
-    <string name="claim_failed">Error de envío. El reporte sigue pendiente de confirmación.</string>
-    <string name="claim_confirmed">Reporte enviado\nIdentificador: %1$s</string>
+    <string name="claim_pending">Guardado en este teléfono.</string>
+    <string name="claim_failed">No se pudo enviar.</string>
     <string name="claim_error_required">Selecciona una póliza y completa todos los campos.</string>
     <string name="claim_error_date">Revisa la fecha y hora: deben ser válidas, no futuras y estar dentro de la vigencia de la póliza.</string>
     <string name="claim_error_description">Escribe una descripción de 10 a 5000 caracteres.</string>
@@ -34,4 +28,18 @@
     <string name="claim_error_session">Inicia sesión con la misma cuenta para reintentar tus reportes.</string>
     <string name="claim_error_protocol">La respuesta no confirma el registro. Conservamos el reporte; puedes reintentar.</string>
     <string name="claim_error_storage">No pudimos guardar el cambio en el dispositivo. Revisa el espacio disponible y reintenta.</string>
+    <string name="claim_sending">Enviando…</string>
+    <string name="claim_add_evidence">Agregar evidencias</string>
+    <string name="claim_review_show">Revisar</string>
+    <string name="claim_review_hide">Ocultar</string>
+    <plurals name="claim_pending_count">
+        <item quantity="one">%d reporte por enviar</item>
+        <item quantity="many">%d reportes por enviar</item>
+        <item quantity="other">%d reportes por enviar</item>
+    </plurals>
+    <plurals name="claim_review_count">
+        <item quantity="one">%d reporte por revisar</item>
+        <item quantity="many">%d reportes por revisar</item>
+        <item quantity="other">%d reportes por revisar</item>
+    </plurals>
 </resources>

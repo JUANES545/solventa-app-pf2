@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="claim_status_title">Estado de mis siniestros</string>
-    <string name="claim_status_view">Consultar estado</string>
+    <string name="claim_status_title">Mis siniestros</string>
+    <string name="claim_status_view">Ver estado</string>
     <string name="claim_status_back">Volver</string>
-    <string name="claim_status_choose">Selecciona el siniestro que quieres consultar.</string>
     <string name="claim_status_loading">Consultando el servicio…</string>
     <string name="claim_status_empty">No tienes siniestros registrados.</string>
     <string name="claim_status_refresh">Actualizar</string>
     <string name="claim_status_retry">Reintentar</string>
-    <string name="claim_status_updated">Última actualización: %1$s (hora local)</string>
-    <string name="claim_status_event">Fecha del evento: %1$s (hora local)</string>
+    <string name="claim_status_updated">Actualizado: %1$s</string>
+    <string name="claim_status_event">Fecha del evento: %1$s</string>
     <string name="claim_status_network">No pudimos consultar el servicio. Revisa tu conexión y reintenta.</string>
     <string name="claim_status_session">No pudimos verificar tu acceso. Vuelve a tu cuenta e inicia sesión para consultar.</string>
     <string name="claim_status_unavailable">Este siniestro no está disponible para tu cuenta.</string>

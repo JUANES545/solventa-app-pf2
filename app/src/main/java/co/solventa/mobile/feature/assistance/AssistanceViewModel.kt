@@ -62,12 +62,16 @@ internal class AssistanceViewModel @Inject constructor(
         mutable.value = AssistanceState()
     }
 
-    fun permissionDenied() {
+    fun chooseManualLocation() = manualLocation(null)
+
+    fun permissionDenied() = manualLocation(AssistanceError.PERMISSION)
+
+    private fun manualLocation(error: AssistanceError?) {
         val current = state.value
         if (!current.open || current.busy) return
         mutable.value = current.copy(
             step = AssistanceStep.MANUAL,
-            error = AssistanceError.PERMISSION,
+            error = error,
         )
     }
 
@@ -177,6 +181,10 @@ internal class AssistanceViewModel @Inject constructor(
 
     private suspend fun loadProviders(location: AssistanceLocation) {
         val actor = state.value.actor ?: return
+        update {
+            copy(step = AssistanceStep.PROVIDERS, location = location,
+                providers = providers.takeIf { this.location == location }.orEmpty())
+        }
         val providers = api.providers(actor, location)
         update {
             copy(

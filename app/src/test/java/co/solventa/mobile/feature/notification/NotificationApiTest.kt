@@ -11,7 +11,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -59,6 +58,42 @@ internal fun notificationApi(server: MockWebServer) =
 @Config(application = Application::class, sdk = [35])
 class NotificationApiTest {
     @Test
+    fun unauthorizedRequestRetriesOnceWithTheRotatedToken() = runBlocking {
+        MockWebServer().use { server ->
+            var refreshes = 0
+            val api = MobileNotificationApi(evidenceAuth(onRefresh = { refreshes++ }),
+                server.url("/movil/v1").toString())
+            server.enqueue(MockResponse().setResponseCode(401))
+            server.enqueue(MockResponse().setBody(notificationsResponse()))
+            assertEquals(1, api.notifications("actor-a").size)
+            assertEquals("Bearer synthetic-access", server.takeRequest().getHeader("Authorization"))
+            assertEquals("Bearer synthetic-access-rotated", server.takeRequest().getHeader("Authorization"))
+            assertEquals(1, refreshes)
+            assertEquals(2, server.requestCount)
+        }
+    }
+
+    @Test
+    fun persistentUnauthorizedResponseIsNotHiddenOrRetriedForever() = runBlocking {
+        MockWebServer().use { server ->
+            var refreshes = 0
+            val api = MobileNotificationApi(evidenceAuth(onRefresh = { refreshes++ }),
+                server.url("/movil/v1").toString())
+            repeat(2) { server.enqueue(MockResponse().setResponseCode(401)) }
+            try {
+                api.notifications("actor-a")
+                fail("Una sesión rechazada no debe producir avisos vacíos")
+            } catch (problem: NotificationProblem) {
+                assertEquals(NotificationError.SESSION, problem.reason)
+            }
+            assertEquals("Bearer synthetic-access", server.takeRequest().getHeader("Authorization"))
+            assertEquals("Bearer synthetic-access-rotated", server.takeRequest().getHeader("Authorization"))
+            assertEquals(1, refreshes)
+            assertEquals(2, server.requestCount)
+        }
+    }
+
+    @Test
     fun readsAuthorizedMinimizedNotificationsAndUpdatesAllPushPreferences() = runBlocking {
         MockWebServer().use { server ->
             val api = notificationApi(server)
@@ -71,7 +106,7 @@ class NotificationApiTest {
             val listRequest = server.takeRequest()
             assertEquals("GET", listRequest.method)
             assertEquals("/movil/v1/notificaciones", listRequest.path)
-            assertNotNull(listRequest.getHeader("Authorization"))
+            assertEquals("Bearer synthetic-access", listRequest.getHeader("Authorization"))
             assertEquals("no-store", listRequest.getHeader("Cache-Control"))
 
             server.enqueue(MockResponse().setBody(preferencesResponse()))
@@ -82,7 +117,7 @@ class NotificationApiTest {
                             it.channel == NotificationChannel.PUSH
                     }.enabled,
             )
-            server.takeRequest()
+            assertEquals("Bearer synthetic-access", server.takeRequest().getHeader("Authorization"))
 
             server.enqueue(MockResponse().setBody(preferencesResponse(push = true)))
             val updated = api.updatePush("actor-a", true)
@@ -90,6 +125,7 @@ class NotificationApiTest {
             val update = server.takeRequest()
             assertEquals("/movil/v1/notificaciones/preferencias", update.path)
             assertEquals("PUT", update.method)
+            assertEquals("Bearer synthetic-access", update.getHeader("Authorization"))
             val sent = JSONObject(update.body.readUtf8()).getJSONArray("preferencias")
             assertEquals(4, sent.length())
             assertEquals(

@@ -5,6 +5,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.Density
@@ -20,11 +21,20 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@OptIn(ExperimentalTestApi::class)
 @Config(application = Application::class, sdk = [35], qualifiers = "w320dp-h640dp")
 class ClaimStatusScreenTest {
     @get:Rule val compose = createComposeRule()
     private val app get() = RuntimeEnvironment.getApplication()
     private fun text(id: Int) = app.getString(id)
+
+    @Test fun summaryDateOmitsSecondsAndTechnicalZoneWhileKeepingTheLocalMinute() {
+        val minute = statusDate.truncatedTo(java.time.temporal.ChronoUnit.MINUTES)
+        val summary = claimStatusDate(minute)
+        assertEquals(summary, claimStatusDate(minute.plusSeconds(37)))
+        assertFalse(summary.contains(java.time.ZoneId.systemDefault().id))
+        assertNotEquals(summary, claimStatusDate(minute.plusSeconds(60)))
+    }
 
     @Test fun loadingErrorsAndEmptyAreDifferentAndRetryRemainsActionable() {
         val state = mutableStateOf(ClaimStatusState(busy = true))
@@ -33,14 +43,14 @@ class ClaimStatusScreenTest {
         compose.setContent {
             SolventaTheme(false) { ClaimStatusScreen(state.value, {}, { retries++ }, { backs++ }) }
         }
-        compose.onNodeWithText(text(R.string.claim_status_loading)).assertIsDisplayed()
-        compose.onNodeWithText(text(R.string.claim_status_refresh)).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(text(R.string.claim_status_loading)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.claim_status_refresh)).assertDoesNotExist()
         compose.onNodeWithText(text(R.string.claim_status_empty)).assertDoesNotExist()
         for (error in ClaimStatusError.entries) {
             compose.runOnIdle { state.value = ClaimStatusState(error = error) }
             compose.onNodeWithText(text(claimStatusErrorText(error))).performScrollTo().assertIsDisplayed()
             compose.onNodeWithText(text(R.string.claim_status_empty)).assertDoesNotExist()
-            compose.onNodeWithText(text(R.string.claim_status_retry)).performScrollTo().performClick()
+            compose.onNodeWithTag("page-refresh").performCustomAccessibilityActionWithLabel("Actualizar")
         }
         compose.runOnIdle { state.value = ClaimStatusState() }
         compose.onNodeWithText(text(R.string.claim_status_empty)).performScrollTo().assertIsDisplayed()
@@ -57,7 +67,7 @@ class ClaimStatusScreenTest {
                 SolventaTheme(dark.value) { ClaimStatusScreen(state.value, { selected = it.id }, {}, {}) }
             }
         }
-        compose.onNode(hasText(statusClaim.id, substring = true)).performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
+        compose.onNodeWithTag("claim-${statusClaim.id}").performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
         compose.runOnIdle { assertEquals(statusClaim.id, selected) }
         for (theme in listOf(false, true)) {
             for (progress in ClaimProgress.entries) {
@@ -68,15 +78,17 @@ class ClaimStatusScreenTest {
                 }
                 compose.onNodeWithText(text(claimProgressText(progress))).performScrollTo().assertIsDisplayed()
                     .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
-                compose.onNodeWithText(app.getString(R.string.claim_status_updated, claimStatusDate(statusDate)))
+                compose.onNodeWithText(app.getString(R.string.claim_status_updated, displayDate()))
                     .performScrollTo().assertIsDisplayed()
-                compose.onNodeWithText(app.getString(R.string.evidence_claim_reference, statusClaim.id))
-                    .performScrollTo().assertIsDisplayed()
-                compose.onNodeWithText(text(R.string.claim_status_refresh)).performScrollTo().assertHeightIsAtLeast(48.dp)
+                compose.onNodeWithText(app.getString(R.string.evidence_claim_reference, operationalReference(statusClaim.id))).assertDoesNotExist()
+                compose.onNodeWithTag("page-refresh").assertExists()
             }
         }
         compose.runOnIdle { state.value = state.value.copy(detail = null, error = ClaimStatusError.NETWORK) }
         compose.onNodeWithText(text(R.string.claim_status_closed)).assertDoesNotExist()
-        compose.onNodeWithText(app.getString(R.string.claim_status_updated, claimStatusDate(statusDate))).assertDoesNotExist()
+        compose.onNodeWithText(app.getString(R.string.claim_status_updated, displayDate())).assertDoesNotExist()
     }
+
+    private fun displayDate() = app.getString(R.string.operational_date_device_zone,
+        claimStatusDate(statusDate), java.time.ZoneId.systemDefault().id)
 }

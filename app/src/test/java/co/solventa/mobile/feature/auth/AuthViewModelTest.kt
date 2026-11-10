@@ -1,9 +1,12 @@
 package co.solventa.mobile.feature.auth
 
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -32,12 +35,25 @@ class AuthViewModelTest {
         override fun current(token: String): AuthUser { check(); return user }
         override fun logout(accessToken: String, refreshToken: String) { check() }
     }
-    private fun model() = AuthViewModel(AuthRepository(api, store))
+    private val models = mutableListOf<AuthViewModel>()
+    private fun model(repository: AuthRepository = AuthRepository(api, store, StandardTestDispatcher())) =
+        AuthViewModel(repository).also { models += it }
+
+    private fun authTest(block: suspend TestScope.() -> Unit) = runTest {
+        try {
+            block()
+        } finally {
+            models.forEach { it.viewModelScope.cancel() }
+        }
+    }
 
     @Before fun setUp() { Dispatchers.setMain(StandardTestDispatcher()) }
-    @After fun tearDown() { Dispatchers.resetMain() }
+    @After fun tearDown() {
+        models.forEach { it.viewModelScope.cancel() }
+        Dispatchers.resetMain()
+    }
 
-    @Test fun registrationPreservesPublicNavigationAndRequiresExplicitLogin() = runTest {
+    @Test fun registrationPreservesPublicNavigationAndRequiresExplicitLogin() = authTest {
         val auth = model()
         auth.showRegistration()
         auth.restore()
@@ -73,7 +89,7 @@ class AuthViewModelTest {
         assertEquals(0, calls)
     }
 
-    @Test fun backendFailuresKeepRegistrationRecoverable() = runTest {
+    @Test fun backendFailuresKeepRegistrationRecoverable() = authTest {
         val errors = mapOf(400 to AuthError.INVALID_REQUEST, 401 to AuthError.INVALID_CREDENTIALS,
             409 to AuthError.EMAIL_EXISTS, 429 to AuthError.RATE_LIMIT, 503 to AuthError.UNAVAILABLE)
         for ((status, reason) in errors) {
@@ -92,7 +108,7 @@ class AuthViewModelTest {
         assertEquals(AuthError.UNAVAILABLE, auth.state.first { !it.loading }.error)
     }
 
-    @Test fun restoreDistinguishesExpiredRejectedAndValidSessions() = runTest {
+    @Test fun restoreDistinguishesExpiredRejectedAndValidSessions() = authTest {
         val auth = model()
         auth.restore()
         assertNull(auth.state.first { !it.loading }.error)
@@ -113,7 +129,7 @@ class AuthViewModelTest {
         assertEquals(AuthError.UNAVAILABLE, auth.state.first { !it.loading }.error)
     }
 
-    @Test fun failedLogoutStillRemovesLocalAccess() = runTest {
+    @Test fun failedLogoutStillRemovesLocalAccess() = authTest {
         for (problem in listOf(AuthHttpError(503), AuthProblem(AuthError.STORAGE))) {
             stored = grant
             failure = problem
@@ -127,11 +143,11 @@ class AuthViewModelTest {
 
     }
 
-    @Test fun offlineRestoreAllowsOnlyAnUnexpiredLocalActorAndNeverAuthorizesRemoteRequests() = runTest {
+    @Test fun offlineRestoreAllowsOnlyAnUnexpiredLocalActorAndNeverAuthorizesRemoteRequests() = authTest {
         stored = grant
         failure = java.io.IOException("offline")
-        val repository = AuthRepository(api, store)
-        val auth = AuthViewModel(repository)
+        val repository = AuthRepository(api, store, StandardTestDispatcher())
+        val auth = model(repository)
         auth.restore()
         val local = auth.state.first { !it.loading }
         assertEquals(user, local.user)
@@ -153,7 +169,7 @@ class AuthViewModelTest {
         assertNull(repository.localUser())
     }
 
-    @Test fun photosAndExplicitConfirmationPrecedeASingleRegistrationWithoutSession() = runTest {
+    @Test fun photosAndExplicitConfirmationPrecedeASingleRegistrationWithoutSession() = authTest {
         val auth = model()
         auth.showRegistration()
         auth.prepareRegistration("Cliente", " cliente@example.org ", "password", "password", withPhotos = true)
@@ -243,7 +259,7 @@ class AuthViewModelTest {
         assertEquals(0, calls)
     }
 
-    @Test fun failedFinalRegistrationRequiresNewInputAndDoesNotReuseCredentials() = runTest {
+    @Test fun failedFinalRegistrationRequiresNewInputAndDoesNotReuseCredentials() = authTest {
         failure = AuthHttpError(503)
         val auth = model()
         auth.showRegistration()
@@ -262,7 +278,7 @@ class AuthViewModelTest {
         assertEquals(1, calls)
     }
 
-    @Test fun validFormThenTermsPrecedeASingleNormalRegistrationWithoutSession() = runTest {
+    @Test fun validFormThenTermsPrecedeASingleNormalRegistrationWithoutSession() = authTest {
         val auth = model()
         auth.continueRegistration(true)
         assertEquals(AccessScreen.LOGIN, auth.state.value.screen)

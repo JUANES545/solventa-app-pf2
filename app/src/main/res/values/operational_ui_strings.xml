@@ -1,0 +1,11 @@
+<resources>
+    <string name="claim_event_section">Datos del evento</string>
+    <string name="claim_policy_reference">Póliza: %1$s</string>
+    <string name="claim_policy_validity">Vigencia: %1$s a %2$s</string>
+    <string name="evidence_capture_section">Agregar evidencia</string>
+    <string name="evidence_history_section">Archivos y envíos</string>
+    <string name="evidence_location_section">Ubicación de la evidencia</string>
+    <string name="evidence_capture_wait">Preparando la cámara…</string>
+    <string name="evidence_loading">Procesando la evidencia…</string>
+    <string name="biometric_processing">Procesando la solicitud…</string>
+</resources>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application android:label="@string/mock_app_name" tools:replace="android:label"
+        android:networkSecurityConfig="@xml/mock_network">
+        <provider android:name=".mock.MockInitializer" android:authorities="${applicationId}.fixtures"
+            android:exported="false" />
+        <receiver android:name=".mock.MockNotificationReceiver" android:exported="true"
+            android:permission="android.permission.DUMP" />
+        <activity android:name=".MainActivity" android:exported="false" tools:replace="android:exported">
+            <intent-filter tools:node="removeAll" />
+        </activity>
+        <activity android:name=".mock.MockControlActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

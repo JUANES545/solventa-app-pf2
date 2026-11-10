@@ -18,6 +18,9 @@ internal class AndroidNotificationStore @Inject constructor(
     override fun read(actor: String): Set<String> = values(key(actor, "read"))
 
     @Synchronized
+    override fun discarded(actor: String): Set<String> = values(key(actor, "discarded"))
+
+    @Synchronized
     override fun recordSeen(actor: String, ids: Set<String>): Set<String> {
         val name = key(actor, "seen")
         val previous = values(name)
@@ -28,16 +31,45 @@ internal class AndroidNotificationStore @Inject constructor(
 
     @Synchronized
     override fun markRead(actor: String, id: String) {
-        requireUuid(id)
-        val name = key(actor, "read")
-        persist(name, values(name) + id)
+        change(actor, id, read = true)
     }
 
     @Synchronized
     override fun markAllRead(actor: String, ids: Set<String>) {
         ids.forEach(::requireUuid)
         val name = key(actor, "read")
-        persist(name, values(name) + ids)
+        val editor = preferences.edit().putStringSet(name, values(name) + ids)
+        ids.forEach { id ->
+            val revisionKey = key(actor, "revision.$id")
+            editor.putLong(revisionKey, preferences.getLong(revisionKey, 0) + 1)
+        }
+        if (!editor.commit()) throw NotificationProblem(NotificationError.STORAGE)
+    }
+
+    @Synchronized
+    override fun change(actor: String, id: String, read: Boolean?, discarded: Boolean?): NotificationUndo {
+        requireUuid(id)
+        val readKey = key(actor, "read")
+        val discardedKey = key(actor, "discarded")
+        val reads = values(readKey)
+        val discards = values(discardedKey)
+        val revisionKey = key(actor, "revision.$id")
+        val revision = preferences.getLong(revisionKey, 0) + 1
+        val previous = NotificationUndo(actor, id, revision, id in reads, id in discards)
+        val editor = preferences.edit().putLong(revisionKey, revision)
+        if (read != null) editor.putStringSet(readKey, if (read) reads + id else reads - id)
+        if (discarded != null) editor.putStringSet(discardedKey, if (discarded) discards + id else discards - id)
+        if (!editor.commit()) throw NotificationProblem(NotificationError.STORAGE)
+        return previous
+    }
+
+    @Synchronized
+    override fun undo(actor: String, change: NotificationUndo): Boolean {
+        requireUuid(change.id)
+        if (actor != change.actor) return false
+        if (preferences.getLong(key(actor, "revision.${change.id}"), 0) != change.revision) return false
+        this.change(actor, change.id, change.read, change.discarded)
+        return true
     }
 
     private fun values(name: String): Set<String> =

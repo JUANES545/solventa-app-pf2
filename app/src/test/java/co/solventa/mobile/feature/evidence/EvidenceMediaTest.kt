@@ -69,4 +69,57 @@ class EvidenceMediaTest {
         assertThrows(EvidenceProblem::class.java) { media.crop(file, EvidenceCrop(), tooSmall, EvidenceKind.PHOTO) }
         assertArrayEquals(original, file.readBytes())
     }
+
+    @Test fun importingJpegUsesPrivateCopyAndRejectsOversizeOrDisguisedFiles() {
+        val media = EvidenceMedia(folder.newFolder())
+        val original = folder.newFile("gallery.jpg").also(::jpeg)
+        val copied = original.inputStream().use { media.importPhoto(it, policy) }
+        assertArrayEquals(original.readBytes(), copied.readBytes())
+        assertNotEquals(original, copied)
+        val before = copied.parentFile!!.list()!!.toSet()
+        assertThrows(EvidenceProblem::class.java) {
+            original.inputStream().use {
+                media.importPhoto(it, EvidencePolicy(1, mapOf(EvidenceKind.PHOTO to 1L), 0))
+            }
+        }
+        assertThrows(EvidenceProblem::class.java) {
+            "not a JPEG".byteInputStream().use { media.importPhoto(it, policy) }
+        }
+        assertEquals("Rejected imports must not leave draft files", before, copied.parentFile!!.list()!!.toSet())
+    }
+
+    @Test fun documentImportUsesItsOwnPolicyAndCannotDisguiseAnImageAsVideo() {
+        val media = EvidenceMedia(folder.newFolder())
+        val source = folder.newFile("document.jpg").also(::jpeg)
+        val documentOnly = EvidencePolicy(1, mapOf(EvidenceKind.DOCUMENT to 1_000_000L), 0)
+        val imported = source.inputStream().use { media.importFile(it, EvidenceKind.DOCUMENT, documentOnly) }
+        assertArrayEquals(source.readBytes(), imported.readBytes())
+        val before = imported.parentFile!!.list()!!.toSet()
+        val videoPolicy = EvidencePolicy(1, mapOf(EvidenceKind.VIDEO to 1_000_000L), 45_000)
+        assertThrows(EvidenceProblem::class.java) {
+            source.inputStream().use { media.importFile(it, EvidenceKind.VIDEO, videoPolicy) }
+        }
+        assertThrows(EvidenceProblem::class.java) {
+            source.inputStream().use { media.importFile(it, EvidenceKind.PHOTO, documentOnly) }
+        }
+        assertEquals(before, imported.parentFile!!.list()!!.toSet())
+    }
+
+    @Test fun oversizedJpegDimensionsAreRejectedBeforeNativeDecode() {
+        val media = EvidenceMedia(folder.newFolder())
+        val file = media.create(EvidenceKind.DOCUMENT).also(::jpeg)
+        val bytes = file.readBytes()
+        val frame = (0 until bytes.size - 8).first {
+            bytes[it] == 0xff.toByte() && bytes[it + 1] in listOf(0xc0.toByte(), 0xc2.toByte())
+        }
+        // The JPEG frame advertises 5000 × 5000; the compressed payload stays small.
+        bytes[frame + 5] = 0x13
+        bytes[frame + 6] = 0x88.toByte()
+        bytes[frame + 7] = 0x13
+        bytes[frame + 8] = 0x88.toByte()
+        file.writeBytes(bytes)
+        assertEquals(EvidenceError.FORMAT, assertThrows(EvidenceProblem::class.java) {
+            media.inspect(file, EvidenceKind.DOCUMENT, policy)
+        }.reason)
+    }
 }

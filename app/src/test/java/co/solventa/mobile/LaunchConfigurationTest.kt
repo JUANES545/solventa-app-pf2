@@ -46,7 +46,10 @@ class LaunchConfigurationTest {
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, info.screenOrientation)
         assertEquals(R.style.Theme_Solventa_Starting, info.theme)
         assertEquals(R.style.Theme_Solventa, application.applicationInfo.theme)
-        assertTrue(info.exported)
+        assertEquals(BuildConfig.BUILD_TYPE != "mock", info.exported)
+        val launcher = checkNotNull(application.packageManager.getLaunchIntentForPackage(application.packageName))
+        assertEquals(if (BuildConfig.BUILD_TYPE == "mock") "co.solventa.mobile.mock.MockControlActivity"
+            else MainActivity::class.java.name, launcher.component?.className)
     }
 
     @Test fun launcherAndRoundIconUseTheSameAdaptiveBrandForeground() {
