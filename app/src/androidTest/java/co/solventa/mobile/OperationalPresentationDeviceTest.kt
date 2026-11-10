@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -53,18 +54,18 @@ class OperationalPresentationDeviceTest {
         CLAIM("claim", R.string.claim_submit),
         CLAIM_LOADING("claim-loading", R.string.claim_submit),
         HISTORY("claim-history", R.string.claim_add_evidence),
-        STATUS_LIST("status-list", R.string.claim_status_refresh),
-        STATUS_LIST_LOADING("status-list-loading", R.string.claim_status_refresh),
-        STATUS("status", R.string.claim_status_refresh),
-        STATUS_LOADING("status-loading", R.string.claim_status_refresh),
+        STATUS_LIST("status-list", R.string.claim_status_back),
+        STATUS_LIST_LOADING("status-list-loading", R.string.claim_status_back),
+        STATUS("status", R.string.claim_status_back),
+        STATUS_LOADING("status-loading", R.string.claim_status_back),
         EVIDENCE_CLAIMS("evidence-claims", R.string.evidence_back),
         EVIDENCE_CLAIMS_LOADING("evidence-claims-loading", R.string.evidence_back),
         EVIDENCE("evidence", R.string.evidence_retry),
-        EVIDENCE_REVIEW("evidence-review", R.string.evidence_attach),
+        EVIDENCE_REVIEW("evidence-review", R.string.evidence_gallery_attach),
         LOCATION("assistance-location", R.string.assistance_use_location),
         MANUAL("assistance-manual", R.string.assistance_search),
-        PROVIDERS("assistance-providers", R.string.assistance_retry),
-        PROVIDERS_LOADING("assistance-providers-loading", R.string.assistance_retry),
+        PROVIDERS("assistance-providers", R.string.assistance_back),
+        PROVIDERS_LOADING("assistance-providers-loading", R.string.assistance_back),
         CONFIRMATION("assistance-confirmation", R.string.assistance_request),
         SUCCESS("assistance-success", R.string.assistance_finish),
         NOTIFICATIONS("notifications", R.string.notification_details_show),
@@ -224,11 +225,18 @@ class OperationalPresentationDeviceTest {
         }
         for (theme in listOf(false, true)) {
             compose.runOnIdle { dark.value = theme }
-            compose.onNodeWithText(compose.activity.getString(
-                if (biometric) R.string.biometric_enable else R.string.evidence_remove,
-            )).performScrollTo().performClick()
+            if (biometric) {
+                compose.onNodeWithText(compose.activity.getString(R.string.biometric_enable))
+                    .performScrollTo().performClick()
+            } else {
+                compose.onNodeWithTag("evidence-tile-$otherReference").performScrollTo().performClick()
+                compose.onNodeWithText(compose.activity.getString(R.string.evidence_gallery_remove))
+                    .performScrollTo().performClick()
+            }
             compose.waitForIdle()
-            val image = compose.onNode(isDialog()).captureToImage().asAndroidBitmap()
+            val dialog = if (biometric) isDialog() else isDialog() and
+                hasAnyDescendant(hasText(compose.activity.getString(R.string.evidence_gallery_remove_question)))
+            val image = compose.onNode(dialog).captureToImage().asAndroidBitmap()
             val name = "ui-${if (biometric) "biometric-consent" else "evidence-remove"}-${if (theme) "dark" else "light"}-large.png"
             File(compose.activity.filesDir, name).outputStream().use {
                 check(image.compress(Bitmap.CompressFormat.PNG, 100, it))

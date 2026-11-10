@@ -175,6 +175,26 @@ class EvidenceGalleryTest {
             android.text.format.Formatter.formatShortFileSize(app, item.bytes))).assertExists()
     }
 
+    @Test fun rejectedTileRequiresConfirmationBeforeRemoval() {
+        val item = EvidenceItem(java.util.UUID.randomUUID().toString(), checkNotNull(state.scope),
+            EvidenceKind.PHOTO, java.time.Instant.now(), null, 128, "a".repeat(64), 0,
+            status = EvidenceStatus.REJECTED, rejection = EvidenceError.FORMAT)
+        val removed = mutableListOf<EvidenceItem>()
+        compose.setContent {
+            SolventaTheme(false) { EvidenceGallery(state.copy(items = listOf(item)), { removed.add(it) }, {}) }
+        }
+        compose.onNodeWithTag("evidence-tile-${item.id}").performClick()
+        compose.onNodeWithText(text(R.string.evidence_gallery_remove)).performScrollTo().performClick()
+        val dialog = isDialog() and hasAnyDescendant(hasText(text(R.string.evidence_gallery_remove_question)))
+        compose.onNode(dialog).assertIsDisplayed()
+        compose.onNode(hasText(text(R.string.evidence_gallery_cancel)) and hasAnyAncestor(dialog)).performClick()
+        assertTrue(removed.isEmpty())
+        compose.onNodeWithText(text(R.string.evidence_gallery_remove)).performScrollTo().performClick()
+        compose.onNode(hasText(text(R.string.evidence_gallery_remove)) and hasClickAction() and hasAnyAncestor(dialog))
+            .assertHeightIsAtLeast(androidx.compose.ui.unit.Dp(48f)).performClick()
+        assertEquals(listOf(item), removed)
+    }
+
     @Test fun remoteMetadataHasAnHonestPreviewWithoutTechnicalReferences() {
         compose.setContent {
             SolventaTheme(true) {
