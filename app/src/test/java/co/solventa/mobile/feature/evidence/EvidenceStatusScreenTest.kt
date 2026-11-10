@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -44,12 +45,13 @@ class EvidenceStatusScreenTest {
         compose.setContent { SolventaTheme { EvidenceScreen(model, model::close, {}) } }
         await { !model.state.value.busy }
         compose.onNodeWithText(app.getString(R.string.evidence_empty)).assertDoesNotExist()
-        compose.onNodeWithText(app.getString(R.string.evidence_remote_registered, 2))
+        compose.onNodeWithTag("evidence-tile-remote-one")
             .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("evidence-tile-remote-two").assertIsDisplayed()
         compose.runOnUiThread { ViewModelStore().apply { put("evidence", model); clear() } }
     }
 
-    @Test fun onlyDefinitivelyRejectedFilesOfferRemoval() {
+    @Test fun removalIsProgressiveAndConflictingFilesRemainProtected() {
         val app = RuntimeEnvironment.getApplication()
         val scope = EvidenceScope("actor-a", "claim-a")
         val policy = EvidencePolicy(4, mapOf(EvidenceKind.PHOTO to 100L), 0)
@@ -71,12 +73,18 @@ class EvidenceStatusScreenTest {
             compose.runOnUiThread { model.open(scope, policy, emptySet()) }
             compose.setContent { SolventaTheme(false) { EvidenceScreen(model, model::close, {}) } }
             await { !model.state.value.busy }
-            for (status in listOf(R.string.evidence_pending, R.string.evidence_confirmed, R.string.evidence_rejected, R.string.sync_conflict)) {
+            for (status in listOf(R.string.evidence_gallery_pending, R.string.evidence_gallery_rejected, R.string.sync_conflict)) {
                 compose.onNodeWithText(app.getString(status), substring = true).performScrollTo().assertIsDisplayed()
             }
-            compose.onAllNodesWithText(app.getString(R.string.evidence_remove)).assertCountEquals(1)
+            compose.onNodeWithText(app.getString(R.string.evidence_gallery_remove)).assertDoesNotExist()
             compose.onNodeWithText(app.getString(R.string.sync_error_conflict)).performScrollTo().assertIsDisplayed()
-            compose.onNodeWithText(app.getString(R.string.evidence_remove)).performScrollTo().assertIsDisplayed()
+            val rejected = model.state.value.items.single { it.status == EvidenceStatus.REJECTED }
+            compose.onNodeWithTag("evidence-tile-${rejected.id}").performScrollTo().performClick()
+            compose.onNodeWithText(app.getString(R.string.evidence_gallery_remove)).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText(app.getString(R.string.evidence_gallery_close)).performClick()
+            val conflict = model.state.value.items.single { it.status == EvidenceStatus.CONFLICT }
+            compose.onNodeWithTag("evidence-tile-${conflict.id}").performScrollTo().performClick()
+            compose.onNodeWithText(app.getString(R.string.evidence_gallery_remove)).assertDoesNotExist()
         } finally {
             compose.runOnUiThread { ViewModelStore().apply { put("evidence", model); clear() } }
         }
@@ -117,14 +125,15 @@ class EvidenceStatusScreenTest {
             assertNull(model.state.value.error)
             assertEquals(EvidenceStatus.PENDING, model.state.value.items.single().status)
             compose.onNodeWithText(app.getString(R.string.evidence_error_network)).performScrollTo().assertIsDisplayed()
-            compose.onNodeWithText(app.getString(R.string.evidence_failed), substring = true).performScrollTo().assertIsDisplayed()
-            compose.onNodeWithText(app.getString(R.string.evidence_remove)).assertDoesNotExist()
+            compose.onNodeWithText(app.getString(R.string.evidence_gallery_failed), substring = true).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText(app.getString(R.string.evidence_gallery_remove)).assertDoesNotExist()
             recover = true
             compose.onNodeWithText(app.getString(R.string.evidence_retry)).performScrollTo().performClick()
             await { !model.state.value.busy && model.state.value.items.single().status == EvidenceStatus.CONFIRMED }
-            compose.onNodeWithText(app.getString(R.string.evidence_confirmed), substring = true).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText(app.getString(R.string.evidence_gallery_saved)).assertDoesNotExist()
+            compose.onNodeWithTag("evidence-tile-${model.state.value.items.single().id}").performScrollTo().assertIsDisplayed()
             compose.onNodeWithText(app.getString(R.string.evidence_error_network)).assertDoesNotExist()
-            compose.onNodeWithText(app.getString(R.string.evidence_retry)).performScrollTo().assertIsNotEnabled()
+            compose.onNodeWithText(app.getString(R.string.evidence_retry)).assertDoesNotExist()
             assertEquals(2, uploads)
         } finally {
             compose.runOnUiThread { ViewModelStore().apply { put("evidence", model); clear() } }

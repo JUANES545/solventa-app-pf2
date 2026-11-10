@@ -1,5 +1,320 @@
 # Pruebas y cobertura Android
 
+## App aislada: Solventa Flujos
+
+La variante `mock` instala **Solventa Flujos** (`co.solventa.mobile.pf2.mock`)
+junto a la app real, con datos, colas, sesión y claves propios. Su servidor HTTP
+vive dentro del proceso Android y escucha únicamente en `127.0.0.1:18725`.
+No necesita AWS, un servidor en el computador ni `adb reverse`. El código y la
+dependencia del servidor pertenecen exclusivamente a `src/mock` y
+`mockImplementation`; no se incluyen en `debug`, `preview` ni `release`.
+
+Abre el icono **Solventa Flujos**, elige un escenario y toca **Abrir Solventa**.
+Para ingreso y registro usa exclusivamente `cliente@solventa.test` y la clave
+ficticia `Solventa123!`. El registro devuelve siempre el mismo actor sintético;
+no representa creación de usuarios reales ni aislamiento multiusuario.
+Usa solo datos y fotos ficticios, también al probar cámara o ubicación.
+
+El panel ofrece información disponible, listas vacías, 503, 403, 404 conocido,
+JSON inválido, un 401 renovable, 401 persistente, desconexión y confirmación
+perdida después de guardar. Para recuperarte, vuelve al panel desde el icono,
+selecciona **Con información**, abre la app y reintenta. Los cambios de escenario
+no borran borradores, solicitudes ni evidencias. La elección y el estado del
+servidor sobreviven al cierre del proceso; un desafío biométrico pendiente debe
+solicitarse nuevamente.
+
+Los contratos simulados cubren registro, ingreso, renovación y cierre de sesión,
+biometría, pólizas, reporte y estado de siniestro, carga por fragmentos y
+confirmación/cancelación de evidencias, prestadores y solicitud de asistencia,
+avisos y preferencias. La idempotencia conserva el resultado al reenviar la misma
+operación y rechaza el mismo UUID con otro cuerpo. Las evidencias verifican
+tamaño, offset y SHA-256; las pruebas incluyen reinicio con carga parcial y
+respuesta perdida sin duplicar el reporte.
+
+Con JDK 17 y SDK 35, y el teléfono físico conectado:
+
+```powershell
+.\gradlew.bat :app:testMockUnitTest :app:lintMock :app:assembleMock
+.\gradlew.bat :app:connectedMockAndroidTest -PmockDeviceTests=true
+adb install -r app\build\outputs\apk\mock\app-mock.apk
+```
+
+Con varios dispositivos, indica el serial con `adb -s` o `ANDROID_SERIAL`.
+
+`connectedMockAndroidTest` selecciona las pruebas de `MockFlowsDeviceTest`
+y configura el backend local de instrumentación. Comprueban HTTP con parsers
+reales (datos, vacío, fallo y recuperación) y el recorrido
+panel → ingreso/inicio → estado → evidencias → avisos, además de importar un
+JPEG desde un URI `content`, revisarlo, adjuntarlo, confirmar su carga y
+reabrir el archivo local. También cubren el formulario con calendario Material,
+reloj/entrada numérica, descripción de práctica y confirmación de reporte local.
+Si el clip público se ha preparado en el teléfono, verifican importación de MP4,
+revisión, eliminación del audio, confirmación y borrado persistente sin afectar
+los adjuntos de otro siniestro. Sin ese archivo se omite únicamente ese caso.
+Gradle retira los APK
+de su ejecución administrada; la última instalación deja la app independiente
+disponible para uso manual. Para instrumentación manual, además de seleccionar
+esa clase, pasa `-e backendUrl http://127.0.0.1:18725/movil/v1`.
+
+### Ubicación del evento
+
+El campo conserva la entrada manual y muestra un icono circular de 48 dp a su
+derecha, con nombre accesible «Usar ubicación actual». Solo la pulsación solicita
+permisos foreground de ubicación aproximada/fina; abrir el formulario no los
+solicita. La aproximada basta. Durante la búsqueda, el mismo icono muestra una
+única carga, anuncia «Buscando ubicación» y bloquea pulsaciones repetidas.
+
+Evidencias y Asistencia usan el mismo permiso al elegir explícitamente añadir
+ubicación o usar la ubicación actual. Evidencias no activa su casilla hasta
+obtener el permiso y la desmarca si no consigue una ubicación. Asistencia ofrece
+la entrada manual. Ninguna pantalla solicita ubicación al abrirse.
+
+Android no muestra otro diálogo cuando el usuario ha bloqueado los permisos
+(`USER_FIXED`). La respuesta denegada ofrece «Abrir ajustes» y «Cancelar».
+Abrir ajustes cancela esa solicitud: volver a la app no obtiene ubicación por
+su cuenta y hay que elegirla de nuevo. Una denegación temporal o la cancelación
+del diálogo tampoco inicia una búsqueda.
+
+Antes se copiaba `latitud, longitud` con cinco decimales. Ahora el Geocoder del
+sistema intenta devolver una dirección legible, sin API externa añadida. El
+contrato sigue siendo texto libre de hasta 300 caracteres:
+`ClaimDraft.place` → `ClaimPayload.place` → JSON `lugar`, sin sustituirlo por
+«Ubicación actual». Si el sistema no resuelve dirección y el campo está vacío,
+se copia `Coordenadas: latitud, longitud` con seis decimales y un aviso de revisión.
+Si ya había texto, se conserva. La búsqueda usa los proveedores de ubicación
+disponibles en paralelo y se detiene al recibir un resultado reciente. Sin permiso,
+proveedor, GPS disponible o resultado antes de 30 segundos, se conserva el texto
+y se informa del fallo. La resolución
+de dirección tiene un límite de cuatro segundos; en Android anterior a 33 usa
+el Geocoder bloqueante fuera del hilo UI con cancelación por interrupción.
+
+En la variante `mock`, tras conceder el permiso, los tres flujos reciben de
+inmediato una ubicación fija de Bogotá. El reporte usa la dirección de demo;
+evidencias y asistencia reciben sus coordenadas sin consultar GPS ni Geocoder.
+
+`ClaimLocationPermissionTest`, `ClaimLocationFieldTest`,
+`ClaimLocationResumeTest`, `EvidenceLocationPermissionTest`,
+`AssistanceLocationPermissionTest`, `DeviceLocationTest` y `ClaimLocationAddressTest` controlan
+permisos y coordenadas sintéticas:
+concesión inicial una sola vez, aproximada/fina, permiso previo, denegación,
+cancelación, ajustes, proveedores apagados, timeout/errores, dirección del
+Geocoder en API 26/35 y contenido exacto del payload. Comprueban además edición
+manual durante ubicación/geocodificación, cambios de actor/corrección/borrador,
+refresco y control accesible sin botón de texto ni carga duplicada. La
+reconexión automática espera a que termine el permiso y la búsqueda, y después
+reanuda el refresco pendiente. Cambiar contexto, editar el lugar, salir o dejar
+la app en segundo plano cancela la solicitud; no se envía ningún reporte por
+localizar.
+
+En el teléfono con permisos ya bloqueados, `MockFlowsDeviceTest` pulsa el icono
+del formulario, comprueba «Abrir ajustes», captura el resultado y cancela sin
+abrir ajustes ni conceder permisos. La captura de carga usa **solo la vista
+compartida con estado sintético**, sin consultar ubicación física. La concesión,
+el GPS, la dirección y el payload con ubicación se validan en pruebas controladas,
+no con datos reales del teléfono. El recorrido local que envía «Choque de prueba»
+requiere ejecutar después `TestReportCleanupDeviceTest` para retirar únicamente
+fixtures reconocidos vacíos, conservando adjuntos y pendientes.
+
+`LocationPermissionPromptDeviceTest` comprueba en el teléfono que el diálogo de
+Android aparece al elegir ubicación en los tres flujos; lo cierra sin conceder
+permisos ni consultar la ubicación física. La evidencia de esa prueba usa un
+borrador sintético temporal que se descarta al terminar.
+
+La prueba de fotografía crea su propio siniestro para no agotar la capacidad
+de evidencias del ejemplo inicial al repetirla.
+
+### Cámara y detalles de adjuntos
+
+«Usar cámara» comprueba `CAMERA` antes de abrir foto, vídeo o documento JPEG.
+El registro usa el mismo control para documento y selfie. Si falta el permiso,
+Android lo solicita; al concederlo, continúa el tipo elegido, sin tomar una foto
+ni iniciar una grabación por sí solo. Un rechazo explica el permiso con una frase
+corta. Si Android bloquea nuevas solicitudes, ofrece **Abrir Ajustes** y
+**Cancelar**. Volver de Ajustes exige elegir otra vez la captura.
+Cancelar el diálogo, salir, cambiar de actor/siniestro o enviar la app al fondo
+invalida la intención anterior. No debe aparecer un error de captura por rechazar
+el permiso. Los fallos reales de cámara siguen mostrando un error.
+
+«Elegir archivo» abre el picker por tipo sin solicitar cámara, almacenamiento
+ni micrófono. Los vídeos capturados permanecen sin audio.
+El visor de cámara de Evidencias permite alternar frontal/trasera desde el icono
+superior derecho si el dispositivo dispone de ambas. El control queda bloqueado
+durante la captura o grabación y no inicia una captura al cambiar de cámara.
+La ubicación opcional solicita permisos en la propia pantalla y conserva la
+búsqueda al pasar de captura a revisión. Solo queda añadida cuando llega una
+posición válida; si no llega, muestra el estado junto a la casilla y permite
+reintentar, sin un snackbar. El permiso no garantiza señal GPS ni disponibilidad
+de un proveedor de ubicación por red.
+
+La vista del adjunto conserva imagen/vídeo, tipo, fecha, tamaño legible, estado
+y duración del vídeo. No ofrece otro panel de detalles ni muestra SHA, UUID,
+MIME, coordenadas, zonas horarias o instantes técnicos. La integridad, el alcance
+actor/siniestro y los metadatos de red permanecen internos. El borrado confirmado
+sigue limitado a `mock`; pendientes y borradores conservan sus acciones.
+
+Pruebas focales: `CameraPermissionTest` controla la respuesta estándar de Android
+(incluida cancelación con resultado vacío); `EvidenceCameraPermissionTest`
+ejercita el cableado de foto/vídeo/documento, permiso concedido, rechazo,
+callback tardío, cámara no disponible y pickers sin permiso.
+`EvidenceGalleryTest` comprueba la ausencia de información técnica y las acciones.
+No se automatiza la aceptación de permisos en el dispositivo.
+Con `CAMERA` denegado y `USER_FIXED`, `MockFlowsDeviceTest` comprueba la explicación
+y la salida a Ajustes en los tres accesos, cancela sin capturar y guarda capturas
+del aviso y de un adjunto de práctica. Este recorrido no acredita una concesión
+física ni una nueva captura: esos casos se comprueban con Robolectric.
+
+En Reportar un siniestro, la fecha abre un calendario Material y la hora ofrece
+reloj y teclado según el formato de 12/24 horas del teléfono. Cancelar conserva
+el borrador. El calendario usa días UTC para evitar desplazar la fecha local;
+la validación del reporte conserva el contrato de vigencia y rechaza horas futuras.
+Solo `mock` completa una descripción vacía al enfocar el campo; no reemplaza texto
+existente. `CLAIM_SAMPLE_ENABLED` permanece desactivado y el recurso vacío en
+las variantes de producción.
+
+**Usar ubicación actual** solicita el permiso del sistema y obtiene coordenadas
+frescas del teléfono, sin geocodificación externa. La dirección sigue siendo
+editable, incluso sin permiso o GPS. Un resultado tardío no reemplaza una
+ubicación escrita ni datos de otra cuenta. Usa la ubicación actual solo si
+corresponde al lugar del evento; no convierte una posición actual en prueba
+de dónde ocurrió un evento anterior.
+
+En Evidencias, cada acción abre las opciones de captura y selección de archivos.
+La selección respeta los límites del backend y requiere revisión antes de adjuntar.
+Al aceptar se eliminan los metadatos de ubicación de la imagen; el consentimiento
+de ubicación sigue siendo explícito. Las miniaturas usan únicamente archivos
+locales validados y separados por cuenta/siniestro. Si no existen, la tarjeta
+muestra una ilustración propia, no una supuesta evidencia remota.
+
+Fotos de práctica de dominio público en `Download/Solventa` del teléfono:
+[Car crash 2, Dori](https://commons.wikimedia.org/wiki/File:Car_crash_2.jpg) y
+[Car crash 1, Thue](https://commons.wikimedia.org/wiki/File:Car_crash_1.jpg).
+No forman parte del APK ni se cargan automáticamente. Selecciónalas manualmente
+desde **Tomar fotografía → Elegir archivo**; no uses imágenes privadas en la app de pruebas.
+
+La carpeta `Pictures/Solventa` también contiene `choque-frontal.jpg`,
+`parachoques.jpg`, `puerta-lateral.jpg` y `vehiculos-temporal.jpg`:
+[Car damage Malden Manor (2)](https://commons.wikimedia.org/wiki/File:Car_damage_Malden_Manor_(2).jpg)
+y [(1)](https://commons.wikimedia.org/wiki/File:Car_damage_Malden_Manor_(1).jpg),
+Colin McLaughlin, CC0;
+[Damaged car door](https://commons.wikimedia.org/wiki/File:Damaged_car_door.jpg),
+Garitzko, dominio público; y
+[NWS damage survey cars](https://commons.wikimedia.org/wiki/File:NWS_damage_survey_cars.jpeg),
+NWS WFO Norman, dominio público.
+`documento-prueba.jpg` es un documento original ficticio, sin datos personales
+ni validez legal. Se proporciona como JPEG escaneado, el formato de documento
+admitido actualmente; no implica soporte de PDF.
+
+`DemoVarietyDeviceTest` se ejecuta por separado con estos archivos ya preparados:
+importa fotografía y documento desde MediaStore, exige revisión, confirma la carga
+y comprueba su restauración con archivos locales válidos. Conserva esos dos
+adjuntos bajo un siniestro de muestra para la demostración manual.
+`DemoPhotoPreparationDeviceTest` registra las copias públicas desde archivos
+privados preparados exclusivamente para esa ejecución. Valida SHA-256, evita
+duplicados y deja archivos visibles en la galería sin pedir acceso general a
+las fotografías privadas del teléfono.
+
+`LegacyBlueEvidenceCleanupDeviceTest` retira únicamente los JPEG azules del
+fixture histórico: exige actor de la demo, siniestro semilla o metadatos exactos
+del antiguo test fotográfico, PHOTO confirmada, firma SHA conocida y archivo
+local íntegro. Usa la eliminación mock y después el almacén; no cambia bytes
+de evidencias confirmadas ni sustituye miniaturas. Conserva los reportes, las
+fotografías reales y los adjuntos de otras cuentas. El test fotográfico actual
+usa la foto pública preparada y retira su propio adjunto al terminar para no
+volver a llenar la galería con artefactos de instrumentación.
+
+`TestReportCleanupDeviceTest` limpia los reportes vacíos de instrumentación
+fotográfica, video y formulario, identificados por tipo, lugar, póliza y descripción
+exactos. Conserva reportes con adjuntos locales/remotos, avisos, asistencias,
+operaciones pendientes y correcciones; retira solo sus confirmaciones de prueba
+de la cola local y conserva las claves de idempotencia. No elimina fotos, video ni
+documento del teléfono. Las pruebas de foto y video retiran su propio reporte vacío
+al terminar. Esta utilidad
+solo se ejecuta de forma explícita en la variante `mock`; no existe un borrado
+equivalente en el contrato real.
+
+El video de práctica procede de
+[Zipper truck, Pete Forsyth](https://commons.wikimedia.org/wiki/File:Zipper_truck.webm)
+(CC0). El derivado MPEG-4 de Wikimedia dura 8,534 segundos y pesa 1.140.364 bytes.
+`DemoMediaDeviceTest` lo remultiplexa a MP4 sin audio ni recodificación, verifica
+duración y extracción de un fotograma y lo guarda en `Movies/Solventa/trafico.mp4`.
+Esta preparación se ejecuta por separado de las pruebas habituales, solo en `mock`,
+con el archivo de origen previamente copiado a su almacenamiento privado.
+
+Las pantallas de consulta usan el gesto de refresco de Material, también disponible
+como acción de accesibilidad **Actualizar**. No se muestran instrucciones ni botones
+de actualización redundantes. En el formulario, refrescar consulta las pólizas sin
+enviar reportes pendientes; **Enviar**, en la tarjeta de pendientes, es la operación explícita
+si existe una solicitud recuperable. La reconexión conserva sus reglas de reintento.
+
+La carga inicial mantiene el skeleton sin añadir un indicador flotante. Las
+consultas automáticas con contenido conservan su geometría y muestran una barra
+fina al pie de la tarjeta, en lugar de una rueda en la esquina. Al refrescar con
+el gesto o la acción accesible aparece un único indicador de página; las tarjetas
+no añaden otros indicadores durante esa misma consulta.
+
+**Reportar un siniestro** no repite el historial: los reportes confirmados viven en
+**Mis siniestros**. Mientras se edita solo se ven el formulario, una tarjeta
+**N reportes por enviar** (tipos en una línea, estado breve y **Enviar**, deshabilitado
+mientras hay una operación en curso) y, si existen rechazos o conflictos, una tarjeta
+plegable **N reportes por revisar** con motivo, fecha, descripción en dos líneas,
+detalles técnicos plegados y **Corregir** cuando aplica. Al enviar se muestra solo el
+reporte recién confirmado con **Agregar evidencias**, **Ver estado** y **Nuevo reporte**;
+el recibo completo queda en **Ver detalles**. Las referencias cortas solo aparecen
+cuando dos pólizas o siniestros coinciden en tipo (y fecha) y hace falta distinguirlos.
+La gestión de credenciales biométricas y el reintento de una solicitud de asistencia
+incierta no se sustituyen por un gesto.
+
+Para esta demostración, un siniestro nuevo en `mock` comienza con la fecha
+**3 de noviembre de 2026** (`CLAIM_INITIAL_DATE`). La fecha sigue siendo editable;
+corregir un reporte conserva su fecha original. Esta configuración no cambia el
+reloj del teléfono, la hora, los avisos, las sesiones ni el historial guardado.
+Las demás variantes mantienen la fecha inicial vacía. Para retirar este ajuste,
+se deja vacía `CLAIM_INITIAL_DATE` en la variante `mock`.
+
+`DemoReadinessDeviceTest` se ejecuta por separado al preparar la demostración:
+comprueba la fecha inicial y la tarjeta informativa de avisos sin solicitar ni
+conceder permisos. Requiere cámara, ubicación aproximada/precisa y avisos sin
+conceder. La preparación revoca únicamente esos permisos de
+`co.solventa.mobile.pf2.mock` y limpia sus flags `user-set`/`user-fixed` para que
+Android vuelva a preguntar; no borra datos, adjuntos ni permisos de otras apps.
+
+El acceso directo de escritorio **Solventa - Enviar aviso** llama a
+`scripts\Send-DemoNotification.ps1 -Send` con el teléfono conectado por USB.
+ADB debe estar en el PATH; también se puede indicar su ruta con `-Adb` y
+seleccionar el dispositivo con `-Serial`.
+El receptor existe solo en `mock`, exige el permiso de envío de shell y conserva
+el evento en el buzón local. La sesión, las preferencias y el permiso de Android
+deben estar activos; un fallo no se presenta como envío correcto.
+`-SelfCheck` y `-DryRun` no envían mensajes; repetir `-EventId` comprueba
+deduplicación. El usuario confirmó conceder el permiso y recibir el aviso enviado
+con ese acceso directo.
+
+**Notificaciones** mantiene un único encabezado accesible. La tarjeta informativa,
+con icono y tono del tema distintos de los avisos, aparece solo si Android/canal
+requieren habilitación o las preferencias ya consultadas están desactivadas.
+Las preferencias aún desconocidas no equivalen a desactivadas: al entrar o volver
+no aparece una confirmación fugaz del permiso concedido. Android/canal bloqueados
+ofrecen ajustes; las preferencias desactivadas ofrecen **Activar avisos** sin
+volver a pedir un permiso existente. Al abrir y en `ON_RESUME` se consulta el
+estado real. **Ver detalle** conserva contenido, fecha y **Ocultar detalle**,
+sin **Abrir aviso**, referencias técnicas ni otro panel **Ver detalles**.
+Lectura, eliminación, deshacer, gestos y alternativas accesibles siguen disponibles;
+los enlaces de las notificaciones del sistema conservan su autorización por sesión.
+Las regresiones focales cubren permiso inicial, concesión, revocación, canal,
+preferencias desconocidas/desactivadas e ida y vuelta sin mensajes de éxito.
+Validación del refinamiento: `:app:testMockUnitTest` con `NotificationScreenTest`,
+`NotificationViewModelTest`, `AndroidNotificationPresenterTest`,
+`NotificationStoreTest` y `OperationalStatePresentationTest`: 43 pruebas, cero
+fallos y cero omitidas. Incluye swipe, lectura accesible, deshacer y aislamiento
+por cuenta. No sustituye una revisión visual o de TalkBack en el teléfono.
+
+La cámara, los permisos, el GPS, Android Keystore y el diálogo biométrico siguen
+siendo los del teléfono, sin autoaprobación. Las pruebas de contrato verifican
+firmas ECDSA y desafíos de un solo uso, no certifican el reconocimiento
+biométrico físico. No se simulan una galería remota inexistente ni entrega push
+externa. Estos mocks permiten comprobar el cliente; **no prueban el despliegue,
+la persistencia ni la recuperación de los servicios reales**.
+
 ## SOL-193 / SOL-235 / SOL-239: cola durable e historial de resultados
 
 `ClaimStore` y `EvidenceStore` conservan UUID, cuerpo y acuses en SQLite privado.
@@ -91,7 +406,7 @@ carga. No toca colas previas, cuentas reales, red del dispositivo ni `FLAG_SECUR
 .\gradlew.bat :app:assembleClaimTest :app:assembleClaimTestAndroidTest `
   -PclaimDeviceTests=true -PbackendE2e=true --no-daemon --max-workers=2 `
   "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" "-Pkotlin.compiler.execution.strategy=in-process"
-adb -s RF8N739C9SJ shell am instrument -w `
+adb shell am instrument -w `
   -e class co.solventa.mobile.espresso.OfflineQueueDeviceTest `
   co.solventa.mobile.pf2.claimtest.test/co.solventa.mobile.espresso.SolventaTestRunner
 ```
@@ -190,7 +505,7 @@ o servicios de producción.
 .\gradlew.bat :app:assembleClaimTest :app:assembleClaimTestAndroidTest `
   -PclaimDeviceTests=true -PbackendE2e=true --no-daemon --max-workers=2 `
   "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" "-Pkotlin.compiler.execution.strategy=in-process"
-adb -s RF8N739C9SJ shell am instrument -w `
+adb shell am instrument -w `
   -e class co.solventa.mobile.espresso.OfflineQueueHttpDeviceTest `
   -e fixtureFile sol193-http-fixture-UUID.json `
   co.solventa.mobile.pf2.claimtest.test/co.solventa.mobile.espresso.SolventaTestRunner
@@ -325,7 +640,7 @@ conflictos que el backend todavía no haya implementado.
 
 La cuenta ofrece **Estado de mis siniestros**. La selección usa
 `GET /movil/v1/siniestros`; no pide identificadores escritos. Un reporte
-confirmado también ofrece **Consultar estado**, sin volver a enviarlo.
+recién confirmado también ofrece **Ver estado**, sin volver a enviarlo.
 El acuse `registrado` solo confirma la recepción del reporte; no sustituye
 el estado de negocio.
 
@@ -439,7 +754,7 @@ usa esta copia, lo indica. Cada reintento conserva el cuerpo y
 El botón de evidencia abre ese siniestro mediante el flujo de SOL-171.
 
 Sin conexión o ante una respuesta incierta, conserva el reporte pendiente.
-Un rechazo explícito de póliza/fecha permite **Corregir reporte rechazado**:
+Un rechazo explícito de póliza/fecha permite **Corregir** desde la tarjeta **por revisar**:
 conserva los datos hasta guardar la corrección y entonces cambia la operación.
 No permite cambiar el cuerpo ni generar otra clave para un ACK incierto.
 Solo `404 + poliza_no_encontrada` y `422 + fecha_evento_invalida` habilitan esa

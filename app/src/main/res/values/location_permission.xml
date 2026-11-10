@@ -1,0 +1,7 @@
+<resources>
+    <string name="location_permission_title">Permiso de ubicación</string>
+    <string name="location_permission_denied">No se concedió el permiso de ubicación.</string>
+    <string name="location_permission_settings">Activa Ubicación en los ajustes de la app.</string>
+    <string name="location_permission_open_settings">Abrir ajustes</string>
+    <string name="location_permission_settings_failed">No pudimos abrir los ajustes.</string>
+</resources>

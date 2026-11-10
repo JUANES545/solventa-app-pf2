@@ -84,7 +84,7 @@ class EvidenceStatusDeviceTest {
             }
             compose.onNodeWithText(context.getString(R.string.evidence_confirmed), substring = true).performScrollTo().assertIsDisplayed()
             compose.onNodeWithText(context.getString(R.string.evidence_error_network)).assertDoesNotExist()
-            compose.onNodeWithText(context.getString(R.string.evidence_retry)).performScrollTo().assertIsNotEnabled()
+            compose.onNodeWithText(context.getString(R.string.evidence_retry)).assertDoesNotExist()
             assertEquals(1, uploads)
             EvidenceStore(directory).use {
                 val restored = it.list(scope).single()

@@ -121,7 +121,7 @@ class OfflineQueueDeviceTest {
             }
             compose.onNodeWithText(context.getString(R.string.evidence_confirmed), substring = true).performScrollTo().assertIsDisplayed()
             compose.onNodeWithText(context.getString(R.string.evidence_error_network)).assertDoesNotExist()
-            compose.onNodeWithText(context.getString(R.string.evidence_retry)).performScrollTo().assertIsNotEnabled()
+            compose.onNodeWithText(context.getString(R.string.evidence_retry)).assertDoesNotExist()
             assertEquals(1, uploads)
             assertEquals(listOf(original[0].id, original[1].id, original[1].id), lookups)
             EvidenceStore(directory).use { store ->
@@ -139,7 +139,7 @@ class OfflineQueueDeviceTest {
                 models.value = newModel().also { it.open(scope, policy, emptySet()) }
             }
             compose.waitUntil(15_000) { !models.value.state.value.busy }
-            compose.onNodeWithText(context.getString(R.string.evidence_retry)).performScrollTo().assertIsNotEnabled()
+            compose.onNodeWithText(context.getString(R.string.evidence_retry)).assertDoesNotExist()
             assertEquals(EvidenceStatus.CONFLICT, models.value.state.value.items.first().status)
         } finally {
             compose.runOnUiThread { clearModel() }

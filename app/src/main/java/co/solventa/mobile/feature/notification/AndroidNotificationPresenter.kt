@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import co.solventa.mobile.MainActivity
 import co.solventa.mobile.R
@@ -19,15 +20,23 @@ import javax.inject.Inject
 internal class AndroidNotificationPresenter @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : NotificationPresenter {
-    override fun permissionGranted(): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+    override fun permissionGranted(): Boolean {
+        val runtimeAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val channelAllowed = manager.getNotificationChannel(CHANNEL_ID)?.importance != NotificationManager.IMPORTANCE_NONE
+        return runtimeAllowed && NotificationManagerCompat.from(context).areNotificationsEnabled() && channelAllowed
+    }
+
+    override fun clear() {
+        context.getSystemService(NotificationManager::class.java).cancelAll()
+    }
 
     override fun show(notification: MobileNotification) {
-        if (!permissionGranted()) return
+        if (!permissionGranted()) throw SecurityException("Avisos desactivados")
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(

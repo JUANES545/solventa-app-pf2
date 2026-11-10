@@ -28,6 +28,8 @@ import co.solventa.mobile.MainActivity
 import co.solventa.mobile.R
 import co.solventa.mobile.feature.auth.AuthRepository
 import co.solventa.mobile.feature.evidence.EvidenceKind
+import co.solventa.mobile.feature.evidence.EvidenceMedia
+import co.solventa.mobile.feature.evidence.EvidencePolicy
 import co.solventa.mobile.feature.evidence.EvidenceStatus
 import co.solventa.mobile.feature.evidence.EvidenceStep
 import co.solventa.mobile.feature.evidence.EvidenceStore
@@ -84,6 +86,14 @@ class EvidenceDeviceE2eTest {
 
     private fun text(id: Int) = context.getString(id)
     private fun click(id: Int) = compose.onNodeWithText(text(id)).performScrollTo().performClick()
+    private fun useCamera(kind: EvidenceKind) {
+        click(when (kind) {
+            EvidenceKind.PHOTO -> R.string.evidence_gallery_photo
+            EvidenceKind.DOCUMENT -> R.string.evidence_gallery_document
+            EvidenceKind.VIDEO -> R.string.evidence_gallery_video
+        })
+        compose.onNodeWithTag("evidence-source-camera").performClick()
+    }
     private fun await(id: Int) {
         compose.waitUntil(30_000) { compose.onAllNodesWithText(text(id)).fetchSemanticsNodes().isNotEmpty() }
     }
@@ -159,23 +169,20 @@ class EvidenceDeviceE2eTest {
         settle(EvidenceStep.LIST)
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            click(R.string.evidence_photo)
+            useCamera(EvidenceKind.PHOTO)
             denyPermission(EvidenceError.PERMISSION)
             await(R.string.evidence_error_permission)
         }
         instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
+        useCamera(EvidenceKind.PHOTO)
         val locationLabel = text(R.string.evidence_location)
         compose.onNodeWithContentDescription(locationLabel).performScrollTo().performClick()
         if (!co.solventa.mobile.feature.evidence.hasEvidenceLocationPermission(context)) denyPermission(EvidenceError.LOCATION)
         compose.waitUntil(15_000) { model.state.value.location == null }
-        compose.runOnIdle { model.enableLocation(false) }
+        compose.runOnIdle { model.enableLocation(false); model.back() }
 
         for (kind in listOf(EvidenceKind.PHOTO, EvidenceKind.DOCUMENT, EvidenceKind.VIDEO)) {
-            click(when (kind) {
-                EvidenceKind.PHOTO -> R.string.evidence_photo
-                EvidenceKind.DOCUMENT -> R.string.evidence_document
-                EvidenceKind.VIDEO -> R.string.evidence_video
-            })
+            useCamera(kind)
             await(R.string.evidence_take)
             Thread.sleep(1500)
             click(R.string.evidence_take)
@@ -186,7 +193,8 @@ class EvidenceDeviceE2eTest {
             }
             settle(EvidenceStep.REVIEW)
             if (kind == EvidenceKind.PHOTO) {
-                click(R.string.evidence_repeat)
+                click(R.string.evidence_gallery_replace)
+                compose.onNodeWithTag("evidence-source-camera").performClick()
                 await(R.string.evidence_take)
                 Thread.sleep(1000)
                 click(R.string.evidence_take)
@@ -194,6 +202,7 @@ class EvidenceDeviceE2eTest {
             }
             if (kind == EvidenceKind.DOCUMENT) {
                 val before = checkNotNull(model.state.value.preview?.bitmap).width
+                click(R.string.evidence_edit_crop)
                 compose.onNodeWithContentDescription(text(R.string.evidence_crop_left)).performScrollTo()
                     .performSemanticsAction(SemanticsActions.SetProgress) { it(.2f) }
                 click(R.string.evidence_crop)
@@ -201,7 +210,34 @@ class EvidenceDeviceE2eTest {
                 assertTrue(checkNotNull(model.state.value.preview?.bitmap).width < before)
             }
             val draft = checkNotNull(model.state.value.draft)
-            if (kind == EvidenceKind.VIDEO) addSyntheticVideoLocation(draft.file)
+            if (kind == EvidenceKind.VIDEO) {
+                addSyntheticVideoLocation(draft.file)
+                val media = EvidenceMedia(context.cacheDir)
+                val policy = checkNotNull(model.state.value.policy)
+                val imported = draft.file.inputStream().use { media.importFile(it, EvidenceKind.VIDEO, policy) }
+                try {
+                    val preview = media.inspect(imported, EvidenceKind.VIDEO, policy)
+                    assertTrue(preview.durationMillis > 0)
+                    preview.bitmap?.recycle()
+                    val metadata = MediaMetadataRetriever()
+                    try {
+                        metadata.setDataSource(imported.path)
+                        assertNull(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO))
+                        assertNull(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION))
+                    } finally { metadata.release() }
+                    for (invalidPolicy in listOf(
+                        EvidencePolicy(1, mapOf(EvidenceKind.VIDEO to 1L), policy.maxVideoDurationMillis),
+                        EvidencePolicy(1, policy.maxBytes, 1),
+                    )) {
+                        try {
+                            draft.file.inputStream().use { media.importFile(it, EvidenceKind.VIDEO, invalidPolicy) }
+                            fail("Invalid video must not pass import")
+                        } catch (expected: co.solventa.mobile.feature.evidence.EvidenceProblem) {
+                            assertTrue(expected.reason in setOf(EvidenceError.SIZE, EvidenceError.DURATION))
+                        }
+                    }
+                } finally { media.delete(imported) }
+            }
             else ExifInterface(draft.file.path).apply {
                 setAttribute(ExifInterface.TAG_GPS_LATITUDE, "4/1,36/1,0/1")
                 setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, "N")
@@ -209,7 +245,7 @@ class EvidenceDeviceE2eTest {
                 setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, "W")
                 saveAttributes()
             }
-            click(R.string.evidence_attach)
+            click(R.string.evidence_gallery_attach)
             settle(EvidenceStep.LIST)
             assertTrue(model.state.value.items.any { it.kind == kind && it.status == EvidenceStatus.PENDING })
         }
@@ -261,12 +297,12 @@ class EvidenceDeviceE2eTest {
         compose.onNodeWithTag("claim-${scope.claimId}").performScrollTo().performClick()
         if (phase == "interrupt") {
             settle(EvidenceStep.LIST)
-            click(R.string.evidence_photo)
+            useCamera(EvidenceKind.PHOTO)
             await(R.string.evidence_take)
             Thread.sleep(1200)
             click(R.string.evidence_take)
             settle(EvidenceStep.REVIEW)
-            click(R.string.evidence_attach)
+            click(R.string.evidence_gallery_attach)
             settle(EvidenceStep.LIST)
             val before = model.state.value.items.filter { it.status == EvidenceStatus.CONFIRMED }.map { checkNotNull(it.remoteId) }
             click(R.string.evidence_retry)
@@ -328,8 +364,9 @@ class EvidenceDeviceE2eTest {
         val rejected = model.state.value.items.single { it.id == rejectedId }
         assertEquals(EvidenceError.FORMAT, rejected.rejection)
         EvidenceStore(context.noBackupFilesDir).use { assertTrue(it.file(rejected).exists()) }
-        click(R.string.evidence_remove)
-        compose.onAllNodesWithText(text(R.string.evidence_remove)).onLast().performClick()
+        compose.onNodeWithTag("evidence-tile-$rejectedId").performScrollTo().performClick()
+        click(R.string.evidence_gallery_remove)
+        compose.onAllNodesWithText(text(R.string.evidence_gallery_remove)).onLast().performClick()
         compose.waitUntil(30_000) { !model.state.value.busy && model.state.value.items.none { it.id == rejectedId } }
         assertNull(model.state.value.error)
         assertEquals(remote.size + 1, runBlocking { api.confirmedIds(scope) }.size)

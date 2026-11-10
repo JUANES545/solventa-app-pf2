@@ -72,6 +72,38 @@ class EvidenceViewModelTest {
         assertFalse(model.state.value.locationEnabled)
     }
 
+    @Test fun importedPhotoRequiresCurrentScopeAndReviewBeforeBeingQueued() {
+        model.open(scope, policy, emptySet())
+        await()
+        val image = Bitmap.createBitmap(64, 48, Bitmap.Config.ARGB_8888)
+        val bytes = java.io.ByteArrayOutputStream().use {
+            check(image.compress(Bitmap.CompressFormat.JPEG, 95, it))
+            it.toByteArray()
+        }
+        image.recycle()
+        val uri = android.net.Uri.parse("content://gallery/selected.jpg")
+        val generation = model.state.value.generation
+        shadowOf(app.contentResolver).registerInputStream(uri, bytes.inputStream())
+        model.importPhoto(uri, scope.copy(actorId = "another-actor"), generation)
+        assertFalse(model.state.value.busy)
+        model.importPhoto(uri, scope, generation)
+        await()
+        assertEquals(EvidenceStep.REVIEW, model.state.value.step)
+        assertTrue(model.state.value.items.isEmpty())
+        assertNotNull(model.state.value.preview?.bitmap)
+        model.accept(false)
+        await()
+        assertEquals(EvidenceStep.LIST, model.state.value.step)
+        assertEquals(1, model.state.value.items.size)
+        assertNull(model.state.value.items.single().location)
+        model.close()
+        model.open(scope.copy(actorId = "another-actor"), policy, emptySet())
+        await()
+        model.importPhoto(uri, scope, generation)
+        assertEquals(EvidenceStep.LIST, model.state.value.step)
+        assertTrue(model.state.value.items.isEmpty())
+    }
+
     @Test fun confirmedReportOpensAuthorizedEvidenceWithoutManualIdentifierEntry() {
         okhttp3.mockwebserver.MockWebServer().use { server ->
             server.enqueue(okhttp3.mockwebserver.MockResponse().setBody(

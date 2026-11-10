@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalContext
@@ -108,6 +109,7 @@ class ClaimHostTest {
         compose.setContent {
             if (visible.value) {
                 CompositionLocalProvider(LocalLifecycleOwner provides owner,
+                    LocalActivityResultRegistryOwner provides compose.activity,
                     LocalContext provides if (useApplication.value) app else compose.activity) {
                     ClaimHost(model) {}
                 }

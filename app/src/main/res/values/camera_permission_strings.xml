@@ -1,0 +1,8 @@
+<resources>
+    <string name="camera_permission_title">Permiso de cámara</string>
+    <string name="camera_permission_needed">Permite usar la cámara para tomar fotos, vídeos o documentos.</string>
+    <string name="camera_permission_settings">Activa el permiso de cámara en Ajustes para tomar fotos, vídeos o documentos.</string>
+    <string name="camera_open_settings">Abrir Ajustes</string>
+    <string name="camera_permission_close">Cancelar</string>
+    <string name="camera_settings_unavailable">No pudimos abrir Ajustes. Busca el permiso de cámara en los ajustes de la app.</string>
+</resources>

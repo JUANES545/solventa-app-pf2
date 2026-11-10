@@ -52,7 +52,7 @@ class OperationalPresentationDeviceTest {
     private enum class Scene(val fileName: String, val action: Int) {
         CLAIM("claim", R.string.claim_submit),
         CLAIM_LOADING("claim-loading", R.string.claim_submit),
-        HISTORY("claim-history", R.string.evidence_entry),
+        HISTORY("claim-history", R.string.claim_add_evidence),
         STATUS_LIST("status-list", R.string.claim_status_refresh),
         STATUS_LIST_LOADING("status-list-loading", R.string.claim_status_refresh),
         STATUS("status", R.string.claim_status_refresh),
@@ -67,9 +67,9 @@ class OperationalPresentationDeviceTest {
         PROVIDERS_LOADING("assistance-providers-loading", R.string.assistance_retry),
         CONFIRMATION("assistance-confirmation", R.string.assistance_request),
         SUCCESS("assistance-success", R.string.assistance_finish),
-        NOTIFICATIONS("notifications", R.string.notification_refresh),
-        NOTIFICATIONS_LOADING("notifications-loading", R.string.notification_refresh),
-        NOTIFICATION_PERMISSION("notification-permission", R.string.notification_permission_turn_off),
+        NOTIFICATIONS("notifications", R.string.notification_details_show),
+        NOTIFICATIONS_LOADING("notifications-loading", R.string.notification_back),
+        NOTIFICATION_PERMISSION("notification-permission", R.string.notification_permission_allow),
         BIOMETRIC("biometric", R.string.biometric_manage),
     }
 
@@ -150,14 +150,14 @@ class OperationalPresentationDeviceTest {
             Scene.SUCCESS -> AssistanceFixture(AssistanceState(open = true, step = AssistanceStep.SUCCESS,
                 receipt = AssistanceReceipt(reference, "registrada", provider.id, provider.serviceType, date)))
             Scene.NOTIFICATIONS, Scene.NOTIFICATION_PERMISSION -> NotificationScreen(
-                NotificationUiState(permissionGranted = true, pushEnabled = true, items = listOf(
+                NotificationUiState(permissionGranted = scene != Scene.NOTIFICATION_PERMISSION, pushEnabled = true, items = listOf(
                     NotificationItem(MobileNotification(reference, NotificationKind.CLAIMS,
                         "Actualizamos tu siniestro", "Consulta los detalles del reporte en Solventa.",
                         NotificationResource(NotificationResourceKind.CLAIM, reference), date), read = false),
-                )), {}, {}, {}, {}, {}, {},
+                )), {}, {}, {}, {}, {},
             )
             Scene.NOTIFICATIONS_LOADING -> NotificationScreen(
-                NotificationUiState(busy = true, loadingNotifications = true), {}, {}, {}, {}, {}, {},
+                NotificationUiState(busy = true, loadingNotifications = true), {}, {}, {}, {}, {},
             )
             Scene.BIOMETRIC -> SolventaPage {
                 BiometricAccountSection(BiometricUiState(credentials = listOf(

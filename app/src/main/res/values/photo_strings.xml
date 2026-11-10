@@ -26,7 +26,7 @@
     <string name="photo_back_login">Continuar</string>
     <string name="photo_back_account">Volver a mi cuenta</string>
     <string name="photo_cancel">Cancelar</string>
-    <string name="photo_denied">Permite usar la cámara desde los ajustes de la app o cancela el registro.</string>
+    <string name="photo_denied">Necesitas permiso de cámara para tomar la foto.</string>
     <string name="photo_no_camera">Cámara frontal no disponible.</string>
     <string name="photo_no_document_camera">Cámara trasera no disponible.</string>
     <string name="photo_camera_error">No pudimos abrir la cámara. Cierra otras apps que la usen e intenta de nuevo.</string>
