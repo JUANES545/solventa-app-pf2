@@ -29,6 +29,7 @@ class ClaimViewModelTest {
             Thread.sleep(10)
         }
         assertFalse("Operation did not finish", model.state.value.busy)
+        assertFalse(model.state.value.loadingPolicies)
     }
 
     @Test fun doubleSubmitFailureRetryAndActorChangeRetainOneDurableOperation() {
@@ -55,6 +56,7 @@ class ClaimViewModelTest {
             model.edit(draft)
             model.submit(); model.submit()
             assertTrue(model.state.value.busy)
+            assertFalse(model.state.value.loadingPolicies)
             await(model)
             assertEquals(1, posts)
             val report = model.state.value.reports.single()

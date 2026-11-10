@@ -6,6 +6,11 @@ import org.junit.Test
 
 class BuildConfigurationTest {
     @Test
+    fun captureProtectionIsKeptForPublishedBuilds() {
+        assertEquals(BuildConfig.BUILD_TYPE != "release", BuildConfig.SCREEN_CAPTURE_ALLOWED)
+    }
+
+    @Test
     fun applicationIdDoesNotReplaceThePreviousPrototype() {
         if (BuildConfig.BUILD_TYPE == "evidenceTest") {
             assertEquals("co.solventa.mobile.pf2.evidencetest", BuildConfig.APPLICATION_ID)

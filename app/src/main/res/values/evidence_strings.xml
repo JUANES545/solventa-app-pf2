@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="evidence_error_invalid_request">El servidor rechazó los datos de esta carga. Puedes retirar el archivo y adjuntarlo de nuevo con los datos corregidos.</string>
-    <string name="evidence_title">Evidencia del siniestro</string>
+    <string name="evidence_title">Evidencias</string>
     <string name="evidence_entry">Adjuntar evidencia a un siniestro</string>
-    <string name="evidence_choose_claim">Elige uno de tus siniestros registrados.</string>
     <string name="evidence_claim_reference">Referencia: %1$s</string>
     <string name="evidence_no_claims">No tienes siniestros registrados. Registra el siniestro antes de adjuntar evidencia.</string>
+    <string name="evidence_query_network">No pudimos consultar tus siniestros. Revisa tu conexión o vuelve a intentarlo más tarde.</string>
+    <string name="evidence_query_service">El servicio de siniestros no está disponible temporalmente. Vuelve a consultar más tarde.</string>
+    <string name="evidence_query_protocol">La respuesta no permite verificar tus siniestros. Vuelve a consultar; no podemos confirmar si tienes registros.</string>
+    <string name="evidence_resource_unavailable">Este recurso no está disponible para tu cuenta. Vuelve a consultar tus siniestros.</string>
+    <string name="evidence_remote_registered">El servidor registra %1$d archivos de este siniestro. No hay archivos guardados en este dispositivo.</string>
     <string name="evidence_reload">Volver a consultar</string>
     <string name="evidence_photo">Tomar fotografía</string>
     <string name="evidence_document">Escanear documento</string>
@@ -44,7 +48,7 @@
     <string name="evidence_kind_document">Documento</string>
     <string name="evidence_kind_video">Vídeo</string>
     <string name="evidence_limit">Máximo %1$d archivos por siniestro.</string>
-    <string name="evidence_format_limit">%1$s: hasta %2$d bytes</string>
+    <string name="evidence_format_limit">%1$s: hasta %2$,d bytes</string>
     <string name="evidence_video_limit">Duración máxima: %1$d s</string>
     <string name="evidence_error_camera">No pudimos completar la captura. Vuelve a intentarlo.</string>
     <string name="evidence_error_permission">Permite el acceso a la cámara para capturar evidencia. Puedes volver sin perder los archivos pendientes.</string>

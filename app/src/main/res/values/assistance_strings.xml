@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="assistance_title">Solicitar asistencia</string>
+    <string name="assistance_title">Asistencia</string>
     <string name="assistance_back">Volver</string>
     <string name="assistance_loading">Consultando información…</string>
     <string name="assistance_location_info">Confirma dónde necesitas ayuda. Usaremos la ubicación solo para consultar prestadores y atender esta solicitud.</string>
@@ -12,7 +12,6 @@
     <string name="assistance_search">Buscar prestadores</string>
     <string name="assistance_providers">Prestadores cercanos</string>
     <string name="assistance_empty">No encontramos prestadores disponibles cerca de esta ubicación.</string>
-    <string name="assistance_provider">%1$s\n%2$s · %3$.1f km aprox.</string>
     <string name="assistance_retry">Volver a consultar</string>
     <string name="assistance_confirm">Confirma la asistencia</string>
     <string name="assistance_distance">Distancia aproximada: %1$.1f km</string>

@@ -1,0 +1,28 @@
+<resources>
+    <string name="assistance_claim_label">Siniestro autorizado</string>
+    <string name="operational_loading_policies">Consultando pólizas…</string>
+    <string name="operational_loading_claims">Consultando siniestros…</string>
+    <string name="operational_loading_providers">Consultando prestadores…</string>
+    <string name="operational_refreshing">Actualizando. Los datos visibles corresponden a la consulta anterior.</string>
+    <string name="operational_refresh_failed">No pudimos actualizar. Los datos visibles corresponden a la consulta anterior.</string>
+    <string name="operational_event_date">Evento: %1$s</string>
+    <string name="operational_captured_date">Captura en este teléfono: %1$s</string>
+    <string name="operational_date_device_zone">%1$s (hora local)</string>
+    <string name="operational_display_zone">Zona horaria del teléfono</string>
+    <string name="operational_error_code">Código de respuesta</string>
+    <string name="operational_delivered_instant">Instante de entrega del aviso</string>
+    <string name="operational_event_instant">Instante del evento</string>
+    <string name="operational_capture_instant">Instante de captura</string>
+    <string name="operational_queued_instant">Registro local en la cola</string>
+    <string name="operational_observed_instant">Última respuesta observada en este teléfono</string>
+    <string name="operational_server_instant">Resultado del servidor</string>
+    <string name="operational_updated_instant">Actualización del servidor</string>
+    <string name="operational_date_hint">AAAA-MM-DD</string>
+    <string name="operational_time_hint">HH:mm, formato de 24 horas</string>
+    <string name="operational_description_hint">De 10 a 5000 caracteres</string>
+    <string name="operational_report_sent">Reporte enviado</string>
+    <string name="operational_assistance_submitting">Solicitando asistencia. No necesitas volver a enviar.</string>
+    <string name="operational_location_loading">Obteniendo ubicación…</string>
+    <string name="operational_saving_notifications">Guardando preferencia de avisos…</string>
+    <string name="operational_notice_delivered">Entrega del aviso: %1$s</string>
+</resources>

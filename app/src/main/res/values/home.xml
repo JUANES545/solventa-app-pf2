@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_notifications">Notificaciones</string>
+    <string name="home_management">Mis gestiones</string>
+    <string name="home_status_title">Mis siniestros</string>
+    <string name="home_evidence_title">Evidencias</string>
+    <string name="home_status_description">Consulta el avance y el historial de tu siniestro.</string>
+    <string name="home_evidence_description">Fotos, documentos y vídeos de tus siniestros.</string>
+</resources>

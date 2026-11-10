@@ -34,6 +34,21 @@ class EvidenceStatusScreenTest {
         condition()
     }
 
+    @Test fun serverEvidenceDoesNotLookEmptyWhenThisDeviceHasNoLocalFiles() {
+        val app = RuntimeEnvironment.getApplication()
+        val model = EvidenceViewModel(app, MobileEvidenceApi(evidenceAuth(), "http://127.0.0.1:1"))
+        compose.runOnUiThread {
+            model.open(EvidenceScope("actor-a", "remote-only-claim"),
+                EvidencePolicy(4, mapOf(EvidenceKind.PHOTO to 100L), 0), setOf("remote-one", "remote-two"))
+        }
+        compose.setContent { SolventaTheme { EvidenceScreen(model, model::close, {}) } }
+        await { !model.state.value.busy }
+        compose.onNodeWithText(app.getString(R.string.evidence_empty)).assertDoesNotExist()
+        compose.onNodeWithText(app.getString(R.string.evidence_remote_registered, 2))
+            .performScrollTo().assertIsDisplayed()
+        compose.runOnUiThread { ViewModelStore().apply { put("evidence", model); clear() } }
+    }
+
     @Test fun onlyDefinitivelyRejectedFilesOfferRemoval() {
         val app = RuntimeEnvironment.getApplication()
         val scope = EvidenceScope("actor-a", "claim-a")

@@ -26,6 +26,14 @@ class ClaimStatusScreenTest {
     private val app get() = RuntimeEnvironment.getApplication()
     private fun text(id: Int) = app.getString(id)
 
+    @Test fun summaryDateOmitsSecondsAndTechnicalZoneWhileKeepingTheLocalMinute() {
+        val minute = statusDate.truncatedTo(java.time.temporal.ChronoUnit.MINUTES)
+        val summary = claimStatusDate(minute)
+        assertEquals(summary, claimStatusDate(minute.plusSeconds(37)))
+        assertFalse(summary.contains(java.time.ZoneId.systemDefault().id))
+        assertNotEquals(summary, claimStatusDate(minute.plusSeconds(60)))
+    }
+
     @Test fun loadingErrorsAndEmptyAreDifferentAndRetryRemainsActionable() {
         val state = mutableStateOf(ClaimStatusState(busy = true))
         var retries = 0
@@ -33,7 +41,7 @@ class ClaimStatusScreenTest {
         compose.setContent {
             SolventaTheme(false) { ClaimStatusScreen(state.value, {}, { retries++ }, { backs++ }) }
         }
-        compose.onNodeWithText(text(R.string.claim_status_loading)).assertIsDisplayed()
+        compose.onNodeWithContentDescription(text(R.string.claim_status_loading)).assertIsDisplayed()
         compose.onNodeWithText(text(R.string.claim_status_refresh)).assertIsNotEnabled()
         compose.onNodeWithText(text(R.string.claim_status_empty)).assertDoesNotExist()
         for (error in ClaimStatusError.entries) {
@@ -57,7 +65,7 @@ class ClaimStatusScreenTest {
                 SolventaTheme(dark.value) { ClaimStatusScreen(state.value, { selected = it.id }, {}, {}) }
             }
         }
-        compose.onNode(hasText(statusClaim.id, substring = true)).performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
+        compose.onNode(hasText(operationalReference(statusClaim.id), substring = true)).performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
         compose.runOnIdle { assertEquals(statusClaim.id, selected) }
         for (theme in listOf(false, true)) {
             for (progress in ClaimProgress.entries) {
@@ -68,15 +76,18 @@ class ClaimStatusScreenTest {
                 }
                 compose.onNodeWithText(text(claimProgressText(progress))).performScrollTo().assertIsDisplayed()
                     .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
-                compose.onNodeWithText(app.getString(R.string.claim_status_updated, claimStatusDate(statusDate)))
+                compose.onNodeWithText(app.getString(R.string.claim_status_updated, displayDate()))
                     .performScrollTo().assertIsDisplayed()
-                compose.onNodeWithText(app.getString(R.string.evidence_claim_reference, statusClaim.id))
+                compose.onNodeWithText(app.getString(R.string.evidence_claim_reference, operationalReference(statusClaim.id)))
                     .performScrollTo().assertIsDisplayed()
                 compose.onNodeWithText(text(R.string.claim_status_refresh)).performScrollTo().assertHeightIsAtLeast(48.dp)
             }
         }
         compose.runOnIdle { state.value = state.value.copy(detail = null, error = ClaimStatusError.NETWORK) }
         compose.onNodeWithText(text(R.string.claim_status_closed)).assertDoesNotExist()
-        compose.onNodeWithText(app.getString(R.string.claim_status_updated, claimStatusDate(statusDate))).assertDoesNotExist()
+        compose.onNodeWithText(app.getString(R.string.claim_status_updated, displayDate())).assertDoesNotExist()
     }
+
+    private fun displayDate() = app.getString(R.string.operational_date_device_zone,
+        claimStatusDate(statusDate), java.time.ZoneId.systemDefault().id)
 }

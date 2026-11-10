@@ -115,7 +115,8 @@ class ClaimHostTest {
         }
         val manager = app.getSystemService(ConnectivityManager::class.java)
         compose.runOnIdle {
-            assertTrue(compose.activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
+            assertEquals(!co.solventa.mobile.BuildConfig.SCREEN_CAPTURE_ALLOWED,
+                compose.activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
             shadowOf(manager).networkCallbacks.forEach { it.onAvailable(org.mockito.Mockito.mock(Network::class.java)) }
             owner.lifecycle.currentState = Lifecycle.State.CREATED
             shadowOf(manager).networkCallbacks.forEach { it.onAvailable(org.mockito.Mockito.mock(Network::class.java)) }

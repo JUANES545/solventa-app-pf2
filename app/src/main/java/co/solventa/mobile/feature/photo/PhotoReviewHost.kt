@@ -100,7 +100,8 @@ internal fun PhotoReviewDialog(onClose: () -> Unit, content: @Composable () -> U
     // Compose 1.7.8's full-width mode ignores the native height constraint in favor of screenHeightDp.
     Dialog(onDismissRequest = onClose, properties = DialogProperties(
         usePlatformDefaultWidth = true, decorFitsSystemWindows = false,
-        securePolicy = SecureFlagPolicy.SecureOn)) {
+        securePolicy = if (co.solventa.mobile.BuildConfig.SCREEN_CAPTURE_ALLOWED)
+            SecureFlagPolicy.SecureOff else SecureFlagPolicy.SecureOn)) {
         val provider = LocalView.current.parent
         check(provider is DialogWindowProvider)
         SideEffect {

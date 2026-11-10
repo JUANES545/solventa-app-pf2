@@ -98,7 +98,7 @@ class AuthHttpFlowTest : AuthJourney() {
         assertInput(R.string.email, EMAIL)
         assertInput(R.string.password, "")
         login()
-        awaitText(R.string.account_title)
+        openAccount()
         val login = JSONObject(request("POST", "/sesiones").body.readUtf8())
         assertEquals(EMAIL, login.getString("correo"))
         assertEquals(PASSWORD, login.getString("contrasena"))
@@ -110,7 +110,7 @@ class AuthHttpFlowTest : AuthJourney() {
 
         scenario!!.close()
         launch()
-        awaitText(R.string.account_title)
+        openAccount()
         awaitText(R.string.sign_out)
         request("GET", "/sesiones/actual", "access-one")
         compose.onNodeWithText(EMAIL).performScrollTo()
@@ -175,7 +175,7 @@ class AuthHttpFlowTest : AuthJourney() {
         assertEquals(1, server.requestCount)
         respond(grantJson())
         login()
-        awaitText(R.string.account_title)
+        openAccount()
         request("POST", "/sesiones")
         assertEquals(2, server.requestCount)
     }
@@ -255,7 +255,7 @@ class AuthHttpFlowTest : AuthJourney() {
         awaitText(R.string.auth_invalid)
         assertNull(store.read())
         login()
-        awaitText(R.string.account_title)
+        openAccount()
         assertEquals(2, server.requestCount)
     }
 
@@ -314,7 +314,7 @@ class AuthHttpFlowTest : AuthJourney() {
         } finally {
             releaseResponse.countDown()
         }
-        awaitText(R.string.account_title)
+        openAccount()
         assertEquals(1, server.requestCount)
     }
 
@@ -323,7 +323,7 @@ class AuthHttpFlowTest : AuthJourney() {
         respond(grantJson(grant("access-two", "refresh-two")))
         respond(userJson())
         launch()
-        awaitText(R.string.account_title)
+        openAccount()
         assertEquals("refresh-one", JSONObject(request("POST", "/sesiones/renovar")
             .body.readUtf8()).getString("refreshToken"))
         request("GET", "/sesiones/actual", "access-two")
@@ -337,7 +337,7 @@ class AuthHttpFlowTest : AuthJourney() {
         respond(grantJson(grant("access-two", "refresh-two")))
         respond(userJson())
         launch()
-        awaitText(R.string.account_title)
+        openAccount()
         request("GET", "/sesiones/actual", "access-one")
         request("POST", "/sesiones/renovar")
         request("GET", "/sesiones/actual", "access-two")
@@ -366,7 +366,7 @@ class AuthHttpFlowTest : AuthJourney() {
         status(503)
         launch()
         login()
-        awaitText(R.string.account_title)
+        openAccount()
         click(R.string.sign_out)
         awaitText(R.string.auth_logout_remote)
         assertNull(store.read())

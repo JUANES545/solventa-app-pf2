@@ -19,28 +19,33 @@ import co.solventa.mobile.core.designsystem.SolventaLayout
 internal fun SolventaPage(
     header: (@Composable ColumnScope.() -> Unit)? = null,
     actions: (@Composable ColumnScope.() -> Unit)? = null,
+    background: (@Composable () -> Unit)? = null,
+    headerAlignment: Alignment.Horizontal = Alignment.CenterHorizontally,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding(), contentAlignment = Alignment.TopCenter) {
-            Column(
-                Modifier.widthIn(max = SolventaLayout.contentWidth).fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .heightIn(min = maxHeight)
-                    .padding(horizontal = SolventaLayout.horizontalPadding, vertical = SolventaLayout.verticalPadding),
-                verticalArrangement = if (header != null || actions != null) Arrangement.SpaceBetween else Arrangement.Top,
-            ) {
-                header?.let {
-                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(SolventaLayout.sectionGap), content = it)
-                }
-                Column(Modifier.fillMaxWidth().padding(
-                    top = if (header != null) 24.dp else 0.dp,
-                    bottom = if (actions != null) 24.dp else 0.dp),
-                    verticalArrangement = Arrangement.spacedBy(SolventaLayout.sectionGap), content = content)
-                actions?.let {
-                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(SolventaLayout.sectionGap), content = it)
+        Box(Modifier.fillMaxSize()) {
+            background?.invoke()
+            BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding(), contentAlignment = Alignment.TopCenter) {
+                Column(
+                    Modifier.widthIn(max = SolventaLayout.contentWidth).fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .heightIn(min = maxHeight)
+                        .padding(horizontal = SolventaLayout.horizontalPadding, vertical = SolventaLayout.verticalPadding),
+                    verticalArrangement = Arrangement.Top,
+                ) {
+                    header?.let {
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = headerAlignment,
+                            verticalArrangement = Arrangement.spacedBy(SolventaLayout.sectionGap), content = it)
+                    }
+                    Column(Modifier.fillMaxWidth().padding(
+                        top = if (header != null) 24.dp else 0.dp,
+                        bottom = if (actions != null) 24.dp else 0.dp),
+                        verticalArrangement = Arrangement.spacedBy(SolventaLayout.sectionGap), content = content)
+                    actions?.let {
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(SolventaLayout.sectionGap), content = it)
+                    }
                 }
             }
         }

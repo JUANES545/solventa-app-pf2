@@ -1,6 +1,7 @@
 package co.solventa.mobile.feature.evidence
 
 import android.view.WindowManager
+import co.solventa.mobile.BuildConfig
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -24,7 +25,7 @@ internal fun EvidenceHost(
     DisposableEffect(model, lifecycle) {
         val window = (context as? android.app.Activity)?.window
         val wasSecure = window?.attributes?.flags?.and(WindowManager.LayoutParams.FLAG_SECURE) != 0
-        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        if (!BuildConfig.SCREEN_CAPTURE_ALLOWED) window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 if (!hasEvidenceLocationPermission(context)) model.enableLocation(false)

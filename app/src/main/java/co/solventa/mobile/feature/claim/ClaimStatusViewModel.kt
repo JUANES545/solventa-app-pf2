@@ -44,7 +44,7 @@ internal class ClaimStatusViewModel @Inject constructor(private val api: MobileC
     fun select(claim: EvidenceClaim) {
         val current = state.value
         if (current.busy || claim !in current.claims) return
-        mutable.value = current.copy(selectedId = claim.id)
+        mutable.value = current.copy(selectedId = claim.id, detail = null)
         refresh()
     }
 
@@ -63,7 +63,8 @@ internal class ClaimStatusViewModel @Inject constructor(private val api: MobileC
         val actor = current.actor ?: return
         if (!current.open || current.busy) return
         val version = generation
-        mutable.value = current.copy(busy = true, claims = emptyList(), detail = null, error = null)
+        mutable.value = current.copy(busy = true,
+            claims = current.claims.takeIf { current.selectedId == null }.orEmpty(), error = null)
         job = viewModelScope.launch {
             try {
                 if (current.selectedId == null) {
@@ -75,7 +76,10 @@ internal class ClaimStatusViewModel @Inject constructor(private val api: MobileC
                 }
             } catch (error: Exception) {
                 val reason = claimStatusError(error)
-                update(version) { copy(error = reason) }
+                update(version) {
+                    if (reason == ClaimStatusError.NETWORK) copy(error = reason)
+                    else copy(error = reason, claims = emptyList(), detail = null)
+                }
             } finally {
                 update(version) { copy(busy = false) }
             }

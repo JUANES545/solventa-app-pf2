@@ -26,9 +26,9 @@ class ClaimScreenTest {
                 { sends++; state.value = state.value.copy(busy = true) }, {}, {}, {}, {}) }
         }
         compose.onNode(hasText("automotive", substring = true)).performScrollTo().performClick()
-        for ((label, value) in listOf("Tipo de evento" to draft.type, "Fecha del evento (AAAA-MM-DD)" to draft.date,
-            "Hora local (HH:mm, formato 24 horas)" to draft.time, "Ubicación del evento" to draft.place,
-            "Descripción (10 a 5000 caracteres)" to draft.description)) {
+        for ((label, value) in listOf("Tipo de evento" to draft.type, "Fecha del evento" to draft.date,
+            "Hora local" to draft.time, "Ubicación del evento" to draft.place,
+            "Descripción" to draft.description)) {
             compose.onNodeWithText(label).performScrollTo().performTextInput(value)
         }
         compose.runOnIdle { assertEquals(draft, state.value.draft) }
@@ -39,7 +39,7 @@ class ClaimScreenTest {
 
     @Test fun errorsCorrectionCachedPoliciesAndNavigationRemainActionable() {
         val rejected = ClaimReport(UUID.randomUUID().toString(), "actor-a", payload(), error = ClaimError.POLICY)
-        val state = mutableStateOf(ClaimState(reports = listOf(rejected)))
+        val state = mutableStateOf(ClaimState(reports = listOf(rejected), policies = listOf(policy)))
         var retries = 0
         var backs = 0
         var corrections = 0
@@ -49,7 +49,7 @@ class ClaimScreenTest {
         }
         val app = org.robolectric.RuntimeEnvironment.getApplication()
         compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.claim_cached_policies)).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.claim_no_policies)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(co.solventa.mobile.R.string.claim_no_policies)).assertDoesNotExist()
         for (error in ClaimError.entries) {
             compose.runOnIdle { state.value = state.value.copy(error = error, reports = emptyList()) }
             compose.onNodeWithText(app.getString(claimErrorText(error))).performScrollTo().assertIsDisplayed()
@@ -84,6 +84,8 @@ class ClaimScreenTest {
         compose.onNodeWithText("Consultar estado").assertDoesNotExist()
         val receipt = ClaimReceipt(UUID.randomUUID().toString(), "registrado")
         compose.runOnIdle { state.value = state.value.copy(reports = listOf(report.copy(receipt = receipt))) }
+        compose.onNodeWithText(operationalReference(receipt.id), substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Ver detalles").performScrollTo().performClick()
         compose.onNodeWithText(receipt.id, substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Consultar estado").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(receipt, queried?.receipt) }

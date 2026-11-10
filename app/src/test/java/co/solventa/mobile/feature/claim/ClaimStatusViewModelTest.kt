@@ -25,7 +25,7 @@ class ClaimStatusViewModelTest {
         assertFalse("Query did not finish", model.state.value.busy)
     }
 
-    @Test fun listSelectionRefreshFailureAndRetryDoNotKeepAStaleStatus() {
+    @Test fun refreshRetainsSameActorDataAndNetworkFailureDoesNotClaimItIsFresh() {
         MockWebServer().use { server ->
             val model = ClaimStatusViewModel(statusApi(server))
             model.refresh()
@@ -40,10 +40,10 @@ class ClaimStatusViewModelTest {
             assertEquals(statusDate, model.state.value.detail!!.updatedAt)
             server.enqueue(MockResponse().setResponseCode(503).setBody("{}"))
             model.refresh()
-            assertNull(model.state.value.detail)
+            assertEquals(statusDate, model.state.value.detail!!.updatedAt)
             await(model)
             assertEquals(ClaimStatusError.NETWORK, model.state.value.error)
-            assertNull(model.state.value.detail)
+            assertEquals(statusDate, model.state.value.detail!!.updatedAt)
             assertEquals(statusClaim.id, model.state.value.selectedId)
             val changed = statusDate.plusSeconds(60)
             server.enqueue(MockResponse().setBody(statusResponse(progress = ClaimProgress.REVIEWING, date = changed).toString()))

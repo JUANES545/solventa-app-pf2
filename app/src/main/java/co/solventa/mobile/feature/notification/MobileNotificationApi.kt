@@ -104,7 +104,7 @@ internal class MobileNotificationApi internal constructor(
             connection.connectTimeout = 10_000
             connection.readTimeout = 30_000
             connection.useCaches = false
-            connection.setRequestProperty("Authorization", "******")
+            connection.setRequestProperty("Authorization", "Bearer $token")
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("Cache-Control", "no-store")
             body?.toString()?.toByteArray(Charsets.UTF_8)?.let { payload ->

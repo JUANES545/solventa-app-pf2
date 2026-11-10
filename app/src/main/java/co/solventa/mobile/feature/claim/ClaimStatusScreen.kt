@@ -5,7 +5,7 @@ import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -15,6 +15,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -25,8 +27,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import co.solventa.mobile.R
+import co.solventa.mobile.BuildConfig
 import co.solventa.mobile.core.designsystem.SolventaLayout
 import co.solventa.mobile.core.ui.SolventaPage
+import co.solventa.mobile.core.ui.SolventaSection
+import co.solventa.mobile.core.ui.SolventaActionRow
+import co.solventa.mobile.core.ui.SolventaScreenHeader
+import co.solventa.mobile.core.ui.SolventaSkeletonList
+import co.solventa.mobile.core.ui.SolventaLoadError
+import co.solventa.mobile.core.ui.SolventaSkeletonDetail
+import co.solventa.mobile.core.ui.SolventaEmptyState
+import co.solventa.mobile.core.ui.SolventaMetadataDetails
 import co.solventa.mobile.feature.evidence.EvidenceClaim
 import java.time.Instant
 import java.time.ZoneId
@@ -41,7 +52,7 @@ internal fun ClaimStatusHost(model: ClaimStatusViewModel) {
     DisposableEffect(model, lifecycle, context) {
         val window = (context as? Activity)?.window
         val wasSecure = window != null && window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
-        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        if (!BuildConfig.SCREEN_CAPTURE_ALLOWED) window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> model.refresh()
@@ -64,50 +75,76 @@ internal fun ClaimStatusHost(model: ClaimStatusViewModel) {
 internal fun ClaimStatusScreen(
     state: ClaimStatusState, select: (EvidenceClaim) -> Unit, refresh: () -> Unit, back: () -> Unit,
 ) {
-    SolventaPage {
-        TextButton(onClick = back, modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) {
-            Text(stringResource(R.string.claim_status_back))
+    SolventaPage(headerAlignment = Alignment.Start, header = {
+        SolventaScreenHeader(stringResource(R.string.claim_status_title), stringResource(R.string.claim_status_back), back)
+    }) {
+        val hasContent = state.detail != null || (state.selectedId == null && state.claims.isNotEmpty())
+        if (hasContent && (state.busy || state.error != null)) {
+            if (state.busy) CircularProgressIndicator()
+            Text(stringResource(if (state.busy) R.string.operational_refreshing else R.string.operational_refresh_failed),
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
-        Text(stringResource(R.string.claim_status_title), Modifier.semantics { heading() },
-            style = MaterialTheme.typography.headlineMedium)
-        when {
-            state.busy -> {
-                CircularProgressIndicator()
-                Text(stringResource(R.string.claim_status_loading), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-            }
-            state.error != null -> Text(stringResource(claimStatusErrorText(state.error)),
+        state.error?.takeIf { hasContent }?.let {
+            Text(stringResource(claimStatusErrorText(it)),
                 Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
-            state.detail != null -> {
-                Text(stringResource(claimProgressText(state.detail.progress)),
-                    Modifier.semantics { heading(); liveRegion = LiveRegionMode.Polite },
-                    style = MaterialTheme.typography.titleLarge)
-                Text(state.detail.description)
-                Text(stringResource(R.string.claim_status_updated, claimStatusDate(state.detail.updatedAt)))
-                Text(stringResource(R.string.evidence_claim_reference, state.detail.id),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        when {
+            state.busy && !hasContent -> {
+                if (state.selectedId == null) SolventaSkeletonList(stringResource(R.string.claim_status_loading))
+                else SolventaSkeletonDetail(stringResource(R.string.claim_status_loading))
             }
-            state.selectedId == null && state.claims.isEmpty() -> Text(stringResource(R.string.claim_status_empty))
+            state.error != null && !hasContent -> SolventaLoadError(
+                stringResource(R.string.ui_load_claim_status_error),
+                stringResource(claimStatusErrorText(state.error)),
+                detail = state.selectedId != null,
+            )
+            state.detail != null -> {
+                SolventaSection {
+                    Text(stringResource(claimProgressText(state.detail.progress)),
+                        Modifier.semantics { heading(); liveRegion = LiveRegionMode.Polite },
+                        style = MaterialTheme.typography.titleLarge)
+                    Text(state.detail.description)
+                    Text(stringResource(R.string.claim_status_updated, operationalDate(state.detail.updatedAt)),
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.evidence_claim_reference, operationalReference(state.detail.id)),
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SolventaMetadataDetails(reference = state.detail.id, entries = listOf(
+                        stringResource(R.string.operational_updated_instant) to state.detail.updatedAt.toString(),
+                        stringResource(R.string.operational_display_zone) to ZoneId.systemDefault().id,
+                    ))
+                }
+            }
+            state.selectedId == null && state.claims.isEmpty() && state.error == null ->
+                SolventaEmptyState(stringResource(R.string.claim_status_empty))
             state.selectedId == null -> {
-                Text(stringResource(R.string.claim_status_choose))
                 state.claims.forEach { claim ->
-                    Button(onClick = { select(claim) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
-                        Text("${claim.type}\n" +
-                            stringResource(R.string.claim_status_event, claimStatusDate(Instant.parse(claim.date))) + "\n" +
-                            stringResource(R.string.evidence_claim_reference, claim.id))
-                    }
+                    SolventaActionRow(title = claim.type,
+                        supportingText = stringResource(R.string.claim_status_event, operationalDate(Instant.parse(claim.date))) +
+                            "\n" + stringResource(R.string.evidence_claim_reference,
+                                operationalReference(claim.id, state.claims.map { it.id })),
+                        onClick = { select(claim) }, enabled = !state.busy)
+                    SolventaMetadataDetails(reference = claim.id, entries = listOf(
+                        stringResource(R.string.operational_event_instant) to claim.date,
+                        stringResource(R.string.operational_display_zone) to ZoneId.systemDefault().id,
+                    ))
                 }
             }
         }
-        Button(onClick = refresh, enabled = !state.busy,
+        OutlinedButton(onClick = refresh, enabled = !state.busy,
             modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
-            Text(stringResource(if (state.error == null) R.string.claim_status_refresh else R.string.claim_status_retry))
+            Text(stringResource(if (state.error == null) R.string.claim_status_refresh else R.string.claim_status_retry),
+                textAlign = TextAlign.Center)
         }
     }
 }
 
 internal fun claimStatusDate(date: Instant): String =
-    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault()).format(date)
+    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+        .withZone(ZoneId.systemDefault()).format(date)
+
+@Composable
+internal fun operationalDate(date: Instant): String =
+    stringResource(R.string.operational_date_device_zone, claimStatusDate(date))
 
 internal fun claimProgressText(progress: ClaimProgress): Int = when (progress) {
     ClaimProgress.REPORTED -> R.string.claim_status_reported

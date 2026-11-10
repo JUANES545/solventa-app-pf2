@@ -23,7 +23,7 @@ class EvidenceHttpFailureTest {
         MockWebServer().use { server ->
             val api = MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString())
             for ((status, reason) in listOf(503 to EvidenceError.NETWORK, 403 to EvidenceError.SESSION,
-                404 to EvidenceError.SESSION, 422 to EvidenceError.PROTOCOL)) {
+                404 to EvidenceError.NETWORK, 422 to EvidenceError.PROTOCOL)) {
                 for (body in listOf("<html>Service unavailable</html>", "", "{}", """{"code":null}""", """{"code":7}""", """{"code":""}""")) {
                     server.enqueue(MockResponse().setResponseCode(status).setBody(body))
                     try { api.request("GET", "/siniestros", "synthetic"); fail("$status must not succeed") }
@@ -54,6 +54,7 @@ class EvidenceHttpFailureTest {
                     assertEquals(reason, error.reason)
                     assertTrue(error.permanent)
                 }
+
             }
 
             server.enqueue(MockResponse().setResponseCode(503).setBody("""{"code":"servicio_no_disponible"}"""))
@@ -62,6 +63,28 @@ class EvidenceHttpFailureTest {
                 assertEquals(503, error.status)
                 assertEquals("servicio_no_disponible", error.code)
                 assertFalse(error.permanent)
+            }
+        }
+    }
+
+    @Test fun emptyCollectionsAreSuccessfulButMissingResourcesAndFailuresAreNotEmpty() = runBlocking {
+        MockWebServer().use { server ->
+            val api = MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString())
+            val scope = EvidenceScope("actor-a", UUID.randomUUID().toString())
+            server.enqueue(MockResponse().setBody("""{"siniestros":[]}"""))
+            assertTrue(api.claims(scope.actorId).isEmpty())
+            server.enqueue(MockResponse().setBody("""{"evidencias":[]}"""))
+            assertTrue(api.confirmedIds(scope).isEmpty())
+            for ((status, body, reason) in listOf(
+                Triple(404, """{"code":"siniestro_no_encontrado"}""", EvidenceError.UNAVAILABLE),
+                Triple(404, """{"code":"ruta_no_encontrada"}""", EvidenceError.NETWORK),
+                Triple(403, """{"code":"alcance_insuficiente"}""", EvidenceError.SESSION),
+                Triple(503, """{"code":"servicio_no_disponible"}""", EvidenceError.NETWORK),
+                Triple(200, "{}", EvidenceError.PROTOCOL),
+            )) {
+                server.enqueue(MockResponse().setResponseCode(status).setBody(body))
+                try { api.confirmedIds(scope); fail("Failure must not become an empty evidence collection") }
+                catch (error: EvidenceProblem) { assertEquals(reason, error.reason) }
             }
         }
     }
