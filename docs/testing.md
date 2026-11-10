@@ -315,6 +315,25 @@ biométrico físico. No se simulan una galería remota inexistente ni entrega pu
 externa. Estos mocks permiten comprobar el cliente; **no prueban el despliegue,
 la persistencia ni la recuperación de los servicios reales**.
 
+## Regresiones de consultas y presentación
+
+`EvidenceQueriesDeviceTest`, `NotificationAuthorizationDeviceTest` y
+`OperationalPresentationDeviceTest` admiten `debug` (CI) y `claimTest`
+(teléfono físico), siempre con `BuildConfig.DEBUG`. Usan sesiones sintéticas
+en memoria, HTTP en loopback o estados de presentación; no consultan el backend
+real. No requieren una sesión guardada del usuario.
+
+Para repetir los siete casos sin reemplazar la app real instalada:
+
+```powershell
+.\gradlew.bat :app:connectedClaimTestAndroidTest -PclaimDeviceTests=true `
+  -PbackendE2e=false `
+  "-Pandroid.testInstrumentationRunnerArguments.class=co.solventa.mobile.EvidenceQueriesDeviceTest,co.solventa.mobile.NotificationAuthorizationDeviceTest,co.solventa.mobile.OperationalPresentationDeviceTest"
+```
+
+CI conserva `connectedDebugAndroidTest` y ejecuta estos casos junto al resto de
+la suite. No se excluyen pruebas ni se relajan las comprobaciones de respuestas,
+autorización, acciones alcanzables o tamaño de los controles.
 ## SOL-193 / SOL-235 / SOL-239: cola durable e historial de resultados
 
 `ClaimStore` y `EvidenceStore` conservan UUID, cuerpo y acuses en SQLite privado.

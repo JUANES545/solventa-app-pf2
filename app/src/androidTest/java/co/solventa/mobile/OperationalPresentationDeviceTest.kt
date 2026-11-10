@@ -74,7 +74,8 @@ class OperationalPresentationDeviceTest {
     }
 
     private fun captureScenes(fontScale: Float) {
-        check(BuildConfig.APPLICATION_ID == "co.solventa.mobile.pf2.claimtest")
+        check(BuildConfig.DEBUG && BuildConfig.APPLICATION_ID in
+            setOf("co.solventa.mobile.pf2", "co.solventa.mobile.pf2.claimtest"))
         val scene = mutableStateOf(Scene.CLAIM)
         val dark = mutableStateOf(false)
         compose.setContent {
@@ -180,7 +181,8 @@ class OperationalPresentationDeviceTest {
     }
 
     @Test fun claimRowsKeepTheirCallbacksAtLargeText() {
-        check(BuildConfig.APPLICATION_ID == "co.solventa.mobile.pf2.claimtest")
+        check(BuildConfig.DEBUG && BuildConfig.APPLICATION_ID in
+            setOf("co.solventa.mobile.pf2", "co.solventa.mobile.pf2.claimtest"))
         var selected = ""
         compose.setContent {
             val density = LocalDensity.current.density
@@ -202,7 +204,8 @@ class OperationalPresentationDeviceTest {
     @Test fun rejectedEvidenceDialogInBothThemesAtLargeText() = captureDialog(biometric = false)
 
     private fun captureDialog(biometric: Boolean) {
-        check(BuildConfig.APPLICATION_ID == "co.solventa.mobile.pf2.claimtest")
+        check(BuildConfig.DEBUG && BuildConfig.APPLICATION_ID in
+            setOf("co.solventa.mobile.pf2", "co.solventa.mobile.pf2.claimtest"))
         val dark = mutableStateOf(false)
         compose.setContent {
             val density = LocalDensity.current.density
