@@ -17,7 +17,8 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NotificationAuthorizationDeviceTest {
     @Test fun queriesAndPreferencesUseTheSessionAndItsRotatedToken() = runBlocking {
-        check(BuildConfig.APPLICATION_ID == "co.solventa.mobile.pf2.claimtest")
+        check(BuildConfig.DEBUG && BuildConfig.APPLICATION_ID in
+            setOf("co.solventa.mobile.pf2", "co.solventa.mobile.pf2.claimtest"))
         val user = AuthUser("synthetic-actor", "Cliente", "cliente@example.test")
         var stored: AuthGrant? = AuthGrant(user, "synthetic-access", "synthetic-refresh",
             Long.MAX_VALUE - 1, Long.MAX_VALUE)
