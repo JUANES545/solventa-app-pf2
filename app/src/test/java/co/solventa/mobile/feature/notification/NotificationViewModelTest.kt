@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Looper
 import java.time.Instant
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -27,9 +28,11 @@ private class FakeNotificationApi : NotificationApi {
     )
     var push = true
     var error: NotificationError? = null
+    var notificationsGate: CompletableDeferred<Unit>? = null
     val updates = mutableListOf<Boolean>()
 
     override suspend fun notifications(actor: String): List<MobileNotification> {
+        notificationsGate?.await()
         error?.let { throw NotificationProblem(it) }
         return values
     }
@@ -91,16 +94,22 @@ class NotificationViewModelTest {
             Thread.sleep(10)
         }
         assertFalse("La operación no terminó", model.state.value.busy)
+        assertFalse(model.state.value.loadingNotifications)
     }
 
     @Test
     fun synchronizationPresentsEachIdentifierOnceAndKeepsReadState() {
-        val api = FakeNotificationApi()
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeNotificationApi().apply { notificationsGate = gate }
         val store = MemoryNotificationStore()
         val presenter = FakePresenter()
         val model = NotificationViewModel(api, store, presenter)
 
         model.bindActor("11111111-1111-4111-8111-111111111111")
+        assertTrue(model.state.value.loadingNotifications)
+        assertTrue(model.state.value.busy)
+        assertTrue(model.state.value.items.isEmpty())
+        gate.complete(Unit)
         await(model)
         model.synchronize("11111111-1111-4111-8111-111111111111")
         await(model)
@@ -146,6 +155,7 @@ class NotificationViewModelTest {
         model.bindActor("11111111-1111-4111-8111-111111111111")
         await(model)
         model.permissionResult(false)
+        assertFalse(model.state.value.loadingNotifications)
         await(model)
 
         assertEquals(listOf(false), api.updates)

@@ -5,7 +5,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import co.solventa.mobile.R
 import java.util.UUID
 import org.junit.Rule
 import org.junit.Test
@@ -35,12 +38,16 @@ class AssistanceScreenTest {
         compose.runOnUiThread { model.select(assistanceProvider) }
         compose.setContent { AssistanceScreen(model) }
         compose.onNodeWithTag("assistance-receipt-id").assertDoesNotExist()
-        compose.onNodeWithTag("assistance-submit").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("assistance-submit").performScrollTo().assertIsDisplayed().performClick()
         compose.waitUntil(10_000) {
             shadowOf(android.os.Looper.getMainLooper()).idle()
             model.state.value.receipt != null
         }
-        compose.onNodeWithTag("assistance-receipt-id").assertIsDisplayed()
-        compose.onNodeWithTag("assistance-receipt-status").assertIsDisplayed()
+        compose.onNodeWithTag("assistance-receipt-id").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("assistance-receipt-status").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(R.string.ui_show_details))
+            .performScrollTo().performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.ui_reference, model.state.value.receipt!!.id))
+            .performScrollTo().assertIsDisplayed()
     }
 }

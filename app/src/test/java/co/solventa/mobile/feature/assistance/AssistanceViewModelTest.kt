@@ -20,13 +20,17 @@ import org.robolectric.annotation.Config
 internal class FakeAssistanceGateway : AssistanceGateway {
     var nearby = listOf(assistanceProvider)
     var requestError: AssistanceError? = null
+    var onProviders: (() -> Unit)? = null
     val operations = mutableListOf<String>()
 
     override suspend fun providers(
         actor: String,
         location: AssistanceLocation,
         radiusKm: Int,
-    ) = nearby
+    ): List<AssistanceProvider> {
+        onProviders?.invoke()
+        return nearby
+    }
 
     override suspend fun request(
         actor: String,
@@ -97,6 +101,31 @@ class AssistanceViewModelTest {
         await(model)
         assertEquals(listOf(assistanceProvider), model.state.value.providers)
         assertNull(model.state.value.error)
+    }
+
+    @Test fun providerQueryIsVisibleBeforeResultsAndRefreshKeepsTheSameLocationRows() {
+        val gateway = FakeAssistanceGateway()
+        val model = AssistanceViewModel(gateway, FixedAssistanceLocator(assistanceLocation))
+        val snapshots = mutableListOf<AssistanceState>()
+        gateway.onProviders = { snapshots += model.state.value }
+        model.show("actor-a", UUID.randomUUID().toString())
+        model.locate()
+        await(model)
+        assertEquals(AssistanceStep.PROVIDERS, snapshots.single().step)
+        assertTrue(snapshots.single().busy)
+        assertTrue(snapshots.single().providers.isEmpty())
+        model.retryProviders()
+        await(model)
+        assertEquals(listOf(assistanceProvider), snapshots.last().providers)
+        assertEquals(assistanceLocation, snapshots.last().location)
+        gateway.onProviders = { throw AssistanceProblem(AssistanceError.NETWORK) }
+        model.retryProviders()
+        await(model)
+        assertEquals(AssistanceError.NETWORK, model.state.value.error)
+        assertEquals(listOf(assistanceProvider), model.state.value.providers)
+        model.bindActor(null)
+        assertTrue(model.state.value.providers.isEmpty())
+        assertNull(model.state.value.location)
     }
 
     @Test fun retryUsesTheSameOperationAndSuccessOnlyAppearsAfterConfirmation() {

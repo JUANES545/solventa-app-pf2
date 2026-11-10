@@ -177,6 +177,10 @@ internal class AssistanceViewModel @Inject constructor(
 
     private suspend fun loadProviders(location: AssistanceLocation) {
         val actor = state.value.actor ?: return
+        update {
+            copy(step = AssistanceStep.PROVIDERS, location = location,
+                providers = providers.takeIf { this.location == location }.orEmpty())
+        }
         val providers = api.providers(actor, location)
         update {
             copy(

@@ -166,6 +166,7 @@ class BiometricFlowUiTest {
         }
         compose.runOnIdle { auth.login(user.email, "password") }
         await { auth.state.value.user != null && !auth.state.value.loading && biometrics.state.value.actorUserId == user.id }
+        compose.onNodeWithContentDescription("Mi cuenta").performClick()
     }
 
     @Test fun anotherAccountCannotSeeOrDeleteThePreviousAccountsLocalLink() {
@@ -183,6 +184,7 @@ class BiometricFlowUiTest {
         currentActor = user.copy(id = "33333333-3333-4333-8333-333333333333", email = "other@example.org")
         compose.runOnIdle { auth.login(currentActor.email, "password") }
         await { biometrics.state.value.actorUserId == currentActor.id }
+        compose.onNodeWithContentDescription("Mi cuenta").performClick()
         assertTrue(biometrics.state.value.credentials.isEmpty())
         assertNull(biometrics.state.value.message)
         compose.onNodeWithText(org.robolectric.RuntimeEnvironment.getApplication().getString(R.string.biometric_other_account))
@@ -347,7 +349,7 @@ class BiometricFlowUiTest {
         compose.onNodeWithContentDescription("Contraseña actual").performScrollTo().performTextInput("password")
         compose.onNodeWithContentDescription("Contraseña actual")
             .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
-        compose.onNode(hasText("Habilitar acceso biométrico") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+        compose.onNode(hasText("Habilitar") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         await { local != null && !biometrics.state.value.busy }
         assertEquals(1, primaryLogins)
         assertEquals(0, biometricLogins)
@@ -360,6 +362,7 @@ class BiometricFlowUiTest {
         await { auth.state.value.user != null && !auth.state.value.loading && !biometrics.state.value.busy }
         assertEquals(1, biometricLogins)
         assertEquals("biometric", grant?.accessToken)
+        compose.onNodeWithContentDescription("Mi cuenta").performClick()
         compose.onNodeWithText("Ver credenciales").performScrollTo().performClick()
         await { biometrics.state.value.credentials.isNotEmpty() && !biometrics.state.value.busy }
         compose.onNodeWithText("Desactivar credencial 11111111").performScrollTo().performClick()
@@ -394,6 +397,7 @@ class BiometricFlowUiTest {
         compose.onNodeWithContentDescription("Contraseña").assertTextEquals("").performTextInput("password")
         compose.onNodeWithText("Ingresar").performScrollTo().performClick()
         await { auth.state.value.user == user && biometrics.state.value.actorUserId == user.id }
+        compose.onNodeWithContentDescription("Mi cuenta").performClick()
         assertEquals(1, primaryLogins)
         assertNull(local)
         assertEquals(0, biometricLogins)
@@ -403,7 +407,7 @@ class BiometricFlowUiTest {
         assertEquals(user, auth.state.value.user)
         compose.onNodeWithText("Habilitar acceso biométrico").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Contraseña actual").performScrollTo().performTextInput("password")
-        compose.onNode(hasText("Habilitar acceso biométrico") and hasClickAction() and hasAnyAncestor(isDialog()))
+        compose.onNode(hasText("Habilitar") and hasClickAction() and hasAnyAncestor(isDialog()))
             .performClick()
         await { local != null && !biometrics.state.value.busy }
         assertEquals(user.id, local?.userId)

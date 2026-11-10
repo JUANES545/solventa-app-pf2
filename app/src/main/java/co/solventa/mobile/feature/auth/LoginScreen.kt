@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,6 +17,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.biometric.BiometricManager
@@ -49,6 +52,10 @@ import co.solventa.mobile.SolventaApp
 import co.solventa.mobile.core.ui.SolventaPage
 import co.solventa.mobile.core.ui.SolventaBrandHeader
 import co.solventa.mobile.core.designsystem.SolventaLayout
+import co.solventa.mobile.core.ui.AccessBackground
+import co.solventa.mobile.core.ui.LocalAccessBackgroundState
+import co.solventa.mobile.core.ui.rememberAccessBackgroundState
+import co.solventa.mobile.core.ui.status
 
 @Composable
 fun LoginScreen(
@@ -70,15 +77,26 @@ fun LoginScreen(
     val emailFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
+    var focusedField by remember { mutableStateOf<String?>(null) }
+    var biometricInfoOpen by remember { mutableStateOf(false) }
+    val background = LocalAccessBackgroundState.current ?: rememberAccessBackgroundState()
+    val motionStatus = background.status(
+        editing = focusedField != null,
+        hasError = error != null || biometricMessage != null,
+        submitting = loading,
+        modalOpen = biometricInfoOpen,
+    )
 
     SolventaPage(header = {
-                SolventaBrandHeader()
-                Text(
-                    stringResource(R.string.login_title),
-                    modifier = Modifier.fillMaxWidth().semantics { heading() },
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.headlineMedium,
-                )
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SolventaBrandHeader()
+            Text(
+                stringResource(R.string.login_title),
+                modifier = Modifier.fillMaxWidth().semantics { heading() },
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.headlineMedium,
+            )
+        }
     }, actions = {
         Button(onClick = { focusManager.clearFocus(); onLogin(email, password) }, enabled = !loading,
             modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight), shape = SolventaLayout.controlShape) {
@@ -87,24 +105,27 @@ fun LoginScreen(
                     color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
             }
-            Text(stringResource(if (loading) R.string.signing_in else R.string.sign_in))
+            Text(stringResource(if (loading) R.string.signing_in else R.string.sign_in), textAlign = TextAlign.Center)
         }
         onBiometricLogin?.let { login ->
             OutlinedButton(onClick = login, enabled = !loading,
                 modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight), shape = SolventaLayout.controlShape) {
-                Text(stringResource(R.string.biometric_login))
+                Text(stringResource(R.string.biometric_login), textAlign = TextAlign.Center)
             }
         }
-        TextButton(onClick = { focusManager.clearFocus(); onCreateAccount() }, enabled = !loading,
-            modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
-            Text(stringResource(R.string.create_account))
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { focusManager.clearFocus(); onCreateAccount() }, enabled = !loading,
+                modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                Text(stringResource(R.string.create_account), textAlign = TextAlign.Center)
+            }
+            extraContent?.invoke()
+            BiometricAccessInfo(enabled = !loading, onUsePassword = { emailFocus.requestFocus() },
+                onDialogVisibilityChanged = { biometricInfoOpen = it },
+                serviceEnabled = biometricEnabled, checkCapability = {
+                    BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                })
         }
-        extraContent?.invoke()
-        BiometricAccessInfo(enabled = !loading, onUsePassword = { emailFocus.requestFocus() },
-            serviceEnabled = biometricEnabled, checkCapability = {
-                BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
-            })
-    }) {
+    }, background = { AccessBackground(background, motionStatus) }) {
                 biometricMessage?.let {
                     Text(stringResource(it), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 }
@@ -113,9 +134,14 @@ fun LoginScreen(
                         value = email,
                         onValueChange = { email = it },
                         modifier = Modifier.fillMaxWidth().focusRequester(emailFocus)
+                            .onFocusChanged {
+                                if (it.isFocused) focusedField = "email"
+                                else if (focusedField == "email") focusedField = null
+                            }
                             .semantics { contentDescription = label },
                         singleLine = true,
                         enabled = !loading,
+                        isError = error in listOf(AuthError.EMAIL, AuthError.INVALID_CREDENTIALS),
                         shape = SolventaLayout.controlShape,
                         colors = authFieldColors(),
                         placeholder = { Text(stringResource(R.string.email_example)) },
@@ -128,9 +154,14 @@ fun LoginScreen(
                         value = password,
                         onValueChange = { password = it },
                         modifier = Modifier.fillMaxWidth().focusRequester(passwordFocus)
+                            .onFocusChanged {
+                                if (it.isFocused) focusedField = "password"
+                                else if (focusedField == "password") focusedField = null
+                            }
                             .semantics { contentDescription = label },
                         singleLine = true,
                         enabled = !loading,
+                        isError = error in listOf(AuthError.PASSWORD, AuthError.INVALID_CREDENTIALS),
                         shape = SolventaLayout.controlShape,
                         colors = authFieldColors(),
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -146,8 +177,7 @@ fun LoginScreen(
                 }
                 error?.let {
                     val message = authErrorMessage(it)
-                    Text(stringResource(message), color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    AuthErrorNotice(stringResource(message))
                 }
     }
 }
@@ -155,8 +185,20 @@ fun LoginScreen(
 @Composable
 internal fun AuthField(label: String, field: @Composable (String) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(label, style = MaterialTheme.typography.labelLarge)
         field(label)
+    }
+}
+
+@Composable
+internal fun AuthErrorNotice(message: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Text(message, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -177,6 +219,8 @@ internal fun PasswordVisibilityToggle(visible: Boolean, enabled: Boolean, onClic
 internal fun authFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = MaterialTheme.colorScheme.surface,
     unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+    disabledContainerColor = MaterialTheme.colorScheme.surface,
+    errorContainerColor = MaterialTheme.colorScheme.surface,
 )
 
 internal fun authErrorMessage(error: AuthError) = when (error) {

@@ -138,7 +138,9 @@ class EvidenceApiTest {
     @Test fun malformedClaimsAndMissingPolicyFieldsBecomeProtocolErrors() = runBlocking {
         MockWebServer().use { server ->
             val api = MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString())
-            for (json in listOf("{}", """{"siniestros":[{"id":"invalid","tipoEvento":"a","fechaEvento":"b","descripcion":"c"}]}""")) {
+            for (json in listOf("{}",
+                """{"siniestros":[{"id":"invalid","tipoEvento":"a","fechaEvento":"b","descripcion":"c"}]}""",
+                """{"siniestros":[{"id":"11111111-1111-4111-8111-111111111111","tipoEvento":"a","fechaEvento":"invalid","descripcion":"c"}]}""")) {
                 server.enqueue(MockResponse().setBody(json))
                 try { api.claims("actor-a"); fail() }
                 catch (error: EvidenceProblem) { assertEquals(EvidenceError.PROTOCOL, error.reason) }

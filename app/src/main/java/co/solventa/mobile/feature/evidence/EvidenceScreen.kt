@@ -9,17 +9,31 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -40,15 +55,31 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
 import co.solventa.mobile.R
+import co.solventa.mobile.core.designsystem.SolventaLayout
 import co.solventa.mobile.core.ui.SolventaPage
+import co.solventa.mobile.core.ui.SolventaSection
+import co.solventa.mobile.core.ui.SolventaActionRow
+import co.solventa.mobile.feature.claim.operationalDate
+import co.solventa.mobile.feature.claim.operationalReference
+import co.solventa.mobile.core.ui.SolventaScreenHeader
+import co.solventa.mobile.core.ui.SolventaSkeletonList
+import co.solventa.mobile.core.ui.SolventaLoadError
+import co.solventa.mobile.core.ui.SolventaEmptyState
+import co.solventa.mobile.core.ui.SolventaMetadataDetails
+import co.solventa.mobile.core.ui.SolventaConfirmationMark
+import java.time.Instant
 import kotlinx.coroutines.launch
 
 @Composable
@@ -61,76 +92,164 @@ internal fun EvidenceScreen(
 ) {
     val state by model.state.collectAsState()
     val context = LocalContext.current
+    EvidenceContent(
+        state = state,
+        onClose = onClose,
+        onBack = model::back,
+        onSelect = model::select,
+        onReload = { state.actorId?.let(model::showClaims) },
+        onCamera = model::camera,
+        onRemove = model::removeRejected,
+        onCrop = model::crop,
+        onAccept = { model.accept(hasEvidenceLocationPermission(context)) },
+        onError = model::fail,
+        onRetry = onRetry,
+        onAssistance = onAssistance,
+        camera = { camera(model, state) },
+        locationChoice = { LocationChoice(model, state) },
+    )
+}
+
+@Composable
+internal fun EvidenceContent(
+    state: EvidenceState,
+    onClose: () -> Unit,
+    onBack: () -> Unit,
+    onSelect: (EvidenceClaim) -> Unit,
+    onReload: () -> Unit,
+    onCamera: (EvidenceKind) -> Unit,
+    onRemove: (EvidenceItem) -> Unit,
+    onCrop: (EvidenceCrop) -> Unit,
+    onAccept: () -> Unit,
+    onError: (EvidenceError) -> Unit,
+    onRetry: (() -> Unit)?,
+    onAssistance: (() -> Unit)?,
+    camera: @Composable () -> Unit,
+    locationChoice: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
     var discard by remember(state.scope) { mutableStateOf<EvidenceItem?>(null) }
     if (!state.open) return
     discard?.let { item ->
         AlertDialog(onDismissRequest = { discard = null },
             title = { Text(stringResource(R.string.evidence_remove)) },
-            text = { Text(stringResource(R.string.evidence_remove_info)) },
-            confirmButton = { TextButton(onClick = { discard = null; model.removeRejected(item) }) { Text(stringResource(R.string.evidence_remove)) } },
-            dismissButton = { TextButton(onClick = { discard = null }) { Text(stringResource(R.string.evidence_back)) } })
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(stringResource(R.string.evidence_remove_info)) } },
+            confirmButton = { TextButton(onClick = { discard = null; onRemove(item) }) { Text(stringResource(R.string.evidence_remove), textAlign = TextAlign.Center) } },
+            dismissButton = { TextButton(onClick = { discard = null }) { Text(stringResource(R.string.evidence_back), textAlign = TextAlign.Center) } })
     }
-    BackHandler { if (!state.busy) { if (state.step == EvidenceStep.LIST) onClose() else model.back() } }
-    SolventaPage(header = {
-        Text(stringResource(R.string.evidence_title), style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.semantics { heading() })
-    }, actions = {
-        TextButton(onClick = { if (state.step == EvidenceStep.LIST) onClose() else model.back() }, enabled = !state.busy) {
-            Text(stringResource(R.string.evidence_back))
+    BackHandler { if (!state.busy) { if (state.step == EvidenceStep.LIST) onClose() else onBack() } }
+    SolventaPage(headerAlignment = Alignment.Start, header = {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { if (state.step == EvidenceStep.LIST) onClose() else onBack() }, enabled = !state.busy,
+                modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) {
+                Icon(painterResource(R.drawable.arrow_back), null, Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.evidence_back), textAlign = TextAlign.Center)
+            }
+            SolventaScreenHeader(stringResource(R.string.evidence_title))
         }
     }) {
-        state.error?.let { error ->
-            Text(stringResource(evidenceErrorMessage(error)), color = MaterialTheme.colorScheme.error,
+        val initialLoadError = state.scope == null && state.claims.isEmpty() && state.error != null
+        state.error?.takeUnless { initialLoadError }?.let { error ->
+            val message = if (state.scope == null) evidenceQueryErrorMessage(error, state.errorHttpStatus)
+                else evidenceErrorMessage(error)
+            Text(stringResource(message), color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive })
         }
-        if (state.busy) CircularProgressIndicator()
+        if (state.busy && !state.loadingClaims) {
+            CircularProgressIndicator()
+            Text(stringResource(R.string.evidence_loading), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        }
+        if (state.loadingClaims && state.claims.isNotEmpty()) {
+            CircularProgressIndicator()
+            Text(stringResource(R.string.operational_refreshing), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        }
         if (state.scope == null) {
-            Text(stringResource(R.string.evidence_choose_claim))
-            if (!state.busy && state.claims.isEmpty() && state.error == null) Text(stringResource(R.string.evidence_no_claims))
+            if (state.loadingClaims && state.claims.isEmpty()) SolventaSkeletonList(stringResource(R.string.operational_loading_claims))
+            else if (initialLoadError) SolventaLoadError(stringResource(R.string.ui_load_claims_error),
+                stringResource(evidenceQueryErrorMessage(checkNotNull(state.error), state.errorHttpStatus)))
+            if (!state.busy && state.claims.isEmpty() && state.error == null) SolventaEmptyState(stringResource(R.string.evidence_no_claims))
             for (claim in state.claims) {
-                Button(onClick = { model.select(claim) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("claim-${claim.id}")) {
-                    Text("${claim.type} · ${claim.date}\n${claim.description}\n${stringResource(R.string.evidence_claim_reference, claim.id)}")
+                Card(
+                    onClick = { onSelect(claim) }, enabled = !state.busy,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    modifier = Modifier.fillMaxWidth().testTag("claim-${claim.id}")) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(claim.type, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(R.string.operational_event_date, operationalDate(Instant.parse(claim.date))),
+                            style = MaterialTheme.typography.bodyMedium)
+                        Text(claim.description)
+                        Text(stringResource(R.string.evidence_claim_reference,
+                            operationalReference(claim.id, state.claims.map { it.id })),
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        SolventaMetadataDetails(reference = claim.id, entries = listOf(
+                            stringResource(R.string.operational_event_instant) to claim.date,
+                            stringResource(R.string.operational_display_zone) to java.time.ZoneId.systemDefault().id,
+                        ))
+                    }
                 }
             }
-            if (state.error != null) TextButton(onClick = { state.actorId?.let(model::showClaims) }, enabled = !state.busy) {
-                Text(stringResource(R.string.evidence_reload))
+            if (state.error != null) TextButton(onClick = onReload, enabled = !state.busy) {
+                Text(stringResource(R.string.evidence_reload), textAlign = TextAlign.Center)
             }
             return@SolventaPage
         }
         when (state.step) {
             EvidenceStep.LIST -> {
                 val policy = checkNotNull(state.policy)
+                Text(stringResource(R.string.evidence_capture_section), Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge)
                 Text(stringResource(R.string.evidence_limit, policy.maxCount))
                 for ((kind, bytes) in policy.maxBytes) {
-                    Text(stringResource(R.string.evidence_format_limit, stringResource(evidenceKindMessage(kind)), bytes))
-                    Button(onClick = { model.camera(kind) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(when (kind) {
+                    SolventaActionRow(
+                        title = stringResource(when (kind) {
                             EvidenceKind.PHOTO -> R.string.evidence_photo
                             EvidenceKind.DOCUMENT -> R.string.evidence_document
                             EvidenceKind.VIDEO -> R.string.evidence_video
-                        }))
-                    }
+                        }),
+                        supportingText = stringResource(R.string.evidence_format_limit, stringResource(evidenceKindMessage(kind)), bytes) +
+                            if (kind == EvidenceKind.VIDEO) "\n" + stringResource(R.string.evidence_video_limit, policy.maxVideoDurationMillis / 1000) else "",
+                        onClick = { onCamera(kind) }, enabled = !state.busy,
+                    )
                 }
-                if (EvidenceKind.VIDEO in policy.maxBytes) Text(stringResource(R.string.evidence_video_limit, policy.maxVideoDurationMillis / 1000))
-                LocationChoice(model, state)
-                if (state.items.isEmpty()) Text(stringResource(R.string.evidence_empty))
+                Text(stringResource(R.string.evidence_location_section), Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge)
+                locationChoice()
+                Text(stringResource(R.string.evidence_history_section), Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge)
+                if (!state.busy && state.error == null && state.items.isEmpty()) {
+                    if (state.confirmedRemoteIds.isEmpty()) SolventaEmptyState(stringResource(R.string.evidence_empty))
+                    else Text(stringResource(R.string.evidence_remote_registered, state.confirmedRemoteIds.size))
+                }
                 for (item in state.items) {
-                    Text(stringResource(R.string.evidence_item, stringResource(evidenceKindMessage(item.kind)),
-                        stringResource(when (item.status) {
-                            EvidenceStatus.CONFIRMED -> R.string.evidence_confirmed
-                            EvidenceStatus.REJECTED -> R.string.evidence_rejected
-                            EvidenceStatus.CONFLICT -> R.string.sync_conflict
-                            EvidenceStatus.PENDING -> if (item.lastError == null) R.string.evidence_pending else R.string.evidence_failed
-                        })), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                    Text(item.capturedAt.toString(), style = MaterialTheme.typography.bodySmall)
-                    item.queuedAt?.let { Text(stringResource(R.string.sync_queued_at, it.toString()), style = MaterialTheme.typography.bodySmall) }
-                    item.lastResultAt?.let { Text(stringResource(R.string.sync_result_at, it.toString()), style = MaterialTheme.typography.bodySmall) }
-                    item.serverResult?.let { Text(stringResource(R.string.sync_server_result_at, it.at.toString()), style = MaterialTheme.typography.bodySmall) }
-                    (item.rejection ?: item.lastError)?.let {
-                        Text(stringResource(evidenceErrorMessage(it)), color = MaterialTheme.colorScheme.error)
-                    }
-                    if (item.status == EvidenceStatus.REJECTED) {
-                        TextButton(onClick = { discard = item }, enabled = !state.busy) { Text(stringResource(R.string.evidence_remove)) }
+                    SolventaSection {
+                        Text(stringResource(R.string.evidence_item, stringResource(evidenceKindMessage(item.kind)),
+                            stringResource(when (item.status) {
+                                EvidenceStatus.CONFIRMED -> R.string.evidence_confirmed
+                                EvidenceStatus.REJECTED -> R.string.evidence_rejected
+                                EvidenceStatus.CONFLICT -> R.string.sync_conflict
+                                EvidenceStatus.PENDING -> if (item.lastError == null) R.string.evidence_pending else R.string.evidence_failed
+                            })), Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.titleMedium)
+                        if (item.status == EvidenceStatus.CONFIRMED) SolventaConfirmationMark(item.id)
+                        Text(stringResource(R.string.operational_captured_date, operationalDate(item.capturedAt)),
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.evidence_claim_reference,
+                            operationalReference(item.remoteId ?: item.id, state.items.map { it.remoteId ?: it.id })),
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        SolventaMetadataDetails(reference = item.remoteId ?: item.id, entries = buildList {
+                            add(stringResource(R.string.operational_capture_instant) to item.capturedAt.toString())
+                            add(stringResource(R.string.operational_display_zone) to java.time.ZoneId.systemDefault().id)
+                            item.queuedAt?.let { add(stringResource(R.string.operational_queued_instant) to it.toString()) }
+                            item.lastResultAt?.let { add(stringResource(R.string.operational_observed_instant) to it.toString()) }
+                            item.serverResult?.let { add(stringResource(R.string.operational_server_instant) to it.at.toString()) }
+                            item.errorCode?.let { add(stringResource(R.string.operational_error_code) to it) }
+                        })
+                        (item.rejection ?: item.lastError)?.let {
+                            Text(stringResource(evidenceErrorMessage(it)), color = MaterialTheme.colorScheme.error)
+                        }
+                        if (item.status == EvidenceStatus.REJECTED) {
+                            TextButton(onClick = { discard = item }, enabled = !state.busy) { Text(stringResource(R.string.evidence_remove), textAlign = TextAlign.Center) }
+                        }
                     }
                 }
                 state.progress?.let { (bytes, total) ->
@@ -140,41 +259,44 @@ internal fun EvidenceScreen(
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 }
                 if (onRetry == null) Text(stringResource(R.string.evidence_integration_pending))
-                else Button(onClick = onRetry, enabled = !state.busy && state.items.any { it.status == EvidenceStatus.PENDING }) {
-                    Text(stringResource(R.string.evidence_retry))
+                else Button(onClick = onRetry, enabled = !state.busy && state.items.any { it.status == EvidenceStatus.PENDING },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                    Text(stringResource(R.string.evidence_retry), textAlign = TextAlign.Center)
                 }
                 onAssistance?.let { continueToAssistance ->
-                    Button(
+                    OutlinedButton(
                         onClick = continueToAssistance,
                         enabled = !state.busy,
-                        modifier = Modifier.fillMaxWidth().testTag("continue-with-location"),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight).testTag("continue-with-location"),
                     ) {
-                        Text(stringResource(R.string.evidence_continue_location))
+                        Text(stringResource(R.string.evidence_continue_location), textAlign = TextAlign.Center)
                     }
                 }
             }
-            EvidenceStep.CAMERA, EvidenceStep.CAPTURING -> camera(model, state)
+            EvidenceStep.CAMERA, EvidenceStep.CAPTURING -> camera()
             EvidenceStep.REVIEW -> {
-                Text(stringResource(R.string.evidence_review), modifier = Modifier.semantics { heading() })
+                Text(stringResource(R.string.evidence_review), modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge)
                 val draft = checkNotNull(state.draft)
                 if (draft.kind == EvidenceKind.VIDEO) {
                     val video = remember(draft) { VideoView(context).apply {
                         setVideoURI(Uri.fromFile(draft.file))
                         setMediaController(MediaController(context).also { it.setAnchorView(this) })
                         setOnPreparedListener { seekTo(1) }
-                        setOnErrorListener { _, _, _ -> model.fail(EvidenceError.FORMAT); true }
+                        setOnErrorListener { _, _, _ -> onError(EvidenceError.FORMAT); true }
                     } }
                     DisposableEffect(video) { onDispose { video.stopPlayback() } }
                     AndroidView(factory = { video }, modifier = Modifier.fillMaxWidth().height(260.dp))
                     Text(stringResource(R.string.evidence_video_silent))
                 } else {
-                    CropReview(state, model::crop)
+                    CropReview(state, onCrop)
                 }
-                Button(onClick = { model.accept(hasEvidenceLocationPermission(context)) }, enabled = !state.busy) {
-                    Text(stringResource(R.string.evidence_attach))
+                Button(onClick = onAccept, enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                    Text(stringResource(R.string.evidence_attach), textAlign = TextAlign.Center)
                 }
-                TextButton(onClick = { model.camera(state.kind) }, enabled = !state.busy) {
-                    Text(stringResource(R.string.evidence_repeat))
+                TextButton(onClick = { onCamera(state.kind) }, enabled = !state.busy) {
+                    Text(stringResource(R.string.evidence_repeat), textAlign = TextAlign.Center)
                 }
             }
         }
@@ -201,21 +323,29 @@ private fun LocationChoice(model: EvidenceViewModel, state: EvidenceState) {
         if (hasEvidenceLocationPermission(context)) locate()
         else { model.location(null); model.fail(EvidenceError.LOCATION) }
     }
-    Row {
-        val label = stringResource(R.string.evidence_location)
-        Checkbox(state.locationEnabled, onCheckedChange = {
-            model.enableLocation(it)
-            if (!it) model.location(null)
-            else if (hasEvidenceLocationPermission(context)) locate()
-            else permissions.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
-        }, enabled = !state.busy && !loading, modifier = Modifier.semantics { contentDescription = label })
-        Text(label)
+    EvidenceLocationChoice(state, loading) {
+        model.enableLocation(it)
+        if (!it) model.location(null)
+        else if (hasEvidenceLocationPermission(context)) locate()
+        else permissions.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
+    }
+}
+
+@Composable
+internal fun EvidenceLocationChoice(state: EvidenceState, loading: Boolean, onToggle: (Boolean) -> Unit) {
+    val label = stringResource(R.string.evidence_location)
+    Row(Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight).toggleable(
+        value = state.locationEnabled, enabled = !state.busy && !loading, role = Role.Checkbox,
+        onValueChange = onToggle).semantics { contentDescription = label },
+        verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(state.locationEnabled, onCheckedChange = null, enabled = !state.busy && !loading)
+        Text(label, Modifier.weight(1f).padding(start = 8.dp).clearAndSetSemantics { })
     }
     Text(stringResource(when {
         loading -> R.string.evidence_location_wait
         state.location != null -> R.string.evidence_location_ready
         else -> R.string.evidence_location_none
-    }))
+    }), Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium)
 }
 
 @Composable
@@ -235,7 +365,8 @@ private fun CropReview(state: EvidenceState, apply: (EvidenceCrop) -> Unit) {
     CropSlider(R.string.evidence_crop_top, crop.top, 0f..(crop.bottom - .01f), !state.busy) { crop = crop.copy(top = it) }
     CropSlider(R.string.evidence_crop_right, crop.right, (crop.left + .01f)..1f, !state.busy) { crop = crop.copy(right = it) }
     CropSlider(R.string.evidence_crop_bottom, crop.bottom, (crop.top + .01f)..1f, !state.busy) { crop = crop.copy(bottom = it) }
-    Button(onClick = { apply(crop) }, enabled = !state.busy && crop != EvidenceCrop()) { Text(stringResource(R.string.evidence_crop)) }
+    OutlinedButton(onClick = { apply(crop) }, enabled = !state.busy && crop != EvidenceCrop(),
+        modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) { Text(stringResource(R.string.evidence_crop), textAlign = TextAlign.Center) }
 }
 
 @Composable
@@ -252,6 +383,7 @@ internal fun evidenceKindMessage(kind: EvidenceKind): Int = when (kind) {
 }
 
 internal fun evidenceErrorMessage(error: EvidenceError): Int = when (error) {
+    EvidenceError.UNAVAILABLE -> R.string.evidence_resource_unavailable
     EvidenceError.INVALID_REQUEST -> R.string.evidence_error_invalid_request
     EvidenceError.CONFLICT -> R.string.sync_error_conflict
     EvidenceError.CAMERA -> R.string.evidence_error_camera
@@ -265,4 +397,11 @@ internal fun evidenceErrorMessage(error: EvidenceError): Int = when (error) {
     EvidenceError.SESSION -> R.string.evidence_error_session
     EvidenceError.LOCATION -> R.string.evidence_error_location
     EvidenceError.PROTOCOL -> R.string.evidence_error_protocol
+}
+
+internal fun evidenceQueryErrorMessage(error: EvidenceError, status: Int?): Int = when {
+    status != null && status in 500..599 -> R.string.evidence_query_service
+    error == EvidenceError.NETWORK -> R.string.evidence_query_network
+    error == EvidenceError.PROTOCOL -> R.string.evidence_query_protocol
+    else -> evidenceErrorMessage(error)
 }

@@ -3,14 +3,12 @@ package co.solventa.mobile.feature.notification
 import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,6 +21,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -32,8 +32,17 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.solventa.mobile.R
+import co.solventa.mobile.BuildConfig
 import co.solventa.mobile.core.designsystem.SolventaLayout
 import co.solventa.mobile.core.ui.SolventaPage
+import co.solventa.mobile.core.ui.SolventaSection
+import co.solventa.mobile.core.ui.SolventaScreenHeader
+import co.solventa.mobile.core.ui.SolventaSkeletonList
+import co.solventa.mobile.core.ui.SolventaLoadError
+import co.solventa.mobile.core.ui.SolventaEmptyState
+import co.solventa.mobile.core.ui.SolventaEmptyKind
+import co.solventa.mobile.core.ui.SolventaMetadataDetails
+import co.solventa.mobile.feature.claim.operationalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -50,7 +59,7 @@ internal fun NotificationHost(
         val wasSecure =
             window != null &&
                 window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
-        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        if (!BuildConfig.SCREEN_CAPTURE_ALLOWED) window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         onDispose {
             if (!wasSecure) window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
@@ -77,27 +86,16 @@ internal fun NotificationScreen(
     refresh: () -> Unit,
     back: () -> Unit,
 ) {
-    SolventaPage {
-        TextButton(
-            onClick = back,
-            modifier = Modifier.heightIn(min = SolventaLayout.controlHeight),
-        ) {
-            Text(stringResource(R.string.notification_back))
-        }
-        Text(
-            stringResource(R.string.notification_title),
-            Modifier.semantics { heading() },
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-        )
-        NotificationPermissionCard(state, requestPermission, togglePush)
+    SolventaPage(headerAlignment = Alignment.Start, header = {
+        SolventaScreenHeader(stringResource(R.string.notification_title), stringResource(R.string.notification_back), back)
+    }) {
         if (state.items.any { !it.read }) {
             TextButton(
                 onClick = markAllRead,
                 enabled = !state.busy,
                 modifier = Modifier.heightIn(min = SolventaLayout.controlHeight),
             ) {
-                Text(stringResource(R.string.notification_mark_all_read))
+                Text(stringResource(R.string.notification_mark_all_read), textAlign = TextAlign.Center)
             }
         }
         state.message?.let {
@@ -107,19 +105,27 @@ internal fun NotificationScreen(
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
+        if (state.busy && state.items.isNotEmpty()) {
+            CircularProgressIndicator()
+            Text(stringResource(if (state.loadingNotifications) R.string.operational_refreshing else R.string.operational_saving_notifications),
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        }
         when {
-            state.busy && state.items.isEmpty() -> {
-                CircularProgressIndicator()
-                Text(stringResource(R.string.notification_loading))
+            state.loadingNotifications && state.items.isEmpty() -> {
+                SolventaSkeletonList(stringResource(R.string.notification_loading))
             }
             state.error != null && state.items.isEmpty() -> {
-                Text(
+                SolventaLoadError(
+                    stringResource(R.string.ui_load_notifications_error),
                     stringResource(notificationErrorText(state.error)),
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
-            state.items.isEmpty() -> Text(stringResource(R.string.notification_empty))
+            state.items.isEmpty() && !state.busy ->
+                SolventaEmptyState(stringResource(R.string.notification_empty), SolventaEmptyKind.NOTIFICATIONS)
+            state.items.isEmpty() -> {
+                CircularProgressIndicator()
+                Text(stringResource(R.string.operational_saving_notifications), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            }
             else -> state.items.forEach { item -> NotificationCard(item, open) }
         }
         if (state.error != null && state.items.isNotEmpty()) {
@@ -129,13 +135,14 @@ internal fun NotificationScreen(
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
-        Button(
+        OutlinedButton(
             onClick = refresh,
             enabled = !state.busy,
             modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight),
         ) {
-            Text(stringResource(R.string.notification_refresh))
+            Text(stringResource(R.string.notification_refresh), textAlign = TextAlign.Center)
         }
+        NotificationPermissionCard(state, requestPermission, togglePush)
         Text(
             stringResource(R.string.notification_privacy_notice),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -150,20 +157,7 @@ private fun NotificationPermissionCard(
     requestPermission: () -> Unit,
     togglePush: () -> Unit,
 ) {
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        Column(
-            Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                stringResource(R.string.notification_permission_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
+    SolventaSection(title = stringResource(R.string.notification_permission_title)) {
             Text(
                 stringResource(
                     when {
@@ -177,7 +171,7 @@ private fun NotificationPermissionCard(
             OutlinedButton(
                 onClick = if (state.permissionGranted) togglePush else requestPermission,
                 enabled = !state.busy,
-                modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight),
+                modifier = Modifier.heightIn(min = SolventaLayout.controlHeight),
             ) {
                 Text(
                     stringResource(
@@ -187,8 +181,8 @@ private fun NotificationPermissionCard(
                             else -> R.string.notification_permission_turn_on
                         },
                     ),
+                    textAlign = TextAlign.Center,
                 )
-            }
         }
     }
 }
@@ -198,15 +192,8 @@ private fun NotificationCard(item: NotificationItem, open: (NotificationItem) ->
     Card(
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(
-            1.dp,
-            if (item.read) {
-                MaterialTheme.colorScheme.outline
-            } else {
-                MaterialTheme.colorScheme.primary
-            },
-        ),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        colors = CardDefaults.cardColors(containerColor = if (item.read)
+            MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Column(
             Modifier.padding(20.dp),
@@ -225,21 +212,26 @@ private fun NotificationCard(item: NotificationItem, open: (NotificationItem) ->
             )
             Text(
                 item.notification.title,
+                modifier = Modifier.semantics { heading() },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
-            Text(item.notification.content, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(item.notification.content)
             TextButton(
                 onClick = { open(item) },
                 modifier = Modifier.heightIn(min = SolventaLayout.controlHeight),
             ) {
-                Text(stringResource(R.string.notification_open))
+                Text(stringResource(R.string.notification_open), textAlign = TextAlign.Center)
             }
             Text(
-                notificationDate(item.notification),
+                stringResource(R.string.operational_notice_delivered, operationalDate(item.notification.deliveredAt)),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
             )
+            SolventaMetadataDetails(entries = listOf(
+                stringResource(R.string.operational_delivered_instant) to item.notification.deliveredAt.toString(),
+                stringResource(R.string.operational_display_zone) to ZoneId.systemDefault().id,
+            ))
         }
     }
 }

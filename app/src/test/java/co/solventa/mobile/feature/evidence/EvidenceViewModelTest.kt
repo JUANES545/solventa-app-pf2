@@ -32,6 +32,7 @@ class EvidenceViewModelTest {
             Thread.sleep(10)
         }
         assertFalse("Operation did not finish", model.state.value.busy)
+        assertFalse(model.state.value.loadingClaims)
         assertNull(model.state.value.error)
     }
 
@@ -42,6 +43,7 @@ class EvidenceViewModelTest {
         draft.file.outputStream().use { check(image.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
         image.recycle()
         model.captured(draft)
+        assertFalse(model.state.value.loadingClaims)
         await()
         assertEquals(EvidenceStep.REVIEW, model.state.value.step)
     }
@@ -78,18 +80,21 @@ class EvidenceViewModelTest {
             val connected = EvidenceViewModel(app, MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString()))
             val claim = EvidenceClaim(scope.claimId, "Choque", "2026-03-01T12:30:00Z", "Descripcion sintetica")
             connected.showClaim(scope.actorId, claim)
+            assertTrue(connected.state.value.loadingClaims)
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
             while (connected.state.value.busy && System.nanoTime() < deadline) {
                 shadowOf(Looper.getMainLooper()).idle()
                 Thread.sleep(10)
             }
             assertFalse(connected.state.value.busy)
+            assertFalse(connected.state.value.loadingClaims)
             assertNull(connected.state.value.error)
             assertEquals(scope, connected.state.value.scope)
             assertEquals(7, connected.state.value.policy?.maxCount)
             assertEquals(listOf(claim), connected.state.value.claims)
             connected.bindActor("actor-b")
             assertNull(connected.state.value.scope)
+            assertFalse(connected.state.value.loadingClaims)
             androidx.lifecycle.ViewModelStore().apply { put("evidence", connected); clear() }
         }
     }
@@ -112,5 +117,62 @@ class EvidenceViewModelTest {
         model.open(scope.copy(actorId = "actor-b"), policy, emptySet())
         await()
         assertTrue(model.state.value.items.isEmpty())
+    }
+
+    @Test fun claimRefreshRetainsOnlyTheSameActorsSelectorAndClearsQueryOnFailure() {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            val configuration = """{"maxCantidad":7,"maxChunkBytes":1024,"maxVideoSeconds":45,"formatos":[{"mimeType":"image/jpeg","maxBytes":1234}]}"""
+            val claims = """{"siniestros":[{"id":"${scope.claimId}","tipoEvento":"Choque","fechaEvento":"2026-03-01T12:30:00Z","descripcion":"Daño en el vehículo."}]}"""
+            val connected = EvidenceViewModel(app, MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString()))
+            fun awaitQuery() {
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+                while (connected.state.value.busy && System.nanoTime() < deadline) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    Thread.sleep(10)
+                }
+                assertFalse(connected.state.value.busy)
+                assertFalse(connected.state.value.loadingClaims)
+            }
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setBody(claims))
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setBody(configuration))
+            connected.showClaims(scope.actorId)
+            assertTrue(connected.state.value.loadingClaims)
+            awaitQuery()
+            val previous = connected.state.value.claims
+            assertEquals(1, previous.size)
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setResponseCode(503).setBody("{}"))
+            connected.showClaims(scope.actorId)
+            assertTrue(connected.state.value.loadingClaims)
+            assertEquals(previous, connected.state.value.claims)
+            awaitQuery()
+            assertEquals(EvidenceError.NETWORK, connected.state.value.error)
+            assertEquals(503, connected.state.value.errorHttpStatus)
+            assertEquals(previous, connected.state.value.claims)
+            connected.bindActor("actor-b")
+            assertTrue(connected.state.value.claims.isEmpty())
+            assertNull(connected.state.value.configuration)
+            assertFalse(connected.state.value.loadingClaims)
+            androidx.lifecycle.ViewModelStore().apply { put("evidence", connected); clear() }
+        }
+    }
+
+    @Test fun accountWithoutClaimsDoesNotRequireCaptureConfigurationOrLookLikeAFailure() {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setBody("""{"siniestros":[]}"""))
+            val connected = EvidenceViewModel(app, MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString()))
+            connected.showClaims(scope.actorId)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (connected.state.value.busy && System.nanoTime() < deadline) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(10)
+            }
+            assertFalse(connected.state.value.busy)
+            assertNull(connected.state.value.error)
+            assertTrue(connected.state.value.claims.isEmpty())
+            assertNull(connected.state.value.configuration)
+            assertEquals(1, server.requestCount)
+            assertEquals("/movil/v1/siniestros", server.takeRequest().path)
+            androidx.lifecycle.ViewModelStore().apply { put("evidence", connected); clear() }
+        }
     }
 }

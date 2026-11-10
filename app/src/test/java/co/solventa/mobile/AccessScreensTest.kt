@@ -336,7 +336,7 @@ class AccessScreensTest {
         compose.onNodeWithText("Continuar").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText(application.getString(R.string.registration_terms)).performScrollTo().performClick()
         compose.onNodeWithText("Continuar").performScrollTo().assertIsEnabled()
-        compose.onNodeWithContentDescription("Volver al formulario").performClick()
+        compose.onNode(hasText("Volver al formulario") and hasClickAction()).performScrollTo().performClick()
         compose.onNodeWithContentDescription("Mostrar contraseña").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Mostrar confirmación de contraseña").performScrollTo().performClick()
         fields.zip(values).forEach { (label, value) ->
@@ -347,7 +347,7 @@ class AccessScreensTest {
         compose.onNodeWithText("Continuar").performScrollTo().performClick()
         compose.onAllNodes(isToggleable()).assertAll(isOff())
         compose.onNodeWithText("Continuar").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithContentDescription("Volver al formulario").performClick()
+        compose.onNode(hasText("Volver al formulario") and hasClickAction()).performScrollTo().performClick()
         compose.runOnIdle {
             assertEquals(AccessScreen.REGISTER, auth.state.value.screen)
             assertNull(auth.state.value.user)

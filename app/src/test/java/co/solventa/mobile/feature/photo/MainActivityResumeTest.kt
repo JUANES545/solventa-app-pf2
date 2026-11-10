@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createComposeRule
 import co.solventa.mobile.MainActivity
 import co.solventa.mobile.SolventaApplication
@@ -105,7 +106,7 @@ class MainActivityResumeTest {
         assertNull(grant)
         assertFalse(file.exists())
         assertEquals(previousCalls, calls)
-        compose.onNodeWithText("Ingresar", substring = false).assertIsDisplayed()
+        compose.onNodeWithText("Ingresar", substring = false).performScrollTo().assertIsDisplayed()
         controller.pause().stop().destroy()
         shadowOf(Looper.getMainLooper()).idle()
     }

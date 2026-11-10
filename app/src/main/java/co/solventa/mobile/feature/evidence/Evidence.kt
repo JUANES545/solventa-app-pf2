@@ -48,7 +48,7 @@ internal data class EvidenceLocation(val latitude: Double, val longitude: Double
     }
 }
 
-internal enum class EvidenceError { CAMERA, PERMISSION, FORMAT, SIZE, DURATION, COUNT, STORAGE, NETWORK, SESSION, LOCATION, PROTOCOL, CONFLICT, INVALID_REQUEST }
+internal enum class EvidenceError { CAMERA, PERMISSION, FORMAT, SIZE, DURATION, COUNT, STORAGE, NETWORK, SESSION, LOCATION, PROTOCOL, CONFLICT, INVALID_REQUEST, UNAVAILABLE }
 internal open class EvidenceProblem(val reason: EvidenceError, cause: Throwable? = null) : IOException(reason.name, cause)
 internal class EvidenceHttpProblem(
     val status: Int, val code: String?, val permanent: Boolean, reason: EvidenceError, cause: Throwable? = null,

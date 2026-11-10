@@ -28,6 +28,7 @@ internal data class ClaimState(
     val actor: String? = null,
     val open: Boolean = false,
     val busy: Boolean = false,
+    val loadingPolicies: Boolean = false,
     val editing: Boolean = true,
     val draft: ClaimDraft = ClaimDraft(),
     val policies: List<ClaimPolicy> = emptyList(),
@@ -96,6 +97,7 @@ internal class ClaimViewModel @Inject constructor(
         operation { actor ->
             update { copy(reports = store.list(actor), policies = store.policies(actor), cachedPolicies = true) }
             if (!sendPending(actor)) return@operation
+            update { copy(loadingPolicies = true) }
             try {
                 val policies = api.policies(actor)
                 store.savePolicies(actor, policies)
@@ -119,7 +121,7 @@ internal class ClaimViewModel @Inject constructor(
             } catch (error: Exception) {
                 val reason = claimError(error)
                 operation.update { copy(error = reason) }
-            } finally { operation.update { copy(busy = false) } }
+            } finally { operation.update { copy(busy = false, loadingPolicies = false) } }
         }
     }
 

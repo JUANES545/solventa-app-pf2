@@ -10,9 +10,7 @@
     <string name="photo_selfie_title">Tu selfie</string>
     <string name="photo_document_received">Documento revisado</string>
     <string name="photo_selfie_received">Selfie revisada</string>
-    <string name="photo_document_pending">Documento pendiente</string>
     <string name="photo_restart_document">Repetir documento</string>
-    <string name="photo_selfie_pending">Selfie pendiente</string>
     <string name="photo_summary">Fotos revisadas</string>
     <string name="photo_document_description">Foto del documento capturada</string>
     <string name="photo_privacy">Las fotos quedan en este teléfono. Las eliminamos al aceptarlas o salir, sin enviarlas al servidor.</string>
@@ -24,7 +22,7 @@
     <string name="photo_accept">Usar esta foto</string>
     <string name="photo_repeat">Repetir foto</string>
     <string name="photo_processing">Procesando…</string>
-    <string name="photo_complete_body">Revisaste ambas fotos. Eliminamos los archivos temporales.</string>
+    <string name="photo_complete_body">Eliminamos los archivos temporales.</string>
     <string name="photo_back_login">Continuar</string>
     <string name="photo_back_account">Volver a mi cuenta</string>
     <string name="photo_cancel">Cancelar</string>

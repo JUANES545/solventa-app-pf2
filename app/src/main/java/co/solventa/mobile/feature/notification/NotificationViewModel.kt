@@ -21,6 +21,7 @@ internal data class NotificationUiState(
     val actor: String? = null,
     val open: Boolean = false,
     val busy: Boolean = false,
+    val loadingNotifications: Boolean = false,
     val items: List<NotificationItem> = emptyList(),
     val permissionGranted: Boolean = false,
     val pushEnabled: Boolean = false,
@@ -72,7 +73,7 @@ internal class NotificationViewModel @Inject constructor(
     fun synchronize(actor: String) {
         if (actor != state.value.actor || state.value.busy) return
         val version = generation
-        mutable.value = state.value.copy(busy = true, error = null)
+        mutable.value = state.value.copy(busy = true, loadingNotifications = true, error = null)
         job = viewModelScope.launch {
             try {
                 val notifications = api.notifications(actor).sortedByDescending { it.deliveredAt }
@@ -91,6 +92,7 @@ internal class NotificationViewModel @Inject constructor(
                 update(version) {
                     copy(
                         busy = false,
+                        loadingNotifications = false,
                         items = notifications.map { NotificationItem(it, it.id in read) },
                         permissionGranted = permission,
                         pushEnabled = NotificationKind.entries.all { pushByKind[it] == true },
@@ -101,11 +103,12 @@ internal class NotificationViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (problem: NotificationProblem) {
-                update(version) { copy(busy = false, error = problem.reason) }
+                update(version) { copy(busy = false, loadingNotifications = false, error = problem.reason) }
             } catch (_: SecurityException) {
                 update(version) {
                     copy(
                         busy = false,
+                        loadingNotifications = false,
                         permissionGranted = false,
                         message = NotificationMessage.PERMISSION_DENIED,
                     )
@@ -136,6 +139,7 @@ internal class NotificationViewModel @Inject constructor(
         val version = generation
         mutable.value = state.value.copy(
             busy = true,
+            loadingNotifications = false,
             error = null,
             message = if (!enabled && !state.value.permissionGranted) {
                 state.value.message

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_show_details">Ver detalles</string>
+    <string name="ui_hide_details">Ocultar detalles</string>
+    <string name="ui_details_expanded">Expandido</string>
+    <string name="ui_details_collapsed">Contraído</string>
+    <string name="ui_reference">Referencia: %1$s</string>
+    <string name="ui_load_notifications_error">No pudimos cargar tus avisos</string>
+    <string name="ui_load_claim_status_error">No pudimos consultar tus siniestros</string>
+    <string name="ui_load_policies_error">No pudimos consultar tus pólizas</string>
+    <string name="ui_load_claims_error">No pudimos cargar tus siniestros</string>
+    <string name="ui_load_providers_error">No pudimos consultar prestadores</string>
+</resources>

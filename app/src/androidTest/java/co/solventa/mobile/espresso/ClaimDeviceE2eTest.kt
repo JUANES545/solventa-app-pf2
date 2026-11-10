@@ -105,7 +105,12 @@ class ClaimDeviceE2eTest {
         settle()
         val report = model.state.value.reports.single { it.payload.type == draft.type }
         assertNotNull(report.receipt)
-        compose.onNodeWithText(report.receipt!!.id, substring = true).performScrollTo().assertIsDisplayed()
+        repeat(compose.onAllNodesWithText(context.getString(R.string.ui_show_details)).fetchSemanticsNodes().size) {
+            compose.onAllNodesWithText(context.getString(R.string.ui_show_details)).onFirst()
+                .performScrollTo().performClick()
+        }
+        compose.onAllNodesWithText(report.receipt!!.id, substring = true).onFirst()
+            .performScrollTo().assertIsDisplayed()
         compose.onAllNodesWithText(context.getString(R.string.evidence_entry)).onFirst().performScrollTo().performClick()
         compose.waitUntil(30_000) { evidence.state.value.scope != null && !evidence.state.value.busy }
         assertEquals(report.receipt.id, evidence.state.value.scope!!.claimId)

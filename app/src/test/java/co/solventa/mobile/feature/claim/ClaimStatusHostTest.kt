@@ -42,7 +42,8 @@ class ClaimStatusHostTest {
             }
         }
         compose.runOnIdle {
-            assertTrue(compose.activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
+            assertEquals(!co.solventa.mobile.BuildConfig.SCREEN_CAPTURE_ALLOWED,
+                compose.activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
             owner.lifecycle.currentState = Lifecycle.State.CREATED
         }
         compose.runOnIdle {

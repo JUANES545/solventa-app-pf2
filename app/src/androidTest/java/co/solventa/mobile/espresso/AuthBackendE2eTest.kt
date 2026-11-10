@@ -25,7 +25,7 @@ class AuthBackendE2eTest : AuthJourney() {
         click(R.string.go_to_login)
         assertInput(R.string.email, email)
         login(email)
-        awaitText(R.string.account_title)
+        openAccount()
         val original = checkNotNull(store.read())
         assertEquals(email, original.user.email)
         assertEquals(original.user, api.current(original.accessToken))
@@ -34,7 +34,7 @@ class AuthBackendE2eTest : AuthJourney() {
         // Expire only the local access deadline to exercise the real refresh endpoint without waiting.
         store.write(original.copy(expiresAt = 0))
         launch()
-        awaitText(R.string.account_title)
+        openAccount()
         awaitText(R.string.sign_out)
         val rotated = checkNotNull(store.read())
         assertNotEquals(original.refreshToken, rotated.refreshToken)

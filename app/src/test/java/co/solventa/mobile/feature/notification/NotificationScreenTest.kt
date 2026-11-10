@@ -1,10 +1,12 @@
 package co.solventa.mobile.feature.notification
 
 import android.app.Application
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import co.solventa.mobile.R
@@ -24,6 +26,26 @@ class NotificationScreenTest {
     @get:Rule
     val compose = createComposeRule()
     private val app get() = RuntimeEnvironment.getApplication()
+
+    @Test
+    fun sessionFailureReplacesLoadingWithOneExplicitErrorWithoutAnEmptyResult() {
+        val state = mutableStateOf(NotificationUiState(busy = true, loadingNotifications = true))
+        var refreshes = 0
+        compose.setContent {
+            SolventaTheme {
+                NotificationScreen(state.value, {}, {}, {}, {}, { refreshes++ }, {})
+            }
+        }
+        compose.onNodeWithContentDescription(app.getString(R.string.notification_loading)).assertExists()
+        compose.runOnIdle { state.value = NotificationUiState(error = NotificationError.SESSION) }
+        compose.onNodeWithContentDescription(app.getString(R.string.notification_loading)).assertDoesNotExist()
+        compose.onNodeWithText(app.getString(R.string.ui_load_notifications_error), useUnmergedTree = true)
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(R.string.notification_error_session), useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(app.getString(R.string.notification_empty)).assertDoesNotExist()
+        compose.onNodeWithText(app.getString(R.string.notification_refresh)).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(1, refreshes) }
+    }
 
     @Test
     fun displaysMinimizedContentWithoutResourceIdentifiersAndMarksRead() {
@@ -81,6 +103,7 @@ class NotificationScreenTest {
                 NotificationScreen(
                     NotificationUiState(
                         busy = true,
+                        loadingNotifications = true,
                         permissionGranted = false,
                         message = NotificationMessage.PERMISSION_DENIED,
                     ),
@@ -99,7 +122,7 @@ class NotificationScreenTest {
         compose.onNodeWithText(app.getString(R.string.notification_permission_denied))
             .performScrollTo()
             .assertIsDisplayed()
-        compose.onNodeWithText(app.getString(R.string.notification_loading))
+        compose.onNodeWithContentDescription(app.getString(R.string.notification_loading))
             .performScrollTo()
             .assertIsDisplayed()
         compose.onNodeWithText(app.getString(R.string.notification_empty)).assertDoesNotExist()

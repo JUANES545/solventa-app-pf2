@@ -105,7 +105,8 @@ class ClaimStatusDeviceE2eTest {
         compose.onNodeWithText(context.getString(R.string.claim_status_updated, claimStatusDate(initialDate)))
             .performScrollTo().assertIsDisplayed()
         scenario!!.onActivity {
-            assertTrue(it.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
+            assertEquals(!BuildConfig.SCREEN_CAPTURE_ALLOWED,
+                it.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
         }
         val changedDate = Instant.parse(control("reviewing").getString("actualizadoEn"))
         compose.onNodeWithText(text(R.string.claim_status_refresh)).performScrollTo().performClick()

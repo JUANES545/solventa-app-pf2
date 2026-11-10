@@ -12,14 +12,17 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import co.solventa.mobile.R
 import co.solventa.mobile.core.designsystem.SolventaLayout
@@ -29,15 +32,21 @@ internal fun BiometricAccessInfo(
     enabled: Boolean,
     onUsePassword: () -> Unit,
     serviceEnabled: Boolean = false,
+    onDialogVisibilityChanged: (Boolean) -> Unit = {},
     checkCapability: () -> Int,
 ) {
     var capability by remember { mutableStateOf<Int?>(null) }
+    val visibilityChanged by rememberUpdatedState(onDialogVisibilityChanged)
     TextButton(onClick = { capability = checkCapability() }, enabled = enabled,
         modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight), shape = SolventaLayout.controlShape,
     ) {
-        Text(stringResource(R.string.biometric_sign_in))
+        Text(stringResource(R.string.biometric_sign_in), textAlign = TextAlign.Center)
     }
     capability?.let { status ->
+        DisposableEffect(Unit) {
+            visibilityChanged(true)
+            onDispose { visibilityChanged(false) }
+        }
         AlertDialog(
             onDismissRequest = { capability = null },
             title = { Text(stringResource(R.string.biometric_title), Modifier.semantics { heading() }) },
@@ -48,8 +57,9 @@ internal fun BiometricAccessInfo(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { capability = null; onUsePassword() }) {
-                    Text(stringResource(R.string.biometric_use_password))
+                TextButton(onClick = { capability = null; onUsePassword() },
+                    modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) {
+                    Text(stringResource(R.string.biometric_use_password), textAlign = TextAlign.Center)
                 }
             },
         )

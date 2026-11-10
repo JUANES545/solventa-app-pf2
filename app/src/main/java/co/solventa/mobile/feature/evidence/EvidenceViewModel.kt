@@ -35,7 +35,9 @@ internal data class EvidenceState(
     val location: EvidenceLocation? = null,
     val locationEnabled: Boolean = false,
     val busy: Boolean = false,
+    val loadingClaims: Boolean = false,
     val error: EvidenceError? = null,
+    val errorHttpStatus: Int? = null,
     val progress: Pair<Long, Long>? = null,
 )
 
@@ -56,11 +58,19 @@ internal class EvidenceViewModel @Inject constructor(
     }
 
     fun showClaims(actorId: String) {
+        if (state.value.open && state.value.actorId == actorId && state.value.scope == null) {
+            if (!state.value.busy) loadClaims(actorId)
+            return
+        }
         close()
         mutable.value = state.value.copy(actorId = actorId, open = true)
-        operation {
-            val configuration = api.configuration(actorId)
+        loadClaims(actorId)
+    }
+
+    private fun loadClaims(actorId: String) {
+        operation(loadingClaims = true) {
             val claims = api.claims(actorId)
+            val configuration = if (claims.isEmpty()) null else api.configuration(actorId)
             update { copy(configuration = configuration, claims = claims) }
         }
     }
@@ -70,7 +80,7 @@ internal class EvidenceViewModel @Inject constructor(
         val actor = current.actorId ?: return
         val config = current.configuration ?: return
         if (current.busy || claim !in current.claims) return
-        operation {
+        operation(loadingClaims = true) {
             val scope = EvidenceScope(actor, claim.id)
             val ids = api.confirmedIds(scope)
             val items = store.list(scope)
@@ -82,7 +92,7 @@ internal class EvidenceViewModel @Inject constructor(
     fun showClaim(actorId: String, claim: EvidenceClaim) {
         close()
         mutable.value = state.value.copy(actorId = actorId, open = true, claims = listOf(claim))
-        operation {
+        operation(loadingClaims = true) {
             val configuration = api.configuration(actorId)
             val scope = EvidenceScope(actorId, claim.id)
             val ids = api.confirmedIds(scope)
@@ -238,18 +248,18 @@ internal class EvidenceViewModel @Inject constructor(
         }
     }
 
-    private fun operation(block: suspend Operation.() -> Unit) {
+    private fun operation(loadingClaims: Boolean = false, block: suspend Operation.() -> Unit) {
         if (state.value.busy) return
         val generation = state.value.generation
-        mutable.value = state.value.copy(busy = true, error = null)
+        mutable.value = state.value.copy(busy = true, loadingClaims = loadingClaims, error = null, errorHttpStatus = null)
         job = viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { Operation(generation).block() }
             } catch (error: Exception) {
                 val reason = evidenceOperationError(error)
-                Operation(generation).update { copy(error = reason) }
+                Operation(generation).update { copy(error = reason, errorHttpStatus = (error as? EvidenceHttpProblem)?.status) }
             } finally {
-                Operation(generation).update { copy(busy = false) }
+                Operation(generation).update { copy(busy = false, loadingClaims = false) }
             }
         }
     }

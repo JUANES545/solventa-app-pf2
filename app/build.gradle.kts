@@ -78,6 +78,7 @@ android {
         buildConfigField("String", "AUTH_ISSUER", "\"https://65qgzhody9.execute-api.us-east-2.amazonaws.com\"")
         buildConfigField("boolean", "BIOMETRIC_LOGIN_ENABLED", "true")
         buildConfigField("boolean", "PHOTO_REVIEW_ENABLED", "true")
+        buildConfigField("boolean", "SCREEN_CAPTURE_ALLOWED", "false")
         testInstrumentationRunner = "co.solventa.mobile.espresso.SolventaTestRunner"
         val backendE2e = providers.gradleProperty("backendE2e").orNull == "true"
         testInstrumentationRunnerArguments[if (backendE2e) "annotation" else "notAnnotation"] =
@@ -113,9 +114,11 @@ android {
         initWith(buildTypes.getByName("release"))
         signingConfig = signingConfigs.getByName("debug")
         matchingFallbacks += "release"
+        buildConfigField("boolean", "SCREEN_CAPTURE_ALLOWED", "true")
     }
     buildTypes.getByName("debug") {
         enableUnitTestCoverage = true
+        buildConfigField("boolean", "SCREEN_CAPTURE_ALLOWED", "true")
     }
     buildTypes.create("biometricTest") {
         initWith(buildTypes.getByName("debug"))

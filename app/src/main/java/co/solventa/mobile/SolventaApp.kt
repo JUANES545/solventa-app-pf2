@@ -19,6 +19,15 @@ import co.solventa.mobile.feature.auth.BiometricDevice
 import co.solventa.mobile.feature.auth.BiometricAccountSection
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import co.solventa.mobile.core.ui.LocalAccessBackgroundState
+import co.solventa.mobile.core.ui.rememberAccessBackgroundState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import co.solventa.mobile.feature.home.HomeDestination
+import co.solventa.mobile.feature.home.HomeNavigation
+import co.solventa.mobile.feature.home.HomeScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -54,12 +63,14 @@ internal fun SolventaApp(
     requestNotificationPermission: () -> Unit = {},
 ) {
     SolventaTheme(darkTheme) {
+        CompositionLocalProvider(LocalAccessBackgroundState provides rememberAccessBackgroundState()) {
         val biometricState = biometrics?.state?.collectAsState()?.value
         if (auth == null) {
             LoginScreen()
         } else {
             val state by auth.state.collectAsState()
             val user = state.user
+            var accountOpen by rememberSaveable(user?.id) { mutableStateOf(false) }
             val evidenceState = evidence?.state?.collectAsState()?.value
             val claimState = claims?.state?.collectAsState()?.value
             val claimStatusState = claimStatus?.state?.collectAsState()?.value
@@ -159,14 +170,35 @@ internal fun SolventaApp(
                             report.payload.date.toString(), report.payload.description))
                     }
                 }
-            } else if (
-                notifications != null &&
-                notificationState?.open == true &&
-                notificationState.actor == user.id
-            ) {
-                NotificationHost(notifications, requestNotificationPermission)
             } else {
-                AccountScreen(user, state.loading || biometricState?.busy == true,
+                val notificationsOpen = notifications != null && notificationState?.open == true &&
+                    notificationState.actor == user.id
+                val selected = when {
+                    notificationsOpen -> HomeDestination.NOTIFICATIONS
+                    accountOpen -> HomeDestination.ACCOUNT
+                    else -> HomeDestination.HOME
+                }
+                BackHandler(enabled = accountOpen && !notificationsOpen) { accountOpen = false }
+                HomeNavigation(selected, !state.loading, notifications != null, onSelect = { destination ->
+                    when (destination) {
+                        HomeDestination.HOME -> {
+                            notifications?.close()
+                            accountOpen = false
+                        }
+                        HomeDestination.NOTIFICATIONS -> {
+                            accountOpen = false
+                            notifications?.show(user.id)
+                        }
+                        HomeDestination.ACCOUNT -> {
+                            notifications?.close()
+                            accountOpen = true
+                        }
+                    }
+                }) {
+                    if (notificationsOpen && notifications != null) {
+                        NotificationHost(notifications, requestNotificationPermission)
+                    } else if (accountOpen) {
+                        AccountScreen(user, state.loading || biometricState?.busy == true,
                     { beforeAccessChange(); auth.logout() },
                     biometricContent = {
                         if (biometricState != null && biometricState.actorUserId == user.id && device != null) {
@@ -174,10 +206,15 @@ internal fun SolventaApp(
                             { biometrics.enroll(it, device) }, biometrics::loadCredentials,
                             { biometrics.revoke(it, device) })
                         }
-                    }, onEvidence = evidence?.let { { it.showClaims(user.id) } },
-                    onClaim = claims?.let { { it.show(user.id) } }, offline = state.offline,
-                    onClaimStatus = claimStatus?.let { { it.show(user.id) } },
-                    onNotifications = notifications?.let { { it.show(user.id) } })
+                    }, offline = state.offline)
+                    } else {
+                        HomeScreen(user, state.loading, state.offline,
+                            onClaim = claims?.let { { it.show(user.id) } },
+                            onClaimStatus = claimStatus?.let { { it.show(user.id) } },
+                            onEvidence = evidence?.let { { it.showClaims(user.id) } })
+                    }
+                    }
+                }
             }
 
         }
