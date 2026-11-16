@@ -209,7 +209,8 @@ sin exposición de respuestas y límites de tamaño del resultado. Pasarlas no v
 las credenciales reales ni demuestra que una app esté publicada.
 
 Los PRs no contienen jobs de publicación, ni siquiera omitidos. CI conserva los checks
-obligatorios de Actions y **CI / Validación (Jenkins)**; CD aparece como ejecución separada.
+obligatorios de Actions y ofrece **CI / Validación (Jenkins)** como comprobación
+opcional bajo demanda; CD aparece como ejecución separada.
 
 ## Compatibilidad y transición
 

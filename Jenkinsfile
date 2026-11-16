@@ -49,7 +49,7 @@ pipeline {
             script {
                 def coverage = [
                     title: 'Cobertura incompleta',
-                    summary: "No se pudieron procesar los reportes JUnit o de cobertura. Consulte el [registro del build](${env.BUILD_URL}console) para ver el error. No hay un resultado de cobertura verificado.",
+                    summary: 'No se pudieron procesar los reportes JUnit o de cobertura. Consulte el registro privado de Jenkins para ver el error. No hay un resultado de cobertura verificado.',
                     conclusion: 'FAILURE'
                 ]
                 try {
@@ -64,7 +64,9 @@ pipeline {
                     def summary = readFile(file: 'reports/coverage-summary.md', encoding: 'UTF-8')
                     def revision = sh(returnStdout: true, script: 'git rev-parse HEAD').trim()
                     summary += "\n**Revisión compilada:** [`${revision}`](https://github.com/JUANES545/solventa-app-pf2/commit/${revision}).\n"
-                    summary += "\n[Informe HTML de cobertura](${env.BUILD_URL}artifact/app/build/reports/coverage/unit/html/index.html) · [Pruebas JUnit](${env.BUILD_URL}testReport/)\n"
+                    summary += "\n**Origen:** Jenkins · ejecución **#${env.BUILD_NUMBER}** · resultado observado **${currentBuild.currentResult}**.\n"
+                    summary += "\nLos conteos y porcentajes anteriores corresponden a esta ejecución de Jenkins. Los informes completos se conservan en Jenkins privado; este resumen no requiere acceso al controlador. Un reporte de cobertura no demuestra que todo el pipeline haya terminado.\n"
+                    writeFile file: 'reports/coverage-summary.md', text: summary, encoding: 'UTF-8'
                     coverage = [
                         title: summary.readLines()[0], summary: summary,
                         conclusion: result == 0 ? 'SUCCESS' : (currentBuild.currentResult == 'SUCCESS' ? 'FAILURE' : 'NEUTRAL')

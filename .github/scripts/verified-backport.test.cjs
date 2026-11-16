@@ -49,6 +49,17 @@ test('verified App PR uses real bot identity, not optional attribution fields', 
   assert.equal('performed_via_github_app' in f.pull, false);
   await verifyPull(f);
 });
+for (const state of ['absent', 'pending', 'failed']) {
+  test(`Jenkins ${state} does not block a verified backport`, async () => {
+    const f = fixture();
+    if (state === 'absent') f.checks.splice(2);
+    else Object.assign(f.checks[2], state === 'pending'
+      ? { status: 'in_progress', conclusion: null }
+      : { conclusion: 'failure' });
+    await verifyPull(f);
+    assert.equal(f.wasMerged(), false);
+  });
+}
 for (const [name, mutate] of [
   ['human-created lookalike', f => { f.pull.user.type = 'User'; }],
   ['wrong App', f => { f.bot.id = 100; }],
@@ -60,8 +71,10 @@ for (const [name, mutate] of [
   ['base race', f => { f.pull.base.sha = HEAD; }],
   ['draft', f => { f.pull.draft = true; }],
   ['failed release check', f => { f.checks[0].conclusion = 'failure'; }],
-  ['wrong check publisher', f => { f.checks[2].app.id = 99; }],
-  ['obsolete Jenkins name', f => { f.checks[2].name = 'Solventa Android Jenkins'; }],
+  ['wrong check publisher', f => { f.checks[0].app.id = 99; }],
+  ['missing UI check', f => { f.checks.splice(1, 1); }],
+  ['failed UI check', f => { f.checks[1].conclusion = 'failure'; }],
+  ['pending UI check', f => { f.checks[1].status = 'in_progress'; }],
   ['stale check', f => { f.checks[0].head_sha = BASE; }],
   ['ambiguous check', f => { f.checks.push(f.checks[0]); }],
   ['no review', f => { f.reviews.length = 0; }],
@@ -71,7 +84,7 @@ for (const [name, mutate] of [
   ['unmerged source', f => { f.source.merged = false; }],
   ['divergent develop with unvalidated content', f => { f.diverge(); f.candidate.tree.sha = BASE; }],
 ]) test(`${name} cannot bypass verification`, async () => {
-  const f = fixture(); mutate(f); await assert.rejects(verifyPull(f)); assert.equal(f.wasMerged(), false);
+  const f = fixture(); f.checks.splice(2); mutate(f); await assert.rejects(verifyPull(f)); assert.equal(f.wasMerged(), false);
 });
 test('automatic merge uses verified PR and never calls review APIs', async () => {
   const f = fixture();

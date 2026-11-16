@@ -6,6 +6,18 @@ from coverage_summary import counters, summarize, junit_counts
 
 
 class CoverageSummaryTest(unittest.TestCase):
+    def test_jenkins_summary_does_not_publish_private_report_links(self) -> None:
+        pipeline = (Path(__file__).resolve().parents[1] / "Jenkinsfile").read_text(encoding="utf-8")
+        self.assertNotIn("BUILD_URL", pipeline)
+        self.assertNotIn("localhost", pipeline)
+        self.assertIn("env.BUILD_NUMBER", pipeline)
+        self.assertIn("currentBuild.currentResult", pipeline)
+        self.assertIn("git rev-parse HEAD", pipeline)
+        self.assertIn("https://github.com/JUANES545/solventa-app-pf2/pull/", pipeline)
+        self.assertIn("skipPublishingChecks: true", pipeline)
+        self.assertIn("archiveArtifacts", pipeline)
+        self.assertIn("writeFile file: 'reports/coverage-summary.md', text: summary", pipeline)
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
