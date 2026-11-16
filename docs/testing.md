@@ -382,6 +382,8 @@ autorización, acciones alcanzables o tamaño de los controles.
 En **Mis siniestros**, el expediente usa el tipo del evento seleccionado.
 **Ver detalles** muestra los campos disponibles del reporte y las referencias
 completas de siniestro y póliza, seleccionables y separadas de los datos.
+Conserva también la fecha exacta de actualización del servidor y la zona
+horaria del teléfono, incluso si falla la consulta de los datos del reporte.
 La galería consulta archivos locales de la misma cuenta y siniestro; abre
 fotos/recibos JPEG y reproduce vídeos mediante una acción explícita. Si solo
 existe un ID remoto, informa que el archivo no está disponible en el dispositivo.

@@ -161,15 +161,20 @@ internal fun ClaimStatusScreen(
                     }
                     val actor = state.actor
                     val claim = state.selectedClaim
-                    if (state.caseLoaded && state.caseError == null && claim != null && claim.id == state.selectedId && actor != null) {
-                        SolventaSection {
-                            Text(stringResource(R.string.claim_status_references), Modifier.semantics { heading() },
-                                style = MaterialTheme.typography.titleMedium)
-                            ClaimCaseField(stringResource(R.string.claim_status_reference), claim.id, reference = true)
-                            claim.policyId?.let {
+                    val caseAvailable = state.caseLoaded && state.caseError == null && claim?.id == state.selectedId
+                    SolventaSection {
+                        Text(stringResource(R.string.claim_status_references), Modifier.semantics { heading() },
+                            style = MaterialTheme.typography.titleMedium)
+                        ClaimCaseField(stringResource(R.string.claim_status_reference), state.detail.id, reference = true)
+                        if (caseAvailable) {
+                            claim?.policyId?.let {
                                 ClaimCaseField(stringResource(R.string.claim_status_policy), it, reference = true)
                             }
                         }
+                        ClaimCaseField(stringResource(R.string.operational_updated_instant), state.detail.updatedAt.toString())
+                        ClaimCaseField(stringResource(R.string.operational_display_zone), ZoneId.systemDefault().id)
+                    }
+                    if (caseAvailable && claim != null && actor != null) {
                         attachments(EvidenceScope(actor, claim.id), claim)
                     }
                 }
