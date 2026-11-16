@@ -107,6 +107,7 @@ if (!factories.first().is(factory)) {
     throw new IllegalStateException('Unsupported factory priority; original publishers preserved')
 }
 def verified = []
+def verifiedPrRoutes = []
 try {
     SolventaGitHubEvidenceFactory.REPOSITORIES.each { projectName, repository ->
         def project = Jenkins.get().getItemByFullName(projectName)
@@ -119,18 +120,23 @@ try {
             "${source.repoOwner}/${source.repository}" != repository) {
             throw new IllegalStateException('Unexpected approved repository configuration')
         }
-        def job = project.items.find { it.lastBuild != null }
+        def job = project.items.find { candidate ->
+            candidate.lastBuild != null &&
+                project.projectFactory.getBranch(candidate).head instanceof PullRequestSCMHead
+        }
         if (job != null) {
             def url = factory.urlForJob(job)
             if (url == null || !url.startsWith("https://github.com/${repository}/pull/")) {
                 throw new IllegalStateException('Scoped publisher verification failed; originals preserved')
             }
+            verifiedPrRoutes.add(job.fullName)
         }
         verified.add(projectName)
     }
     new File(Jenkins.get().rootDir, 'ci-evidence-links.json').text = JsonOutput.toJson([
-        factory: name, verifiedProjects: verified, activatedAt: java.time.Instant.now().toString(),
-        verification: 'factory-registration-sources-and-existing-job-routes',
+        factory: name, verifiedProjects: verified, verifiedPrRoutes: verifiedPrRoutes,
+        activatedAt: java.time.Instant.now().toString(),
+        verification: 'factory-registration-approved-sources-and-listed-pr-routes',
     ])
 } catch (RuntimeException | IOException failure) {
     factories.remove(factory)

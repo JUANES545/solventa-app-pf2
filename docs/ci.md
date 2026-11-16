@@ -51,6 +51,14 @@ una prioridad de fábrica incompatible. Para revertir, retirar solo ese iniciali
 reiniciar en reposo: vuelve el publicador original, sin cambiar las protecciones.
 La reparación puntual del PR40 no reescribe otros checks históricos.
 
+La comprobación de rutas elige solo jobs de PR con una ejecución previa;
+ignora `develop`/`master`. La ausencia de un PR construido no impide registrar
+la fábrica. `verifiedPrRoutes` enumera las rutas que sí se comprobaron y puede
+quedar vacío; `verifiedProjects` acredita la comprobación de las fuentes.
+`test-check-link-selection.groovy` ejecuta ese selector con tipos dobles en cinco
+escenarios, sin cargar plugins ni registrar la fábrica. La integración con los
+tipos reales de Jenkins corresponde a `test-check-links.groovy`.
+
 No abrir Jenkins al público, cambiar su URL base por la de GitHub ni desactivar checks.
 Una IP privada tampoco permite consultar la evidencia desde fuera.
 
