@@ -364,8 +364,11 @@ class OperationalStatePresentationTest {
         compose.onNodeWithText(app.getString(R.string.claim_status_updated, displayDate)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(date.toString(), substring = true).assertDoesNotExist()
         compose.onNodeWithText(app.getString(R.string.ui_show_details)).performScrollTo().performClick()
-        compose.onNodeWithText("${app.getString(R.string.operational_updated_instant)}: $date")
-            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(R.string.operational_updated_instant)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(date.toString()).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(R.string.operational_display_zone)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(ZoneId.systemDefault().id).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(id).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { state.value = state.value.copy(busy = false, error = ClaimStatusError.NETWORK) }
         compose.onNodeWithText(app.getString(R.string.claim_status_network)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(app.getString(R.string.claim_status_reviewing)).performScrollTo().assertIsDisplayed()

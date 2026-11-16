@@ -4,6 +4,7 @@ import android.view.WindowManager
 import co.solventa.mobile.BuildConfig
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
@@ -20,6 +21,7 @@ internal fun EvidenceHost(
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val state by model.state.collectAsState()
+    LaunchedEffect(model) { if (state.scope != null) model.refresh() }
     RetryOnReconnect(state.scope, state.open && !state.busy && state.step == EvidenceStep.LIST &&
         state.configuration != null, model::retry)
     DisposableEffect(model, lifecycle) {

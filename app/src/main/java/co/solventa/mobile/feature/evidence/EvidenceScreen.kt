@@ -104,7 +104,6 @@ internal fun EvidenceScreen(
         onChooseFile = { kind ->
             state.scope?.let { importScope = Triple(it, state.generation, kind); picker.launch(kind.mime) }
         },
-        onRemoveRemote = model::removeDemoConfirmed,
     )
 }
 
@@ -127,7 +126,6 @@ internal fun EvidenceContent(
     onChoosePhoto: (() -> Unit)? = null,
     feedback: (@Composable () -> Unit)? = null,
     onChooseFile: ((EvidenceKind) -> Unit)? = null,
-    onRemoveRemote: (String) -> Unit = {},
 ) {
     var sourceKind by remember(state.scope, state.generation) { mutableStateOf<EvidenceKind?>(null) }
     if (!state.open) return
@@ -188,9 +186,11 @@ internal fun EvidenceContent(
         when (state.step) {
             EvidenceStep.LIST -> {
                 val policy = checkNotNull(state.policy)
-                EvidenceGallery(state, onRemove, onRemoveRemote)
+                EvidenceGallery(state, onRemove)
                 Text(stringResource(R.string.evidence_gallery_add), Modifier.semantics { heading() },
                     style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.evidence_camera_guide),
+                    style = MaterialTheme.typography.bodyMedium)
                 for (kind in listOf(EvidenceKind.PHOTO, EvidenceKind.VIDEO, EvidenceKind.DOCUMENT).filter { it in policy.maxBytes }) {
                     SolventaActionRow(
                         modifier = Modifier.testTag(when (kind) {

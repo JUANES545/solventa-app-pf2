@@ -37,6 +37,7 @@ internal data class ClaimState(
     val error: ClaimError? = null,
     val correction: String? = null,
     val locationRevision: Long = 0,
+    val autoRetry: Boolean = true,
 )
 
 @HiltViewModel
@@ -58,10 +59,26 @@ internal class ClaimViewModel @Inject constructor(
         mutable.value = ClaimState(actor = actor, locationRevision = state.value.locationRevision + 1)
     }
 
-    fun show(actor: String) {
+    fun show(actor: String, selectedPolicy: ClaimPolicy? = null): Boolean {
         bindActor(actor)
-        mutable.value = state.value.copy(open = true)
-        retry()
+        val current = state.value
+        if (selectedPolicy == null) {
+            mutable.value = current.copy(open = true, autoRetry = true)
+            retry()
+        } else {
+            if (current.busy || (current.draft != ClaimDraft() && current.draft.policyId != selectedPolicy.id)) return false
+            mutable.value = current.copy(open = true, editing = true, autoRetry = false,
+                draft = current.draft.copy(policyId = selectedPolicy.id),
+                policies = listOf(selectedPolicy),
+                cachedPolicies = false, error = null)
+            operation { owner -> update { copy(reports = store.list(owner)) } }
+        }
+        return true
+    }
+
+    fun resumeDraft(actor: String) {
+        bindActor(actor)
+        mutable.value = state.value.copy(open = true, autoRetry = false)
     }
 
     fun close() {
@@ -89,6 +106,7 @@ internal class ClaimViewModel @Inject constructor(
         if (current.busy || !current.editing || current.actor == null) return
         val payload = try { current.draft.payload(current.policies) }
         catch (error: ClaimProblem) { mutable.value = current.copy(error = error.reason); return }
+        mutable.value = current.copy(autoRetry = true)
         operation { actor ->
             store.enqueue(actor, payload, current.correction)
             update { copy(editing = false, draft = ClaimDraft(), correction = null, reports = store.list(actor)) }

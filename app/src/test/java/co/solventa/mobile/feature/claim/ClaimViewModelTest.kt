@@ -2,7 +2,6 @@ package co.solventa.mobile.feature.claim
 
 import android.app.Application
 import android.os.Looper
-import co.solventa.mobile.BuildConfig
 import co.solventa.mobile.feature.evidence.MobileEvidenceApi
 import co.solventa.mobile.feature.evidence.evidenceAuth
 import java.util.concurrent.TimeUnit
@@ -33,17 +32,17 @@ class ClaimViewModelTest {
         assertFalse(model.state.value.loadingPolicies)
     }
 
-    @Test fun newReportRestoresOnlyTheConfiguredInitialDateWithoutChangingAnEditedDate() {
+    @Test fun newReportStartsWithAnEmptyDateWithoutChangingAnEditedDate() {
         val api = MobileClaimApi(MobileEvidenceApi(evidenceAuth(), "http://127.0.0.1:18725/movil/v1"))
         val model = ClaimViewModel(app, api)
         model.bindActor("a")
-        assertEquals(BuildConfig.CLAIM_INITIAL_DATE, model.state.value.draft.date)
+        assertEquals("", model.state.value.draft.date)
         assertEquals("", model.state.value.draft.time)
         model.edit(model.state.value.draft.copy(date = "2026-11-01", place = "Lugar manual"))
         assertEquals("2026-11-01", model.state.value.draft.date)
         assertEquals("Lugar manual", model.state.value.draft.place)
         model.newReport()
-        assertEquals(BuildConfig.CLAIM_INITIAL_DATE, model.state.value.draft.date)
+        assertEquals("", model.state.value.draft.date)
         assertEquals("", model.state.value.draft.time)
         assertEquals("", model.state.value.draft.place)
     }

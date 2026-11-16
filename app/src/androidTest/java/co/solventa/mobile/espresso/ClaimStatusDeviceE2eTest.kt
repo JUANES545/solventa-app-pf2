@@ -62,6 +62,7 @@ class ClaimStatusDeviceE2eTest {
         hilt.inject()
         fixture = JSONObject(File(context.filesDir, "claim-status-fixture.json").readText())
         runBlocking { auth.login(fixture.getString("email"), fixture.getString("password")) }
+        control("online")
         scenario = ActivityScenario.launch(MainActivity::class.java)
         scenario!!.onActivity {
             it.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -73,10 +74,18 @@ class ClaimStatusDeviceE2eTest {
 
     @After fun finish() {
         scenario?.close()
-        if (::fixture.isInitialized) runBlocking { auth.logout() }
+        if (::fixture.isInitialized) {
+            control("online")
+            runBlocking { auth.logout() }
+        }
     }
 
     private fun text(id: Int) = context.getString(id)
+    private fun updated(date: Instant) = context.getString(R.string.claim_status_updated,
+        context.getString(R.string.operational_date_device_zone, claimStatusDate(date)))
+    @OptIn(ExperimentalTestApi::class)
+    private fun refresh() = compose.onNodeWithTag("page-refresh")
+        .performCustomAccessibilityActionWithLabel(text(R.string.claim_status_refresh))
     private fun settle() = compose.waitUntil(45_000) { !model.state.value.busy }
     private fun control(mode: String): JSONObject {
         val connection = URL("http://127.0.0.1:18721/__control/$mode").openConnection() as HttpURLConnection
@@ -96,35 +105,36 @@ class ClaimStatusDeviceE2eTest {
         settle()
         assertTrue(model.state.value.open)
         assertEquals(listOf(id), model.state.value.claims.map { it.id })
-        compose.onNode(hasText(id, substring = true)).performScrollTo().performClick()
+        compose.onNodeWithTag("claim-$id").performScrollTo().performClick()
         settle()
         assertEquals(ClaimProgress.REPORTED, model.state.value.detail!!.progress)
         val initialDate = Instant.parse(fixture.getString("updatedAt"))
         assertEquals(initialDate, model.state.value.detail!!.updatedAt)
         compose.onNodeWithText(text(R.string.claim_status_reported)).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(context.getString(R.string.claim_status_updated, claimStatusDate(initialDate)))
+        compose.onNodeWithText(updated(initialDate))
             .performScrollTo().assertIsDisplayed()
         scenario!!.onActivity {
             assertEquals(!BuildConfig.SCREEN_CAPTURE_ALLOWED,
                 it.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
         }
         val changedDate = Instant.parse(control("reviewing").getString("actualizadoEn"))
-        compose.onNodeWithText(text(R.string.claim_status_refresh)).performScrollTo().performClick()
+        refresh()
         settle()
         assertEquals(ClaimProgress.REVIEWING, model.state.value.detail!!.progress)
         assertEquals(changedDate, model.state.value.detail!!.updatedAt)
         compose.onNodeWithText(text(R.string.claim_status_reviewing)).performScrollTo().assertIsDisplayed()
 
         control("unavailable")
-        compose.onNodeWithText(text(R.string.claim_status_refresh)).performScrollTo().performClick()
+        refresh()
         settle()
         assertEquals(ClaimStatusError.NETWORK, model.state.value.error)
-        assertNull(model.state.value.detail)
-        compose.onNodeWithText(text(R.string.claim_status_reviewing)).assertDoesNotExist()
-        compose.onNodeWithText(context.getString(R.string.claim_status_updated, claimStatusDate(changedDate))).assertDoesNotExist()
+        assertEquals(ClaimProgress.REVIEWING, model.state.value.detail!!.progress)
+        assertEquals(changedDate, model.state.value.detail!!.updatedAt)
+        compose.onNodeWithText(text(R.string.claim_status_reviewing)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(updated(changedDate)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(text(R.string.claim_status_network)).performScrollTo().assertIsDisplayed()
         control("online")
-        compose.onNodeWithText(text(R.string.claim_status_retry)).performScrollTo().performClick()
+        compose.onNodeWithText(text(R.string.claim_status_retry)).performScrollTo().assertIsDisplayed().performClick()
         compose.waitUntil(30_000) { !model.state.value.busy && model.state.value.detail?.id == id }
         assertEquals(changedDate, model.state.value.detail!!.updatedAt)
         assertNull(model.state.value.error)
@@ -182,9 +192,9 @@ class ClaimStatusDeviceE2eTest {
             compose.onRoot().captureToImage().asAndroidBitmap().let { image ->
                 File(context.filesDir, name).outputStream().use { assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
             }
-            compose.onNodeWithText(context.getString(R.string.claim_status_updated, claimStatusDate(detail.updatedAt)))
+            compose.onNodeWithText(updated(detail.updatedAt))
                 .performScrollTo().assertIsDisplayed()
-            compose.onNodeWithText(text(R.string.claim_status_refresh)).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithTag("page-refresh").assertIsDisplayed()
         }
     }
 }

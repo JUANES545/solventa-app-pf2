@@ -6,14 +6,11 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.Looper
 import android.os.SystemClock
-import co.solventa.mobile.BuildConfig
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeFalse
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -26,10 +23,6 @@ import org.robolectric.annotation.Config
 @OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("DEPRECATION")
 class DeviceLocationTest {
-    @Before fun useRealLocationProvider() {
-        assumeFalse(BuildConfig.DEMO_LOCATION)
-    }
-
     @Test fun availableFusedLocationDoesNotWaitForAnUnresponsiveNetworkProvider() = runTest {
         val context = RuntimeEnvironment.getApplication()
         shadowOf(context).grantPermissions(Manifest.permission.ACCESS_COARSE_LOCATION)

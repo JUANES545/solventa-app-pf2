@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="claim_status_title">Mis siniestros</string>
+    <string name="claim_status_detail_title">Detalle del siniestro</string>
+    <string name="claim_status_report_details">Datos del reporte</string>
+    <string name="claim_status_policy">Póliza asociada</string>
+    <string name="claim_status_references">Referencias del reporte</string>
+    <string name="claim_status_registered">Fecha de registro</string>
+    <string name="claim_status_reference">Código del siniestro</string>
+    <string name="claim_status_partial_details">Este registro no incluye todos los datos del reporte original.</string>
+    <string name="claim_status_details_error">No pudimos consultar los datos del reporte.</string>
+    <string name="claim_status_attachments_loading">Consultando archivos adjuntos…</string>
+    <string name="claim_status_attachments_error">No pudimos consultar los archivos de este siniestro. Vuelve a abrir sus detalles para reintentar.</string>
     <string name="claim_status_view">Ver estado</string>
     <string name="claim_status_back">Volver</string>
     <string name="claim_status_loading">Consultando el servicio…</string>

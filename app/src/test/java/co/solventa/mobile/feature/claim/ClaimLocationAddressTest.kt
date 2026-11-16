@@ -5,7 +5,6 @@ import android.app.Application
 import android.location.Address
 import android.location.Geocoder
 import android.location.LocationManager
-import co.solventa.mobile.BuildConfig
 import co.solventa.mobile.core.location.DeviceLocation
 import co.solventa.mobile.core.location.currentDeviceLocation
 import java.time.Instant
@@ -61,7 +60,7 @@ class ClaimLocationAddressTest {
         }
     }
 
-    @Test fun missingPermissionAndDisabledProvidersRespectBuildLocationMode() = runBlocking {
+    @Test fun missingPermissionAndDisabledProvidersDoNotInventLocation() = runBlocking {
         shadowOf(context).denyPermissions(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
         assertNull(currentDeviceLocation(context))
         shadowOf(context).grantPermissions(Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -70,10 +69,6 @@ class ClaimLocationAddressTest {
         shadowOf(manager).setProviderEnabled(LocationManager.NETWORK_PROVIDER, false)
         shadowOf(manager).setProviderEnabled(LocationManager.FUSED_PROVIDER, false)
         val location = currentDeviceLocation(context)
-        if (BuildConfig.DEMO_LOCATION) {
-            assertEquals("Cra. 7 # 72-41, Bogotá", location?.knownAddress)
-        } else {
-            assertNull(location)
-        }
+        assertNull(location)
     }
 }

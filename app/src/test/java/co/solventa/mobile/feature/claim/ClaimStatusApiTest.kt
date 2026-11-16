@@ -33,6 +33,26 @@ internal fun statusApi(server: MockWebServer) =
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
 class ClaimStatusApiTest {
+    @Test fun listPreservesOriginalReportFieldsWithoutInventingMissingValues() = runBlocking {
+        MockWebServer().use { server ->
+            val policy = UUID.randomUUID().toString()
+            val original = JSONObject(statusList()).getJSONArray("siniestros").getJSONObject(0)
+                .put("polizaId", policy).put("lugar", "Lugar sintético del reporte")
+                .put("registradoEn", statusDate.toString())
+            server.enqueue(MockResponse().setBody(JSONObject().put("siniestros", JSONArray().put(original)).toString()))
+            val claim = statusApi(server).claims("actor-a").single()
+            assertEquals(policy, claim.policyId)
+            assertEquals("Lugar sintético del reporte", claim.place)
+            assertEquals(statusDate, claim.registeredAt)
+            assertEquals(statusClaim.description, claim.description)
+            server.enqueue(MockResponse().setBody(statusList()))
+            val legacy = statusApi(server).claims("actor-a").single()
+            assertNull(legacy.policyId)
+            assertNull(legacy.place)
+            assertNull(legacy.registeredAt)
+        }
+    }
+
     @Test fun readsOnlyAuthorizedResourcesWithoutMutationsAndKeepsServerDates() = runBlocking {
         MockWebServer().use { server ->
             val api = statusApi(server)

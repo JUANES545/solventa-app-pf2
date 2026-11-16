@@ -1,62 +1,212 @@
 # Pruebas y cobertura Android
 
-## App aislada: Solventa Flujos
+## Recorrido normal contra el BFF movil
 
-La variante `mock` instala **Solventa Flujos** (`co.solventa.mobile.pf2.mock`)
-junto a la app real, con datos, colas, sesión y claves propios. Su servidor HTTP
-vive dentro del proceso Android y escucha únicamente en `127.0.0.1:18725`.
-No necesita AWS, un servidor en el computador ni `adb reverse`. El código y la
-dependencia del servidor pertenecen exclusivamente a `src/mock` y
-`mockImplementation`; no se incluyen en `debug`, `preview` ni `release`.
+Usa el icono **Solventa** (`co.solventa.mobile.pf2`) para acceder al backend.
+Las variantes `debug`, `preview` y `release` usan
+`https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1`.
+Hilt inyecta `MobileAuthApi`, `MobileClaimApi`, `MobileEvidenceApi`,
+`MobileNotificationApi` y `MobileAssistanceApi`; no hay un servidor simulado
+ni un fallback a datos de practica. Se retiro la variante demo y su servidor.
+Los dobles HTTP solo se conservan en `src/test` y `src/androidTest`.
 
-Abre el icono **Solventa Flujos**, elige un escenario y toca **Abrir Solventa**.
-Para ingreso y registro usa exclusivamente `cliente@solventa.test` y la clave
-ficticia `Solventa123!`. El registro devuelve siempre el mismo actor sintético;
-no representa creación de usuarios reales ni aislamiento multiusuario.
-Usa solo datos y fotos ficticios, también al probar cámara o ubicación.
+| Recorrido | Contrato del BFF, relativo a `/movil/v1` |
+| --- | --- |
+| Registro y sesion | `POST /usuarios`, `POST /sesiones`, `POST /sesiones/renovar`, `GET/DELETE /sesiones/actual`; biometria en `/biometria` y `POST /sesiones/biometria` |
+| Documento y selfie del registro | Revision local en el telefono, sin endpoint ni envio de fotos; no verifica identidad ni prueba de vida y no inicia sesion |
+| Polizas para reportar | `GET /siniestros/polizas`, solo vigentes propias; no equivale a un listado general de polizas |
+| Reporte y estado | `GET/POST /siniestros`, `GET /siniestros/{id}/estado`; el acuse `registrado` no sustituye el estado consultado |
+| Evidencias | Configuracion, cargas, contenido por fragmentos, confirmacion y consulta bajo `/siniestros`; conciliacion de offset al reintentar |
+| Asistencia | `POST /prestadores/consulta`, `POST /asistencias`; ubicacion confirmada y referencia al siniestro; acuse de solicitud `registrada`, sin confirmacion de despacho |
+| Avisos | `GET /notificaciones`, `GET/PUT /notificaciones/preferencias` |
 
-El panel ofrece información disponible, listas vacías, 503, 403, 404 conocido,
-JSON inválido, un 401 renovable, 401 persistente, desconexión y confirmación
-perdida después de guardar. Para recuperarte, vuelve al panel desde el icono,
-selecciona **Con información**, abre la app y reintenta. Los cambios de escenario
-no borran borradores, solicitudes ni evidencias. La elección y el estado del
-servidor sobreviven al cierre del proceso; un desafío biométrico pendiente debe
-solicitarse nuevamente.
+Los clientes usan la sesion del actor autenticado, renuevan un 401 una vez y
+mantienen las claves de idempotencia de reportes, cargas y asistencias. Un fallo
+de red o del servidor conserva un estado de error o pendiente; una lista vacia
+solo representa una respuesta valida sin elementos. El contrato de referencia
+vive en `contracts/openapi` del repositorio backend: `bff-movil-v1.yaml`,
+`siniestros-v1.yaml`, `asistencias-v1.yaml` y `notificaciones-v1.yaml`.
 
-Los contratos simulados cubren registro, ingreso, renovación y cierre de sesión,
-biometría, pólizas, reporte y estado de siniestro, carga por fragmentos y
-confirmación/cancelación de evidencias, prestadores y solicitud de asistencia,
-avisos y preferencias. La idempotencia conserva el resultado al reenviar la misma
-operación y rechaza el mismo UUID con otro cuerpo. Las evidencias verifican
-tamaño, offset y SHA-256; las pruebas incluyen reinicio con carga parcial y
-respuesta perdida sin duplicar el reporte.
+El registro de cuenta usa `POST /usuarios`, pero la revision de documento y
+selfie es un paso local separado. `PhotoReviewViewModel` elimina las capturas
+temporales al aceptarlas o salir y no tiene dependencia de red. La pantalla
+informa este limite y conserva el consentimiento existente. No confundas ese
+paso con la biometria de acceso ni con la carga de evidencias de un siniestro:
+no todos los recorridos de la app envian datos al backend.
 
-Con JDK 17 y SDK 35, y el teléfono físico conectado:
+Para comprobar parsers, errores y reintentos sin usar una cuenta ni escribir
+en AWS, ejecuta las pruebas HTTP controladas y compila el cliente real:
 
 ```powershell
-.\gradlew.bat :app:testMockUnitTest :app:lintMock :app:assembleMock
-.\gradlew.bat :app:connectedMockAndroidTest -PmockDeviceTests=true
-adb install -r app\build\outputs\apk\mock\app-mock.apk
+.\gradlew.bat :app:testDebugUnitTest --tests 'co.solventa.mobile.BuildConfigurationTest' --tests 'co.solventa.mobile.feature.auth.MobileAuthApiTest' --tests 'co.solventa.mobile.feature.claim.*' --tests 'co.solventa.mobile.feature.evidence.EvidenceApiTest' --tests 'co.solventa.mobile.feature.notification.NotificationApiTest' --tests 'co.solventa.mobile.feature.assistance.AssistanceApiTest' :app:assembleRelease
 ```
 
-Con varios dispositivos, indica el serial con `adb -s` o `ANDROID_SERIAL`.
+Estas pruebas usan dobles HTTP en la JVM; no acreditan aceptacion autenticada
+del despliegue. Para esa aceptacion hace falta una cuenta autorizada y permiso
+para los reportes, adjuntos o solicitudes que creen datos. No ejecutes
+`connectedDebugAndroidTest` sobre una instalacion con una sesion que debas
+conservar: consulta sus requisitos de aislamiento antes de instrumentar.
+Tampoco sustituyas una app instalada si su firma es incompatible.
 
-`connectedMockAndroidTest` selecciona las pruebas de `MockFlowsDeviceTest`
-y configura el backend local de instrumentación. Comprueban HTTP con parsers
-reales (datos, vacío, fallo y recuperación) y el recorrido
-panel → ingreso/inicio → estado → evidencias → avisos, además de importar un
-JPEG desde un URI `content`, revisarlo, adjuntarlo, confirmar su carga y
-reabrir el archivo local. También cubren el formulario con calendario Material,
-reloj/entrada numérica, descripción de práctica y confirmación de reporte local.
-Si el clip público se ha preparado en el teléfono, verifican importación de MP4,
-revisión, eliminación del audio, confirmación y borrado persistente sin afectar
-los adjuntos de otro siniestro. Sin ese archivo se omite únicamente ese caso.
-Gradle retira los APK
-de su ejecución administrada; la última instalación deja la app independiente
-disponible para uso manual. Para instrumentación manual, además de seleccionar
-esa clase, pasa `-e backendUrl http://127.0.0.1:18725/movil/v1`.
+### Aceptacion AWS aislada y autorizada
 
-### Ubicación del evento
+Registro histórico de la línea `feature/android-backend-real`, no repetido
+durante la integración de estos cambios. No acredita validación del nuevo HEAD.
+
+`awsTest` usa el mismo HTTPS, issuer, DI y clientes que la app oficial, con
+`co.solventa.mobile.pf2.awstest` y captura de pantalla habilitada solo en la
+variante de prueba. No incluye servidor ni datos simulados. `release` conserva
+`FLAG_SECURE`. La cuenta autorizada se registra una sola vez; sus credenciales
+se guardan fuera del repositorio en un archivo privado. No se pasan por
+argumentos de ADB ni se imprimen.
+
+```powershell
+.\gradlew.bat :app:assembleAwsTest :app:assembleAwsTestAndroidTest -PawsDeviceTests=true
+```
+
+Antes de instalar, comprobar que `.awstest` y `.awstest.test` no existen y que
+el telefono esta desbloqueado. Instalar sin reemplazo ni downgrade. Copiar
+mediante stdin a `run-as`, con permisos 600, `files/aws-account.json`
+(`email`, `password`, `actor` de esa misma cuenta). Ejecutar explicitamente:
+
+```powershell
+adb shell am instrument -w -e runAwsAcceptance true `
+  -e class co.solventa.mobile.espresso.AwsAcceptanceDeviceTest `
+  co.solventa.mobile.pf2.awstest.test/co.solventa.mobile.espresso.SolventaTestRunner
+```
+
+La prueba ingresa desde la pantalla real, restaura/renueva la sesion, usa los
+clientes Kotlin para polizas, historial, configuracion de evidencias, buzon,
+preferencias y consulta de prestadores con ubicacion manual sintetica. Cambia
+preferencias de esa cuenta y las restablece; cierra sesion y comprueba la
+revocacion del refresh. No crea cuentas adicionales, polizas, reportes,
+adjuntos ni solicitudes. Si faltan polizas o siniestros propios, informa el
+bloqueo: no fabrica recursos para convertir el vacio en aceptacion integral.
+El informe sanitizado queda en `files/aws-acceptance-results.json`; retirar
+solo los dos paquetes instalados tras extraerlo. No requiere `adb reverse`.
+La biometria fisica requiere intervencion del usuario; listar credenciales
+no acredita un enrolamiento ni reconocimiento biometrico.
+
+### Aceptacion integral local sin servidor simulado
+
+`LocalBackendAcceptanceTest` es optativa y solo permite loopback 18723. Usa los
+clientes Kotlin y los servicios BFF, Identidad, Polizas, Siniestros,
+Asistencias y Notificaciones del checkout backend. `scripts/local_acceptance_stack.py`
+reutiliza `tests/claims_local_stack.py`, crea SQLite y archivos privados temporales,
+migra Asistencias/Notificaciones y conecta sus dependencias HTTP reales.
+Las polizas, cuentas y siniestros iniciales son fixtures locales, no contratos
+ni operaciones de AWS. No modifica archivos del checkout backend.
+
+Con las dependencias Python del backend disponibles, un directorio de fixture
+privado restringido al usuario y el puerto 18723 libre:
+
+```powershell
+python scripts\local_acceptance_stack.py --backend-dir <checkout-backend> --fixture <directorio-privado>\fixture.json
+# En otra terminal, sin imprimir la fixture:
+$env:SOLVENTA_LOCAL_ACCEPTANCE_FIXTURE='<directorio-privado>\fixture.json'
+.\gradlew.bat :app:testDebugUnitTest --tests 'co.solventa.mobile.LocalBackendAcceptanceTest'
+Invoke-RestMethod -Method Post http://127.0.0.1:18723/__control/stop
+```
+
+La prueba comprueba sesion/rotacion, reporte en cola SQLite durante un 503
+inyectado por el proxy propio (sin reenviar al BFF ni modificar la red del telefono),
+restauracion del ViewModel y envio de la misma operacion sin duplicados,
+consulta del estado real y carga de JPEG por fragmentos. El proxy de fallos
+devuelve un 503 despues de guardar un trozo: el cliente concilia el offset y
+confirma sin repetir la evidencia. Tambien consulta prestadores, registra una
+solicitud idempotente contra el autorizador real, consulta/cambia preferencias
+y revoca la sesion. No prueba despacho, push externo ni biometria fisica.
+El helper elimina la fixture, cierra conexiones y retira sus bases temporales
+al recibir `stop`; comprobarlo y retirar el directorio privado vacio.
+
+La carga inicial de prestadores del backend contiene datos sinteticos;
+no determina la procedencia de todos los registros del catalogo desplegado.
+Una respuesta HTTP valida no acredita una red operativa de asistencia.
+El acuse **Solicitud registrada** confirma el registro de la solicitud; no
+confirma que un prestador haya aceptado atenderla ni que haya salido a atenderla.
+La pantalla aclara que el registro no confirma que se haya avisado a un prestador
+y limita el uso anunciado de la ubicacion a consultar prestadores y registrar
+la solicitud.
+Desde el paso de ubicacion, antes de consultar prestadores, la pantalla informa
+que el catalogo puede incluir datos de prueba y que registrar una solicitud no
+confirma atencion ni despacho. Conserva el aviso en lista y confirmacion, sin
+afirmar que todo el catalogo productivo sea sintetico.
+Los avisos Android proceden del buzon consultado; no acreditan entrega remota
+por un proveedor push. Las consultas HTTPS sin token solo
+permiten comprobar el rechazo 401, no los datos ni permisos de un cliente.
+
+### Resultado de aceptacion del 11 de noviembre de 2026
+
+Se registro una unica cuenta sintetica por `POST /usuarios` (201), sin crear
+polizas, pagos ni contratos. `AwsAcceptanceDeviceTest` aprobo **1/1 en 13,403 s**
+en SM-A217M/API 36 con la variante aislada y HTTPS reales. Una consulta vacia o
+de configuracion no demuestra los recorridos que necesitan recursos propios.
+
+| Flujo | AWS con cuenta sintetica | Stack local real con fixtures |
+| --- | --- | --- |
+| Registro/terminos | API 201 desde el host; no nuevo registro fisico | Fixtures registradas por API; casillas y validacion local cubiertas por suite de pantalla, sin consentimiento legal persistido |
+| Login/sesion/refresh/logout | UI fisica y clientes: OK; rotacion y refresh revocado 401 | Clientes Kotlin: OK, con rotacion y revocacion |
+| Polizas | 200 vacio; no hay via publica demostrada para asignarlas a esta cuenta | Poliza fixture propia consultada por cliente |
+| Reporte y cola | Bloqueado sin poliza propia; no se enviaron reportes AWS | SQLite pendiente durante indisponibilidad 503 del proxy propio, recreacion del ViewModel y reenvio de la misma operacion; no desconexion fisica |
+| Historial/estado | Historial 200 vacio; estado bloqueado sin siniestro | Reporte real local, replay sin duplicado y consulta `reportado` |
+| Evidencias | Configuracion OK; carga bloqueada sin siniestro | JPEG fragmentado, acuse perdido, conciliacion de offset y confirmacion idempotente |
+| Avisos/preferencias | Buzon 200 vacio; preferencias cambiadas y restablecidas desde cliente fisico | Buzon vacio y preferencias consultadas/modificadas; no acredita push remoto |
+| Prestadores/asistencia | Consulta fisica: 2 resultados para ubicacion manual sintetica; solicitud bloqueada sin siniestro | Consulta y registro `registrada` con autorizacion HTTP real y replay idempotente; no despacho |
+| Biometria | Listado de credenciales 200 vacio; no prueba de enrolamiento ni reconocimiento | Dobles JVM; no se ejecuto enrolamiento contra este stack ni reconocimiento fisico |
+
+Se cerraron las sesiones AWS y se comprobo el rechazo del refresh revocado.
+Se eliminaron la fixture privada de credenciales y los paquetes aislados propios;
+las instalaciones previas no se sustituyeron ni se borraron sus datos.
+Queda durable la cuenta sintetica y pueden persistir los registros de preferencias
+restauradas y auditoria de consultas de prestadores prevista por el contrato.
+No se inspeccionaron ni eliminaron tablas. La consulta no acredita ausencia de
+auditoria ni una solicitud de asistencia. Las fixtures SQL y archivos del stack
+local se retiran al cerrar el helper. No se modificaron ubicacion real ni revision
+local de documento/selfie.
+
+La repeticion fisica local de
+`ClaimDeviceE2eTest#formValidationConfirmationEvidenceAndActorIsolation`
+aprobo **1/1 en 19,935 s**: validacion de campos, confirmacion del reporte,
+entrada a evidencias y aislamiento al cambiar de actor. No prueba carga fisica
+de archivos: esa carga se ejercito con clientes Kotlin JVM contra servicios
+locales reales. Se uso exclusivamente `.claimtest`, con reverse propio desde
+18721 al helper 18723, y se retiraron ambos paquetes y el reverse al terminar.
+Para repetir este caso, copiar la fixture privada del helper como
+`files/claim-fixture.json` mediante `run-as`, nunca por argumentos ni logs.
+
+Controles ejecutados localmente, sin lanzar pipelines remotos:
+
+```powershell
+.\gradlew.bat --no-daemon :app:compileDebugUnitTestSources :app:testDebugUnitTest `
+  :app:jacocoDebugUnitTestReport :app:lintDebug :app:assembleDebug `
+  :app:assembleDebugAndroidTest :app:assemblePreview :app:assembleRelease
+# Suite completa repetida con la fixture local activa:
+.\gradlew.bat --no-daemon :app:testDebugUnitTest --rerun :app:jacocoDebugUnitTestReport
+$env:PYTHONIOENCODING='utf-8' # Consola Windows; no modifica el verificador.
+python scripts\coverage_summary.py --coverage App=app\build\reports\coverage\unit\coverage.xml `
+  --tests 'app\build\test-results\testDebugUnitTest\TEST-*.xml' --scope 'JVM debug completa'
+python scripts\verify_file_coverage.py
+```
+
+La suite final tiene **532 aprobadas, 1 optativa omitida, 0 fallos**.
+Lint y todas las compilaciones anteriores aprobaron. El resumen usado por
+Jenkins aprobo: **90,28 % lineas (6093/6749)** y **75,62 % ramas (3965/5243)**;
+su objetivo del 80 % es recomendado, no bloqueante. El verificador local por
+archivo termina con codigo 2 en `core/designsystem/SolventaMotion.kt`, compuesto
+por constantes sin contador LINE en JaCoCo; fuente y verificador no fueron
+modificados. No se redujeron umbrales ni exclusiones. `ClaimStatusScreen.kt`
+tiene 75/94 ramas (79,79 %); no hay informe del mismo HEAD anterior al cambio
+que permita atribuir esa cifra a una regresion.
+
+`gradlew :app:tasks --all` ya no expone tareas de la variante mock.
+`createMockableJar` es la tarea estandar de AGP para pruebas JVM, no una demo.
+Tambien se retiro el directorio de APK mock generado antes de estos cambios.
+El fallo de arranque del helper se comprobo ocupando 18723 con un socket
+exclusivo propio: salida no cero, sin fixture ni bases temporales remanentes.
+El helper definitivo tambien cerro con salida cero tras ambas aceptaciones
+locales y elimino todas sus bases y credenciales temporales.
+
+## Ubicación del evento
 
 El campo conserva la entrada manual y muestra un icono circular de 48 dp a su
 derecha, con nombre accesible «Usar ubicación actual». Solo la pulsación solicita
@@ -88,10 +238,6 @@ y se informa del fallo. La resolución
 de dirección tiene un límite de cuatro segundos; en Android anterior a 33 usa
 el Geocoder bloqueante fuera del hilo UI con cancelación por interrupción.
 
-En la variante `mock`, tras conceder el permiso, los tres flujos reciben de
-inmediato una ubicación fija de Bogotá. El reporte usa la dirección de demo;
-evidencias y asistencia reciben sus coordenadas sin consultar GPS ni Geocoder.
-
 `ClaimLocationPermissionTest`, `ClaimLocationFieldTest`,
 `ClaimLocationResumeTest`, `EvidenceLocationPermissionTest`,
 `AssistanceLocationPermissionTest`, `DeviceLocationTest` y `ClaimLocationAddressTest` controlan
@@ -105,23 +251,6 @@ reconexión automática espera a que termine el permiso y la búsqueda, y despu�
 reanuda el refresco pendiente. Cambiar contexto, editar el lugar, salir o dejar
 la app en segundo plano cancela la solicitud; no se envía ningún reporte por
 localizar.
-
-En el teléfono con permisos ya bloqueados, `MockFlowsDeviceTest` pulsa el icono
-del formulario, comprueba «Abrir ajustes», captura el resultado y cancela sin
-abrir ajustes ni conceder permisos. La captura de carga usa **solo la vista
-compartida con estado sintético**, sin consultar ubicación física. La concesión,
-el GPS, la dirección y el payload con ubicación se validan en pruebas controladas,
-no con datos reales del teléfono. El recorrido local que envía «Choque de prueba»
-requiere ejecutar después `TestReportCleanupDeviceTest` para retirar únicamente
-fixtures reconocidos vacíos, conservando adjuntos y pendientes.
-
-`LocationPermissionPromptDeviceTest` comprueba en el teléfono que el diálogo de
-Android aparece al elegir ubicación en los tres flujos; lo cierra sin conceder
-permisos ni consultar la ubicación física. La evidencia de esa prueba usa un
-borrador sintético temporal que se descarta al terminar.
-
-La prueba de fotografía crea su propio siniestro para no agotar la capacidad
-de evidencias del ejemplo inicial al repetirla.
 
 ### Cámara y detalles de adjuntos
 
@@ -149,8 +278,8 @@ de un proveedor de ubicación por red.
 La vista del adjunto conserva imagen/vídeo, tipo, fecha, tamaño legible, estado
 y duración del vídeo. No ofrece otro panel de detalles ni muestra SHA, UUID,
 MIME, coordenadas, zonas horarias o instantes técnicos. La integridad, el alcance
-actor/siniestro y los metadatos de red permanecen internos. El borrado confirmado
-sigue limitado a `mock`; pendientes y borradores conservan sus acciones.
+actor/siniestro y los metadatos de red permanecen internos. No hay un endpoint
+de borrado de evidencias confirmadas; pendientes y borradores conservan sus acciones.
 
 Pruebas focales: `CameraPermissionTest` controla la respuesta estándar de Android
 (incluida cancelación con resultado vacío); `EvidenceCameraPermissionTest`
@@ -158,18 +287,11 @@ ejercita el cableado de foto/vídeo/documento, permiso concedido, rechazo,
 callback tardío, cámara no disponible y pickers sin permiso.
 `EvidenceGalleryTest` comprueba la ausencia de información técnica y las acciones.
 No se automatiza la aceptación de permisos en el dispositivo.
-Con `CAMERA` denegado y `USER_FIXED`, `MockFlowsDeviceTest` comprueba la explicación
-y la salida a Ajustes en los tres accesos, cancela sin capturar y guarda capturas
-del aviso y de un adjunto de práctica. Este recorrido no acredita una concesión
-física ni una nueva captura: esos casos se comprueban con Robolectric.
-
 En Reportar un siniestro, la fecha abre un calendario Material y la hora ofrece
 reloj y teclado según el formato de 12/24 horas del teléfono. Cancelar conserva
 el borrador. El calendario usa días UTC para evitar desplazar la fecha local;
 la validación del reporte conserva el contrato de vigencia y rechaza horas futuras.
-Solo `mock` completa una descripción vacía al enfocar el campo; no reemplaza texto
-existente. `CLAIM_SAMPLE_ENABLED` permanece desactivado y el recurso vacío en
-las variantes de producción.
+La fecha y descripción iniciales están vacías; no se rellenan con datos de práctica.
 
 **Usar ubicación actual** solicita el permiso del sistema y obtiene coordenadas
 frescas del teléfono, sin geocodificación externa. La dirección sigue siendo
@@ -184,61 +306,6 @@ Al aceptar se eliminan los metadatos de ubicación de la imagen; el consentimien
 de ubicación sigue siendo explícito. Las miniaturas usan únicamente archivos
 locales validados y separados por cuenta/siniestro. Si no existen, la tarjeta
 muestra una ilustración propia, no una supuesta evidencia remota.
-
-Fotos de práctica de dominio público en `Download/Solventa` del teléfono:
-[Car crash 2, Dori](https://commons.wikimedia.org/wiki/File:Car_crash_2.jpg) y
-[Car crash 1, Thue](https://commons.wikimedia.org/wiki/File:Car_crash_1.jpg).
-No forman parte del APK ni se cargan automáticamente. Selecciónalas manualmente
-desde **Tomar fotografía → Elegir archivo**; no uses imágenes privadas en la app de pruebas.
-
-La carpeta `Pictures/Solventa` también contiene `choque-frontal.jpg`,
-`parachoques.jpg`, `puerta-lateral.jpg` y `vehiculos-temporal.jpg`:
-[Car damage Malden Manor (2)](https://commons.wikimedia.org/wiki/File:Car_damage_Malden_Manor_(2).jpg)
-y [(1)](https://commons.wikimedia.org/wiki/File:Car_damage_Malden_Manor_(1).jpg),
-Colin McLaughlin, CC0;
-[Damaged car door](https://commons.wikimedia.org/wiki/File:Damaged_car_door.jpg),
-Garitzko, dominio público; y
-[NWS damage survey cars](https://commons.wikimedia.org/wiki/File:NWS_damage_survey_cars.jpeg),
-NWS WFO Norman, dominio público.
-`documento-prueba.jpg` es un documento original ficticio, sin datos personales
-ni validez legal. Se proporciona como JPEG escaneado, el formato de documento
-admitido actualmente; no implica soporte de PDF.
-
-`DemoVarietyDeviceTest` se ejecuta por separado con estos archivos ya preparados:
-importa fotografía y documento desde MediaStore, exige revisión, confirma la carga
-y comprueba su restauración con archivos locales válidos. Conserva esos dos
-adjuntos bajo un siniestro de muestra para la demostración manual.
-`DemoPhotoPreparationDeviceTest` registra las copias públicas desde archivos
-privados preparados exclusivamente para esa ejecución. Valida SHA-256, evita
-duplicados y deja archivos visibles en la galería sin pedir acceso general a
-las fotografías privadas del teléfono.
-
-`LegacyBlueEvidenceCleanupDeviceTest` retira únicamente los JPEG azules del
-fixture histórico: exige actor de la demo, siniestro semilla o metadatos exactos
-del antiguo test fotográfico, PHOTO confirmada, firma SHA conocida y archivo
-local íntegro. Usa la eliminación mock y después el almacén; no cambia bytes
-de evidencias confirmadas ni sustituye miniaturas. Conserva los reportes, las
-fotografías reales y los adjuntos de otras cuentas. El test fotográfico actual
-usa la foto pública preparada y retira su propio adjunto al terminar para no
-volver a llenar la galería con artefactos de instrumentación.
-
-`TestReportCleanupDeviceTest` limpia los reportes vacíos de instrumentación
-fotográfica, video y formulario, identificados por tipo, lugar, póliza y descripción
-exactos. Conserva reportes con adjuntos locales/remotos, avisos, asistencias,
-operaciones pendientes y correcciones; retira solo sus confirmaciones de prueba
-de la cola local y conserva las claves de idempotencia. No elimina fotos, video ni
-documento del teléfono. Las pruebas de foto y video retiran su propio reporte vacío
-al terminar. Esta utilidad
-solo se ejecuta de forma explícita en la variante `mock`; no existe un borrado
-equivalente en el contrato real.
-
-El video de práctica procede de
-[Zipper truck, Pete Forsyth](https://commons.wikimedia.org/wiki/File:Zipper_truck.webm)
-(CC0). El derivado MPEG-4 de Wikimedia dura 8,534 segundos y pesa 1.140.364 bytes.
-`DemoMediaDeviceTest` lo remultiplexa a MP4 sin audio ni recodificación, verifica
-duración y extracción de un fotograma y lo guarda en `Movies/Solventa/trafico.mp4`.
-Esta preparación se ejecuta por separado de las pruebas habituales, solo en `mock`,
-con el archivo de origen previamente copiado a su almacenamiento privado.
 
 Las pantallas de consulta usan el gesto de refresco de Material, también disponible
 como acción de accesibilidad **Actualizar**. No se muestran instrucciones ni botones
@@ -264,31 +331,6 @@ cuando dos pólizas o siniestros coinciden en tipo (y fecha) y hace falta distin
 La gestión de credenciales biométricas y el reintento de una solicitud de asistencia
 incierta no se sustituyen por un gesto.
 
-Para esta demostración, un siniestro nuevo en `mock` comienza con la fecha
-**3 de noviembre de 2026** (`CLAIM_INITIAL_DATE`). La fecha sigue siendo editable;
-corregir un reporte conserva su fecha original. Esta configuración no cambia el
-reloj del teléfono, la hora, los avisos, las sesiones ni el historial guardado.
-Las demás variantes mantienen la fecha inicial vacía. Para retirar este ajuste,
-se deja vacía `CLAIM_INITIAL_DATE` en la variante `mock`.
-
-`DemoReadinessDeviceTest` se ejecuta por separado al preparar la demostración:
-comprueba la fecha inicial y la tarjeta informativa de avisos sin solicitar ni
-conceder permisos. Requiere cámara, ubicación aproximada/precisa y avisos sin
-conceder. La preparación revoca únicamente esos permisos de
-`co.solventa.mobile.pf2.mock` y limpia sus flags `user-set`/`user-fixed` para que
-Android vuelva a preguntar; no borra datos, adjuntos ni permisos de otras apps.
-
-El acceso directo de escritorio **Solventa - Enviar aviso** llama a
-`scripts\Send-DemoNotification.ps1 -Send` con el teléfono conectado por USB.
-ADB debe estar en el PATH; también se puede indicar su ruta con `-Adb` y
-seleccionar el dispositivo con `-Serial`.
-El receptor existe solo en `mock`, exige el permiso de envío de shell y conserva
-el evento en el buzón local. La sesión, las preferencias y el permiso de Android
-deben estar activos; un fallo no se presenta como envío correcto.
-`-SelfCheck` y `-DryRun` no envían mensajes; repetir `-EventId` comprueba
-deduplicación. El usuario confirmó conceder el permiso y recibir el aviso enviado
-con ese acceso directo.
-
 **Notificaciones** mantiene un único encabezado accesible. La tarjeta informativa,
 con icono y tono del tema distintos de los avisos, aparece solo si Android/canal
 requieren habilitación o las preferencias ya consultadas están desactivadas.
@@ -302,7 +344,7 @@ Lectura, eliminación, deshacer, gestos y alternativas accesibles siguen disponi
 los enlaces de las notificaciones del sistema conservan su autorización por sesión.
 Las regresiones focales cubren permiso inicial, concesión, revocación, canal,
 preferencias desconocidas/desactivadas e ida y vuelta sin mensajes de éxito.
-Validación del refinamiento: `:app:testMockUnitTest` con `NotificationScreenTest`,
+Validación del refinamiento: `:app:testDebugUnitTest` con `NotificationScreenTest`,
 `NotificationViewModelTest`, `AndroidNotificationPresenterTest`,
 `NotificationStoreTest` y `OperationalStatePresentationTest`: 43 pruebas, cero
 fallos y cero omitidas. Incluye swipe, lectura accesible, deshacer y aislamiento
@@ -312,7 +354,7 @@ La cámara, los permisos, el GPS, Android Keystore y el diálogo biométrico sig
 siendo los del teléfono, sin autoaprobación. Las pruebas de contrato verifican
 firmas ECDSA y desafíos de un solo uso, no certifican el reconocimiento
 biométrico físico. No se simulan una galería remota inexistente ni entrega push
-externa. Estos mocks permiten comprobar el cliente; **no prueban el despliegue,
+externa. Los dobles de prueba permiten comprobar el cliente; **no prueban el despliegue,
 la persistencia ni la recuperación de los servicios reales**.
 
 ## Regresiones de consultas y presentación
@@ -334,6 +376,156 @@ Para repetir los siete casos sin reemplazar la app real instalada:
 CI conserva `connectedDebugAndroidTest` y ejecuta estos casos junto al resto de
 la suite. No se excluyen pruebas ni se relajan las comprobaciones de respuestas,
 autorización, acciones alcanzables o tamaño de los controles.
+
+## Detalle del expediente
+
+En **Mis siniestros**, el expediente usa el tipo del evento seleccionado.
+**Ver detalles** muestra los campos disponibles del reporte y las referencias
+completas de siniestro y póliza, seleccionables y separadas de los datos.
+Conserva también la fecha exacta de actualización del servidor y la zona
+horaria del teléfono, incluso si falla la consulta de los datos del reporte.
+La galería consulta archivos locales de la misma cuenta y siniestro; abre
+fotos/recibos JPEG y reproduce vídeos mediante una acción explícita. Si solo
+existe un ID remoto, informa que el archivo no está disponible en el dispositivo.
+No inventa campos de reportes antiguos ni una descarga no soportada por el BFF.
+
+El expediente reutiliza la confirmación de borrado de **Mis evidencias** para
+adjuntos pendientes o rechazados, con un modelo separado para conservar sus
+borradores. Los confirmados permanecen protegidos: el contrato real no ofrece
+su eliminación. No se publica el DELETE exclusivo de la variante simulada.
+
+## SOL-189: Mis pólizas
+
+Recorrido: Inicio → Mis pólizas → Detalle → Reportar un siniestro. El reporte
+conserva el acceso existente a estado y evidencias; atrás regresa al detalle,
+después a la lista y a Inicio. La vista usa `SolventaPage`, `SolventaBrandHeader`
+y los roles del tema nativo, con controles de al menos 48 dp y texto que envuelve.
+No se cambió el tema global. No se pudieron inspeccionar los adjuntos Jira
+10054/10053; no se afirma fidelidad a esos mocks.
+
+Contrato SOL-316 consumido:
+
+- `GET /movil/v1/polizas`: `{"polizas":[...]}`.
+- `GET /movil/v1/polizas/{id}`: objeto directo, con UUID idéntico al solicitado.
+- Campos: `id`, `suscripcionId`, `tipo`, `fechaInicio`, `fechaFin`, `estado`,
+  `simulada`, `numero` y `coberturaPrincipal`.
+- Tipos: `automotive`, `travel`, `life`, `device-protection`, `parametric`,
+  `parametric-weather`, `payment-protection`, `mortgage-life`. Estados:
+  `programada`, `vigente`, `vencida`. La interfaz traduce los valores.
+- El dominio actual devuelve `simulada: true`, `numero: null` y
+  `coberturaPrincipal: null`. La pantalla dice «Póliza simulada» y
+  «No disponible»; no presenta el UUID como número ni inventa coberturas.
+- `404 poliza_no_encontrada` representa tanto una póliza ajena como inexistente.
+  `401/403`, transporte/503 y protocolo inválido tienen estados propios.
+
+Las consultas reutilizan la sesión verificada y HTTP `no-store`. No hay una
+billetera local ni persistencia de lista/detalle. Refresh, pausa, cierre y
+cambio de actor eliminan los datos consultados; una generación evita que una
+respuesta tardía restaure datos. Logout limpia los modelos protegidos al pulsar
+la acción, antes de esperar la revocación remota. La revocación del access JWT
+corresponde a SOL-316: Android trata el token como opaco y no crea otro protocolo
+de identidad. La prueba HTTP exige la versión backend con revocación central,
+además de comprobar que la app no reutiliza credenciales después del logout.
+
+Solo `vigente` habilita el reporte. El servidor vuelve a comprobar actor,
+vigencia y fecha al enviarlo. La preselección cambia solo el ID de un formulario
+vacío o conserva un borrador de la misma póliza. Si hay otro borrador, se ofrece
+continuarlo o volver al detalle; no se descarta ni reemplaza. Se conserva el
+UUID de una corrección en curso. Abrir desde pólizas no encola, crea UUID ni
+reenvía pendientes, incluso por el disparador de reconexión/apertura. Enviar o
+«Actualizar y reintentar pendientes» siguen siendo acciones explícitas del
+flujo existente. El acceso directo anterior desde Inicio conserva su conducta.
+
+Pruebas nuevas:
+
+- `MobilePolicyApiTest`: contrato, estados/productos, nulos, GET sin mutación,
+  sesión/renovación acotada, actor incorrecto, UUID y respuestas inválidas.
+- `PolicyViewModelTest`: lista/detalle/refresh, vacío, errores, pausa y
+  respuestas tardías tras salir/cambiar usuario.
+- `PolicyHostTest`: limpieza en segundo plano, consulta al volver y conservación
+  de `FLAG_SECURE` preexistente.
+- `PolicyPreselectionTest`: borrador, corrección, UUID y cola intactos al navegar.
+- `PolicyFlowTest`: navegación real de `SolventaApp`, preselección, edición,
+  atrás, conflicto de borrador y logout sin POST.
+- `PolicyScreenTest`: estados separados, temas claro/oscuro, fuente 1×/2×,
+  controles ≥48 dp y PNG sintéticos por Canvas nativo de Robolectric en
+  `app\build\reports\policy-synthetic-renders`. No son capturas del teléfono.
+
+Instrumentación acotada, para ejecutar por separado con la variante claimTest:
+
+```powershell
+.\gradlew.bat :app:assembleClaimTest :app:assembleClaimTestAndroidTest `
+  -PclaimDeviceTests=true -PbackendE2e=true --no-daemon --console=plain `
+  "-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8" --max-workers=2 `
+  "-Pkotlin.compiler.execution.strategy=in-process"
+adb -s <serial> shell am instrument -w `
+  -e class co.solventa.mobile.espresso.PolicyDeviceTest `
+  co.solventa.mobile.pf2.claimtest.test/co.solventa.mobile.espresso.SolventaTestRunner
+```
+
+`PolicyDeviceTest` usa HTTP controlado/SQLite/Compose con datos sintéticos y
+directorio propio, sin tocar las colas existentes. Recorre Cuenta → Pólizas →
+Detalle → reporte preseleccionado → atrás y logout. El segundo método produce
+PNG claro/oscuro, lista/detalle y fuente 1×/2× en el directorio privado
+`no_backup\sol189-synthetic-renders`; se pueden extraer con `run-as`.
+No modifica ajustes globales de fuente/tema ni elimina `FLAG_SECURE`.
+
+`PolicyHttpDeviceTest` exige fixture privada y un backend HTTP real:
+
+```powershell
+adb -s <serial> shell am instrument -w `
+  -e class co.solventa.mobile.espresso.PolicyHttpDeviceTest `
+  -e fixtureFile sol189-http-fixture.json `
+  co.solventa.mobile.pf2.claimtest.test/co.solventa.mobile.espresso.SolventaTestRunner
+```
+
+El coordinador prepara `no_backup\sol189-http-fixture.json` (o sufijo UUID),
+sin versionar credenciales. Campos: `schemaVersion: 1`, `synthetic: true`,
+`baseUrl: "http://127.0.0.1:18731/movil/v1"`, `email`, `password`, `policyId`
+vigente, `eventDate` UTC dentro de su vigencia y no futura, `otherPolicyId`,
+`otherEmail`, `otherPassword`. El harness backend `tests.claims_local_stack.stack`
+expone cuentas sintéticas y sus pólizas reales para generar esos valores.
+`tests.claims_local_stack.policy_android_fixture(running)` devuelve este JSON.
+Su CLI agrega `policyFixture` al archivo privado de estado y `mobile` indica
+el puerto local que debe conectarse al reverse 18731:
+
+```powershell
+python -m tests.claims_local_stack --directory reports\sol316-phone --state reports\sol316-phone.json
+```
+
+Ese comando se ejecuta desde el worktree backend, no desde Android. El archivo
+de estado contiene credenciales sintéticas y no debe publicarse ni versionarse.
+La validación de logout requiere Identidad actualizada e `INTERNAL_API_TOKEN`
+coincidente entre servicios. Los access tokens antiguos sin `sid` deben
+renovarse o volver a obtenerse mediante login; Android no interpreta ese campo.
+La prueba comprueba propias/ajenas, detalle/refresh sin nuevos siniestros,
+un envío explícito con replay idempotente, estado, logout y cambio de actor.
+Coteja también un GET directo con el access token anterior al logout: debe
+responder `401 sesion_invalida`, aunque el JWT no haya expirado.
+Crea un siniestro sintético en ese backend; no debe apuntar a producción.
+No incluye evidencia multimedia nueva: esa parte conserva su prueba HTTP existente.
+
+Estas pruebas no sustituyen la inspección con TalkBack, landscape o hardware.
+La ejecución física/HTTP requiere el dispositivo y fixture del coordinador.
+
+Validación local del 6 de noviembre de 2026: **353 casos JVM, 352 aprobados,
+1 optativo omitido y 0 fallos**; JaCoCo y lint completados, **47 advertencias
+y 0 errores** en la pasada completa (36 advertencias y 0 errores al reconstruir
+claimTest con instrumentación seleccionada). Se inspeccionaron los 12 renders sintéticos agrupados
+en `app\build\reports\policy-synthetic-renders\contact-sheet.png`: texto en
+español, claro/oscuro, 1×/2× y desplazamiento vertical. No se ejecutó
+instrumentación ni se accedió al teléfono desde esta implementación.
+
+APK preparados y compilados para la revisión del coordinador:
+
+| Archivo relativo al worktree | SHA-256 |
+| --- | --- |
+| `app\build\outputs\apk\claimTest\app-claimTest.apk` | `88B050DCBC98F0C8EFDA7206C65E65D8AA887CB62DD5DC9140E39DAA70943969` |
+| `app\build\outputs\apk\androidTest\claimTest\app-claimTest-androidTest.apk` | `838734A8A2640A5ED415A3904E606C568E6C03BD7010020734FD041A0979A260` |
+
+Logs en `app\build\reports\sol189-validation.log` y
+`app\build\reports\sol189-apk.log`.
+
 ## SOL-193 / SOL-235 / SOL-239: cola durable e historial de resultados
 
 `ClaimStore` y `EvidenceStore` conservan UUID, cuerpo y acuses en SQLite privado.
@@ -737,6 +929,31 @@ Resultado local del 4 de noviembre de 2026: **316 pruebas JVM, 315 aprobadas,
 pasaron en SM-A217M/API 36, con el backend real temporal: 10,506 s en la pasada
 final. El helper confirmó cero mutaciones de siniestro desde la app y cerró
 las conexiones SQL antes de retirar las bases en Windows.
+
+Repeticion del 11 de noviembre de 2026: `ClaimStatusDeviceE2eTest` aprobo
+**2/2 casos en 12,347 s** en SM-A217M, contra BFF, Identidad, Polizas y
+Siniestros reales locales de la base backend `66b72e7`, con SQLite temporal.
+La instrumentacion usa ahora el identificador de tarjeta, la accion accesible
+de refresco y el formato de hora local vigentes. Ante 503 comprueba el error
+visible y la conservacion del ultimo estado y fecha conocidos, como exige
+`ClaimStatusViewModelTest`; no los presenta como una respuesta nueva.
+Cada caso restablece el modo online del control local para evitar contaminacion.
+Ante un error de red, la pantalla ofrece un boton visible **Reintentar** que
+invoca el mismo refresco y se deshabilita durante la consulta. Conserva el gesto
+pull-to-refresh y su accion accesible. `ClaimStatusScreenTest` comprueba la
+pulsacion con y sin detalle previo; la pasada fisica final pulso ese boton
+para recuperarse del 503 y aprobo ambos casos.
+
+Una pasada previa requirio desbloqueo manual del telefono. La ultima repeticion,
+con todos los ajustes de asistencia incluidos en el APK, verifico que seguia
+despierto y desbloqueado. Se instalaron sin
+reemplazo solo `.claimtest` y `.claimtest.test`, ausentes antes de empezar.
+Al terminar se retiraron ambos paquetes y el reverse propio 18721. El helper
+confirmo cero mutaciones de siniestro desde la app y elimino las bases y la
+fixture; las rutas APK y versiones de Solventa y Solventa Flujos no cambiaron.
+Esta evidencia cubre consulta, cambio de estado local, fallo/reintento,
+aislamiento entre cuentas y presentacion. No acredita AWS, TLS productivo,
+envio de evidencias, despacho de asistencia ni proveedor push.
 
 | Archivo | Líneas JVM | Ramas JVM |
 | --- | --- | --- |

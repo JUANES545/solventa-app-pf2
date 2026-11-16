@@ -7,6 +7,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.*
+import co.solventa.mobile.R
+import co.solventa.mobile.core.designsystem.SolventaTheme
+import co.solventa.mobile.core.ui.SolventaPage
+import co.solventa.mobile.feature.evidence.EvidenceScope
+import co.solventa.mobile.feature.evidence.EvidenceViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -25,6 +31,39 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [35])
 class ClaimStatusHostTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Test fun confirmedCaseAttachmentCannotBeDeletedWithoutServerSupport() {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            val app = RuntimeEnvironment.getApplication()
+            val model = EvidenceViewModel(app, MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString()))
+            val scope = EvidenceScope("actor-a", statusClaim.id)
+            val remote = java.util.UUID.randomUUID().toString()
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setBody(
+                """{"maxCantidad":7,"maxChunkBytes":1024,"maxVideoSeconds":45,"formatos":[{"mimeType":"image/jpeg","maxBytes":1234}]}"""))
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setBody("""{"evidencias":[{"id":"$remote"}]}"""))
+            compose.setContent {
+                SolventaTheme(false) { SolventaPage { ClaimCaseAttachments(model, scope, statusClaim) } }
+            }
+            compose.waitUntil(10_000) {
+                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+                model.state.value.actorId == scope.actorId && !model.state.value.busy
+            }
+            assertNull(model.state.value.error)
+            assertEquals(scope, model.state.value.scope)
+            compose.onNodeWithTag("evidence-tile-$remote").performScrollTo().performClick()
+            compose.onNodeWithText(app.getString(R.string.evidence_gallery_remove)).assertDoesNotExist()
+            compose.onNodeWithText(app.getString(R.string.evidence_gallery_file_unavailable)).assertExists()
+            compose.onNodeWithText(app.getString(R.string.evidence_gallery_close)).performScrollTo().performClick()
+            assertEquals(2, server.requestCount)
+            compose.onNodeWithTag("evidence-tile-$remote").performScrollTo().assertIsDisplayed()
+            assertEquals(setOf(remote), model.state.value.confirmedRemoteIds)
+            assertNull(model.state.value.error)
+            repeat(2) {
+                assertEquals("GET", server.takeRequest().method)
+            }
+            androidx.lifecycle.ViewModelStore().apply { put("case-evidence", model); clear() }
+        }
+    }
 
     @Test fun lifecycleBackAndDisposalKeepTheOriginalWindowPrivacy() {
         val app = RuntimeEnvironment.getApplication()

@@ -175,14 +175,6 @@ internal class EvidenceStore(noBackupDirectory: File, private val now: () -> Ins
         removeFileAndRow(stored)
     }
 
-    @Synchronized
-    fun removeDemoConfirmed(item: EvidenceItem) {
-        check(co.solventa.mobile.BuildConfig.BUILD_TYPE == "mock")
-        val stored = list(item.scope).single { it.id == item.id }
-        require(stored.status == EvidenceStatus.CONFIRMED && stored.remoteId == item.remoteId)
-        removeFileAndRow(stored)
-    }
-
     private fun removeFileAndRow(item: EvidenceItem) {
         val file = File(directory, "${item.id}.${item.kind.extension}")
         if (file.exists() && !file.delete()) throw IOException("Evidence cleanup failed")

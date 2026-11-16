@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,13 +29,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -72,12 +68,15 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 @Composable
-internal fun ClaimHost(model: ClaimViewModel, onStatus: ((ClaimReport) -> Unit)? = null, onEvidence: (ClaimReport) -> Unit) {
+internal fun ClaimHost(
+    model: ClaimViewModel, onStatus: ((ClaimReport) -> Unit)? = null, backToPolicy: Boolean = false,
+    onEvidence: (ClaimReport) -> Unit,
+) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val state by model.state.collectAsState()
     var locating by remember { mutableStateOf(false) }
-    RetryOnReconnect(state.actor, state.open && !state.busy && !locating, model::retry)
+    RetryOnReconnect(state.actor, state.open && !state.busy && !locating && state.autoRetry, model::retry)
     DisposableEffect(model, lifecycle) {
         val window = (context as? android.app.Activity)?.window
         val wasSecure = window?.attributes?.flags?.and(WindowManager.LayoutParams.FLAG_SECURE) != 0
@@ -88,7 +87,8 @@ internal fun ClaimHost(model: ClaimViewModel, onStatus: ((ClaimReport) -> Unit)?
     }
     BackHandler(onBack = model::close)
     ClaimScreen(state, model::edit, model::submit, model::retry, model::newReport, model::close, onEvidence,
-        model::correct, onStatus, readState = { model.state.value }, refresh = model::refreshPolicies,
+        model::correct, onStatus, backLabel = if (backToPolicy) R.string.policy_back_detail else R.string.claim_back,
+        readState = { model.state.value }, refresh = model::refreshPolicies,
         onLocationActiveChange = { locating = it })
 }
 
@@ -98,6 +98,7 @@ internal fun ClaimScreen(
     newReport: () -> Unit, back: () -> Unit, evidence: (ClaimReport) -> Unit,
     correct: (ClaimReport) -> Unit = {},
     status: ((ClaimReport) -> Unit)? = null,
+    backLabel: Int = R.string.claim_back,
     readState: () -> ClaimState = { state },
     refresh: () -> Unit = retry,
     onLocationActiveChange: (Boolean) -> Unit = {},
@@ -105,7 +106,7 @@ internal fun ClaimScreen(
     val feedback = remember { SnackbarHostState() }
     SolventaPage(headerAlignment = Alignment.Start, feedback = { SnackbarHost(feedback) },
         onRefresh = refresh, isRefreshing = state.loadingPolicies, refreshEnabled = !state.busy, header = {
-        SolventaScreenHeader(stringResource(R.string.claim_title), stringResource(R.string.claim_back), back)
+        SolventaScreenHeader(stringResource(R.string.claim_title), stringResource(backLabel), back)
     }) {
         val open = state.reports.filter { it.receipt == null && it.supersededBy == null }
         val pending = open.filter { it.retryable }
@@ -121,6 +122,8 @@ internal fun ClaimScreen(
         if (sent != null) ClaimSentCard(sent, state.busy, evidence, status)
         if (review.isNotEmpty()) ClaimReviewCard(review, state.busy, !state.editing, correct)
         if (state.editing) {
+            Text(stringResource(R.string.claim_camera_evidence_guide),
+                style = MaterialTheme.typography.bodyMedium)
             Text(stringResource(R.string.claim_policy), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
             if (state.cachedPolicies && state.policies.isNotEmpty() && !state.loadingPolicies) {
                 Text(stringResource(R.string.claim_cached_policies), style = MaterialTheme.typography.bodyMedium,
@@ -291,18 +294,7 @@ private fun ClaimField(label: Int, value: String, busy: Boolean, multiline: Bool
         R.string.claim_description -> R.string.operational_description_hint
         else -> null
     }
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
-    val sample = stringResource(R.string.claim_sample_description)
-    val latestValue by rememberUpdatedState(value)
-    val latestChange by rememberUpdatedState(change)
-    LaunchedEffect(focused) {
-        if (BuildConfig.CLAIM_SAMPLE_ENABLED && label == R.string.claim_description && focused && latestValue.isBlank() && !busy) {
-            latestChange(sample)
-        }
-    }
     OutlinedTextField(value, change, Modifier.fillMaxWidth(), enabled = !busy,
-        interactionSource = interaction,
         label = { Text(stringResource(label)) },
         supportingText = hint?.let { { Text(stringResource(it)) } },
         singleLine = !multiline, minLines = if (multiline) 3 else 1)

@@ -18,11 +18,56 @@ import org.robolectric.annotation.Config
 class ClaimStatusViewModelTest {
     private fun await(model: ClaimStatusViewModel) {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-        while (model.state.value.busy && System.nanoTime() < deadline) {
+        while ((model.state.value.busy || model.state.value.caseBusy) && System.nanoTime() < deadline) {
             shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(10)
         }
         assertFalse("Query did not finish", model.state.value.busy)
+        assertFalse("Case query did not finish", model.state.value.caseBusy)
+    }
+
+    @Test fun caseReadsOnlySelectedReportAndClearsOnActorChangeOrFailure() {
+        MockWebServer().use { server ->
+            val model = ClaimStatusViewModel(statusApi(server))
+            server.enqueue(MockResponse().setBody(statusResponse().toString()))
+            model.show("actor-a", statusClaim.id); await(model)
+            val other = statusClaim.copy(id = UUID.randomUUID().toString(), type = "Otro caso")
+            server.enqueue(MockResponse().setBody(statusList(other, statusClaim)))
+            model.loadCase(); await(model)
+            assertEquals(statusClaim, model.state.value.selectedClaim)
+            assertTrue(model.state.value.caseLoaded)
+            val requests = List(2) { server.takeRequest() }
+            assertTrue(requests.all { it.method == "GET" && it.body.size == 0L })
+            assertEquals("/movil/v1/siniestros", requests.last().path)
+            server.enqueue(MockResponse().setResponseCode(403).setBody("{}"))
+            model.loadCase(); await(model)
+            assertNull(model.state.value.selectedClaim)
+            assertFalse(model.state.value.caseLoaded)
+            assertEquals(ClaimStatusError.SESSION, model.state.value.caseError)
+            model.bindActor("actor-b")
+            assertNull(model.state.value.selectedClaim)
+            assertNull(model.state.value.caseError)
+        }
+    }
+
+    @Test fun changingClaimDiscardsAnOlderCaseResponse() {
+        MockWebServer().use { server ->
+            val model = ClaimStatusViewModel(statusApi(server))
+            server.enqueue(MockResponse().setBody(statusResponse().toString()))
+            model.show("actor-a", statusClaim.id); await(model)
+            server.takeRequest()
+            server.enqueue(MockResponse().setBody(statusList()).setBodyDelay(250, TimeUnit.MILLISECONDS))
+            model.loadCase()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+            val nextId = UUID.randomUUID().toString()
+            server.enqueue(MockResponse().setBody(statusResponse(id = nextId).toString()))
+            model.show("actor-a", nextId); await(model)
+            Thread.sleep(300)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertNull(model.state.value.selectedClaim)
+            assertFalse(model.state.value.caseLoaded)
+        }
     }
 
     @Test fun refreshRetainsSameActorDataAndNetworkFailureDoesNotClaimItIsFresh() {

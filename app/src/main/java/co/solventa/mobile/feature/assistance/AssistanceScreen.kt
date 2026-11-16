@@ -125,6 +125,9 @@ internal fun AssistanceContent(
             }
         },
     ) {
+        if (state.step != AssistanceStep.SUCCESS) {
+            Text(stringResource(R.string.assistance_catalog_limit))
+        }
         val initialLoadError = state.step == AssistanceStep.PROVIDERS && state.providers.isEmpty() &&
             state.error != null && state.error != AssistanceError.NO_PROVIDER
         state.error?.takeUnless { it == AssistanceError.NO_PROVIDER || initialLoadError }?.let {
@@ -282,6 +285,7 @@ internal fun AssistanceContent(
                     modifier = Modifier.semantics { heading() },
                     style = MaterialTheme.typography.titleLarge,
                 )
+                Text(stringResource(R.string.assistance_registration_limit))
                 Text(
                     stringResource(R.string.assistance_status, receipt.status),
                     modifier = Modifier.testTag("assistance-receipt-status"),

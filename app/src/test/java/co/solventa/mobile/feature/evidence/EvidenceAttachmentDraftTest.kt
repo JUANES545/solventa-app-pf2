@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Looper
 import androidx.lifecycle.ViewModelStore
-import co.solventa.mobile.BuildConfig
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -155,8 +154,7 @@ class EvidenceAttachmentDraftTest {
         EvidenceStore(app.noBackupFilesDir).use { assertTrue(it.list(scope).isEmpty()) }
     }
 
-    @Test fun productionConfirmedRemovalCannotCallDemoApiOrDeleteLocalData() {
-        if (BuildConfig.BUILD_TYPE == "mock") return
+    @Test fun confirmedRemovalCannotDeleteLocalData() {
         open()
         importDocument()
         model.accept(false)
@@ -174,11 +172,5 @@ class EvidenceAttachmentDraftTest {
         assertFalse(model.state.value.busy)
         assertEquals(confirmed, model.state.value.items.single())
         EvidenceStore(app.noBackupFilesDir).use { assertTrue(it.file(confirmed).exists()) }
-        assertThrows(IllegalStateException::class.java) {
-            runBlocking { api.removeDemoConfirmed(scope, remote) }
-        }
-        EvidenceStore(app.noBackupFilesDir).use { store ->
-            assertThrows(IllegalStateException::class.java) { store.removeDemoConfirmed(confirmed) }
-        }
     }
 }

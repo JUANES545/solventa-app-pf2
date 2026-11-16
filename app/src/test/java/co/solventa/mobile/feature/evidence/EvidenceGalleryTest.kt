@@ -26,6 +26,33 @@ class EvidenceGalleryTest {
         scope = EvidenceScope("actor-a", "claim-a"), policy = policy)
     private fun text(id: Int) = app.getString(id)
 
+    @Test fun readOnlyGalleryOpensOnlyThisCasesPhotoAndCannotDeleteIt() {
+        val source = java.io.File(app.cacheDir, "case-gallery-fixture.jpg")
+        val bitmap = android.graphics.Bitmap.createBitmap(32, 24, android.graphics.Bitmap.Config.ARGB_8888)
+        source.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
+        bitmap.recycle()
+        val item = EvidenceStore(app.noBackupFilesDir).use { store ->
+            store.enqueue(checkNotNull(state.scope), EvidenceKind.PHOTO, source,
+                java.time.Instant.parse("2026-11-10T12:00:00Z"), null, 0, policy, emptySet())
+        }
+        val other = item.copy(id = java.util.UUID.randomUUID().toString(),
+            scope = EvidenceScope("actor-b", "claim-b"))
+        compose.setContent {
+            SolventaTheme(false) {
+                EvidenceGallery(state.copy(items = listOf(item, other)), {}, readOnly = true)
+            }
+        }
+        compose.onNodeWithTag("evidence-tile-${other.id}").assertDoesNotExist()
+        compose.onNodeWithTag("evidence-tile-${item.id}").performClick()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithContentDescription(text(R.string.evidence_local_preview))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText(text(R.string.evidence_gallery_remove)).assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.evidence_gallery_close)).performScrollTo().performClick()
+        assertTrue(source.delete())
+    }
+
     @Test fun idleGalleryHidesCaptureLocationAndRetryUntilPendingEvidenceExists() {
         val current = mutableStateOf(state)
         var retries = 0
@@ -148,7 +175,7 @@ class EvidenceGalleryTest {
             SolventaTheme(false) {
                 date = app.getString(R.string.evidence_gallery_date,
                     co.solventa.mobile.feature.claim.claimStatusDate(item.capturedAt))
-                EvidenceGallery(state.copy(items = listOf(item)), {}, {})
+                EvidenceGallery(state.copy(items = listOf(item)), {})
             }
         }
         compose.onNodeWithContentDescription(text(R.string.evidence_kind_photo)).assertExists()
@@ -181,7 +208,7 @@ class EvidenceGalleryTest {
             status = EvidenceStatus.REJECTED, rejection = EvidenceError.FORMAT)
         val removed = mutableListOf<EvidenceItem>()
         compose.setContent {
-            SolventaTheme(false) { EvidenceGallery(state.copy(items = listOf(item)), { removed.add(it) }, {}) }
+            SolventaTheme(false) { EvidenceGallery(state.copy(items = listOf(item)), { removed.add(it) }) }
         }
         compose.onNodeWithTag("evidence-tile-${item.id}").performClick()
         compose.onNodeWithText(text(R.string.evidence_gallery_remove)).performScrollTo().performClick()
@@ -196,15 +223,20 @@ class EvidenceGalleryTest {
     }
 
     @Test fun remoteMetadataHasAnHonestPreviewWithoutTechnicalReferences() {
+        val other = EvidenceItem(java.util.UUID.randomUUID().toString(), EvidenceScope("actor-b", "claim-b"),
+            EvidenceKind.PHOTO, java.time.Instant.now(), null, 128, "a".repeat(64), 0,
+            EvidenceStatus.CONFIRMED, "remote-one")
         compose.setContent {
             SolventaTheme(true) {
-                EvidenceContent(state.copy(confirmedRemoteIds = setOf("remote-one")), {}, {}, {}, {}, {}, {}, {}, {}, {},
-                    null, null, {}, {})
+                EvidenceGallery(state.copy(items = listOf(other), confirmedRemoteIds = setOf("remote-one")),
+                    {}, readOnly = true)
             }
         }
+        compose.onNodeWithTag("evidence-tile-${other.id}").assertDoesNotExist()
         compose.onNodeWithText(text(R.string.evidence_gallery_empty)).assertDoesNotExist()
         compose.onNodeWithTag("evidence-tile-remote-one").performClick()
-        compose.onNodeWithText(text(R.string.evidence_preview_unavailable)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.evidence_gallery_file_unavailable)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.evidence_gallery_remove)).assertDoesNotExist()
         compose.onNodeWithTag("evidence-thumbnail").assertDoesNotExist()
         compose.onNodeWithText(app.getString(R.string.evidence_claim_reference, "remote-one")).assertDoesNotExist()
         compose.onNodeWithText(text(R.string.evidence_gallery_details)).assertDoesNotExist()

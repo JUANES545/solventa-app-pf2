@@ -9,7 +9,6 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.core.os.CancellationSignal
-import co.solventa.mobile.BuildConfig
 import java.time.Instant
 import kotlin.coroutines.resume
 import kotlinx.coroutines.channels.Channel
@@ -43,9 +42,6 @@ internal fun hasLocationPermission(context: Context): Boolean =
 
 internal suspend fun currentDeviceLocation(context: Context): DeviceLocation? {
     if (!hasLocationPermission(context)) return null
-    if (BuildConfig.DEMO_LOCATION) {
-        return DeviceLocation(4.6560, -74.0560, Instant.now(), "Cra. 7 # 72-41, Bogotá")
-    }
     val manager = context.getSystemService(LocationManager::class.java)
     val fine = ContextCompat.checkSelfPermission(
         context,
