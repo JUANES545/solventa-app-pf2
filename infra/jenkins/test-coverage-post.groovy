@@ -11,7 +11,7 @@ def runPost = { Map scenario ->
         always: { body -> body() },
         script: { body -> body() },
         cleanup: { body -> },
-        env: [CHANGE_ID: '55', BUILD_URL: 'https://jenkins.example/job/55/1/'],
+        env: [CHANGE_ID: '55', BUILD_NUMBER: '21', BUILD_URL: 'https://jenkins.example/job/55/1/'],
         currentBuild: result.build,
         fileExists: { path -> scenario.junitDirectory != false },
         junit: { options ->
@@ -27,6 +27,12 @@ def runPost = { Map scenario ->
         readFile: { options ->
             if (scenario.readError) throw scenario.readError
             return scenario.summaryExit ? 'Cobertura incompleta\nReporte parcial\n' : 'Cobertura JVM\nInforme real\n'
+        },
+        writeFile: { options ->
+            assert options.file == 'reports/coverage-summary.md'
+            assert options.encoding == 'UTF-8'
+            if (scenario.writeError) throw scenario.writeError
+            result.written = options.text
         },
         publishChecks: { options ->
             result.checks << options
@@ -44,6 +50,7 @@ def runPost = { Map scenario ->
     assert result.checks.size() == 1
     assert result.checks[0].name == 'Cobertura'
     assert result.checks[0].status == 'COMPLETED'
+    assert !result.checks[0].summary.contains('jenkins.example')
     result
 }
 
@@ -55,10 +62,10 @@ for (buildResult in ['SUCCESS', 'FAILURE']) {
     assert result.checks[0].conclusion == 'FAILURE'
     assert result.checks[0].title == 'Cobertura incompleta'
     assert !result.checks[0].summary.contains('%')
-    assert result.checks[0].summary.contains('console')
+    assert result.checks[0].summary.contains('registro privado de Jenkins')
 }
 
-for (step in ['summaryError', 'readError']) {
+for (step in ['summaryError', 'readError', 'writeError']) {
     def failure = new IllegalStateException("Cannot process ${step}")
     def result = runPost([(step): failure])
     assert result.failure.is(failure)
@@ -70,6 +77,8 @@ assert !success.failure
 assert success.checks[0].conclusion == 'SUCCESS'
 assert success.checks[0].summary.contains('Informe real')
 assert success.checks[0].summary.contains('approved-revision')
+assert success.checks[0].summary.contains('ejecución **#21**')
+assert success.written == success.checks[0].summary
 
 def missing = runPost([junitDirectory: false, summaryExit: 1])
 assert missing.failure.message == 'Faltan reportes válidos de cobertura o pruebas'
@@ -106,4 +115,4 @@ for (command in gradleCommands) {
     assert command.contains(' --no-daemon ')
     assert command.contains(' -Pkotlin.compiler.execution.strategy=in-process ')
 }
-println 'Coverage post tests passed (8 scenarios); isolated compilation command verified.'
+println 'Coverage post tests passed (9 scenarios); isolated compilation command verified.'

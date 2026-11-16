@@ -14,7 +14,7 @@ Activation requires a reviewed migration of develop's classic protection to equi
 
 1. Save the complete existing protection privately for comparison/recovery.
 2. Create active develop rulesets preserving PR-only changes, blocked force pushes/deletion and resolved review conversations. No admin/write-role bypasses.
-3. Place one approval (stale reviews dismissed) and the existing strict required checks in an additional develop ruleset: Android verification (15368), Android UI tests (15368), CI / Validación (Jenkins) (5247357).
+3. Place one approval (stale reviews dismissed) and the strict required checks in an additional develop ruleset: Android verification (15368), Android UI tests (15368). Keep Jenkins optional.
 4. Only this additional ruleset grants the dedicated App `Integration` bypass in `pull_request` mode. The non-bypass PR/force-push/deletion rules still apply to the App.
 5. Compare effective protections before removing the redundant classic develop rule. Never disable all protection as an intermediate step. Master must remain unchanged.
 6. Verify effective normal-PR protections and denied direct pushes. Do not perform destructive test pushes.
@@ -25,6 +25,7 @@ GitHub grants bypass to an actor, not to a source branch. The App technically ca
 
 - Only merged origin release/* PRs into master qualify; hotfixes are not included.
 - Verify merge SHA belongs to current master, source-head required checks are successful from the expected Apps, and a human approval belongs to that source head.
+- Jenkins may be absent, pending or unsuccessful without blocking source verification. Both Actions checks from App 15368 must still succeed for the exact source SHA. Keep the existing identity, approval and ancestry/tree checks.
 - Dedicated-App PR creator, App ID, repository, deterministic branch, target and head SHA must match API evidence. Existing PRs created by github-actions[bot] (including PR #7) are not silently adopted or auto-merged.
 - App identity uses the authenticated `app-slug` output from token creation, matched against configuration. Users API confirms that the PR author has the real Bot ID and login for that App. Do not rely on `performed_via_github_app`: it is absent from PR responses and can be null in Issues API.
 - If current develop is an ancestor of the release merge, the existing ancestry proof applies. Otherwise GitHub must report a conflict-free prospective merge with exactly current develop and the release SHA as its parents, in that order, and the exact approved release tree. Develop is reread after this check. A different tree, moved base, unknown mergeability or conflict requires manual verification; application tests are never reused for combined, unvalidated content.
@@ -38,7 +39,7 @@ The GitHub merge API pins the PR head SHA but has no base-SHA precondition. The 
 
 ## Activation order and evidence
 
-1. Review this implementation through an ordinary PR with Actions, Jenkins and approval; ship the workflow/policy to master through a reviewed release.
+1. Review this implementation through an ordinary PR with Actions and approval; Jenkins remains optional. Ship the workflow/policy to master through a reviewed release.
 2. Install/configure the App and private secret, verify identity without exposing token/key values, then perform the reviewed ruleset migration.
 3. Ensure the trusted backport policy also exists in develop before setting BACKPORT_AUTOMATION_ENABLED=true. The legacy workflow is disabled only while this variable is true.
 4. Test a real approved subsequent release, confirming correct source/head/tree, App identity, skipped application tests, merge commit and unchanged normal-PR/master rules.
@@ -47,6 +48,10 @@ The GitHub merge API pins the PR head SHA but has no base-SHA precondition. The 
 Rollback: set BACKPORT_AUTOMATION_ENABLED=false to retain the legacy PR-creation workflow for future releases. Existing closed/open PRs are not altered automatically. Remove the App bypass if deactivating its credentials; retain normal protection.
 
 ## Activation status — 2026-10-18
+
+Historical record, before the change to optional Jenkins. The policy above
+describes the new requirement; updating GitHub rules does not update trusted
+automation until this code reaches the branches that load it.
 
 `BACKPORT_AUTOMATION_ENABLED=true`. Develop uses rulesets 25324691 (PR-only, resolved
 conversations, no force pushes/deletion, no bypass) and 25324708 (one approval and strict
