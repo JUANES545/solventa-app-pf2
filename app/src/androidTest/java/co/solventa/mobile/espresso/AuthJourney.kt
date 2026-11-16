@@ -1,9 +1,11 @@
 package co.solventa.mobile.espresso
 
 import android.Manifest
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.graphics.Bitmap
 import android.util.Log
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.compose.setContent
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -91,8 +93,7 @@ abstract class AuthJourney {
             try {
                 scenario!!.onActivity { logWindowState(it, "espresso-root-failure") }
                 logSystemFocus()
-                val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
-                Log.e("AuthJourneyFocus", "activeWindow package=${root?.packageName} class=${root?.className} windowId=${root?.windowId}")
+                logActiveWindow()
             } catch (diagnosticFailure: Throwable) {
                 Log.e("AuthJourneyFocus", "diagnosticUnavailable=${diagnosticFailure.javaClass.simpleName}")
             }
@@ -133,6 +134,30 @@ abstract class AuthJourney {
                     }
                 }
             }
+        }
+    }
+
+    private fun logActiveWindow() {
+        if (InstrumentationRegistry.getArguments().getString("focusDiagnostics") != "true") return
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val originalFlags = automation.serviceInfo.flags
+        try {
+            automation.serviceInfo = automation.serviceInfo.apply {
+                flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+            }
+            val root = automation.rootInActiveWindow
+            Log.e("AuthJourneyFocus", "activeWindow package=${root?.packageName} class=${root?.className} windowId=${root?.windowId}")
+            var remaining = 64
+            fun inspect(node: AccessibilityNodeInfo, depth: Int) {
+                if (remaining-- <= 0 || depth > 8) return
+                // Log structure only: never field values, credentials or screen text.
+                Log.e("AuthJourneyFocus", "activeNode depth=$depth package=${node.packageName} " +
+                    "class=${node.className} id=${node.viewIdResourceName}")
+                repeat(node.childCount) { index -> node.getChild(index)?.let { inspect(it, depth + 1) } }
+            }
+            root?.let { inspect(it, 0) }
+        } finally {
+            automation.serviceInfo = automation.serviceInfo.apply { flags = originalFlags }
         }
     }
 

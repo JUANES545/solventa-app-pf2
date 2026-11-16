@@ -24,6 +24,11 @@ a sus reportes: cualquier persona con acceso al PR puede leer esa evidencia en G
 Los XML y HTML completos siguen archivados en Jenkins para los operadores autorizados.
 Los artefactos de Actions corresponden a otra ejecución y no sustituyen los de Jenkins.
 
+Si un recorrido HTTP no obtiene foco, `focusDiagnostics=true` registra la
+estructura de la ventana activa: paquete, clase e identificadores de vistas.
+No registra textos ni valores de campos y restaura las opciones de accesibilidad
+del diagnóstico. El fallo original de Espresso se conserva.
+
 El botón **Details** de **CI / Validación (Jenkins)** lo genera el publicador automático
 del controlador. El inicializador confiable
 `infra/jenkins/configure-check-links.groovy` adapta su destino a la pestaña Checks del PR
