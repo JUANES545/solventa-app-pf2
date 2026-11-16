@@ -6,7 +6,6 @@ const shaPattern = /^[0-9a-f]{40}$/;
 const requiredChecks = [
   ['Android verification', 15368],
   ['Android UI tests', 15368],
-  ['CI / Validación (Jenkins)', 5247357],
 ];
 
 function sourceNumber(branch) {

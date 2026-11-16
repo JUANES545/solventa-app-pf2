@@ -4,7 +4,7 @@
 
 - **Cobertura**: check publicado por la App existente de Jenkins. Muestra líneas/ramas,
   conteo JUnit actual y alcance JVM. Su enlace abre la pestaña Checks de GitHub, no localhost.
-- **CI / Validación (Jenkins)**: check principal obligatorio, publicado automáticamente
+- **CI / Validación (Jenkins)**: check opcional, publicado automáticamente
   por el controlador. El Jenkinsfile ya no publica un alias duplicado.
 - El workflow del PR define **CI · Validación**; GitHub puede mostrar todavía el nombre de
   la rama predeterminada hasta integrarlo. Sus jobs obligatorios no cambian.
@@ -17,6 +17,42 @@
   o no se puede generar o leer el resumen, el bloque `finally` publica **Cobertura incompleta**
   con conclusión `FAILURE` y estado `COMPLETED`. Conserva la excepción y el fallo del pipeline,
   sin inventar porcentajes. Intenta archivar los reportes incluso si falla la publicación del check.
+
+El resumen de **Cobertura** publica el SHA compilado, el número de ejecución y el resultado
+observado junto a los conteos y porcentajes. No incluye enlaces al controlador privado ni
+a sus reportes: cualquier persona con acceso al PR puede leer esa evidencia en GitHub.
+Los XML y HTML completos siguen archivados en Jenkins para los operadores autorizados.
+Los artefactos de Actions corresponden a otra ejecución y no sustituyen los de Jenkins.
+
+El botón **Details** de **CI / Validación (Jenkins)** lo genera el publicador automático
+del controlador. El inicializador confiable
+`infra/jenkins/configure-check-links.groovy` adapta su destino a la pestaña Checks del PR
+para los tres proyectos Solventa aprobados. Delega al mismo publicador de GitHub, que
+conserva credenciales, SHA e ID del check; solo sustituye Details del check principal,
+sin modificar nombre, estado, conclusión, tiempos, acciones ni resultados.
+
+**Operación 2026-10-24:** el adaptador está instalado en el controlador privado para
+Android, web y backend. Se comprobó el registro de la fábrica, las tres fuentes y las
+rutas disponibles con `checks-api` 415.vf022234a_931d y `github-checks`
+679.v74133da_b_435a_. Las pruebas con esas bibliotecas cubren todas las conclusiones,
+cola/en curso y el aislamiento de otros checks. Además, se corrigieron los enlaces del
+[PR40 reportado](https://github.com/JUANES545/solventa-app-pf2/pull/40/checks), conservando
+App, IDs, SHA, tiempos, resultados y métricas originales. No se repitieron esas pruebas.
+No se ejecutó un pipeline nuevo; la próxima ejecución debe confirmar el adaptador en
+el flujo completo. Los cambios del Jenkinsfile requieren integración por separado.
+
+Para reinstalar, ejecutar primero `test-check-links.groovy` con la ruta del inicializador
+como argumento usando el classpath de Jenkins y sus plugins. Esa prueba compila el
+adaptador sin registrarlo ni publicar checks. Copiar después el archivo revisado al
+directorio confiable `init.groovy.d/13-github-evidence-links.groovy`, fuera de workspaces,
+y reiniciar solo con cola y ejecutores vacíos. Verificar `ci-evidence-links.json` en
+Jenkins home y el check de una ejecución real. La instalación es idempotente y rechaza
+una prioridad de fábrica incompatible. Para revertir, retirar solo ese inicializador y
+reiniciar en reposo: vuelve el publicador original, sin cambiar las protecciones.
+La reparación puntual del PR40 no reescribe otros checks históricos.
+
+No abrir Jenkins al público, cambiar su URL base por la de GitHub ni desactivar checks.
+Una IP privada tampoco permite consultar la evidencia desde fuera.
 
 Los resúmenes se construyen desde XML, no desde porcentajes escritos manualmente.
 `python3 -m unittest discover -s scripts -p 'test_*summary.py'` prueba los resúmenes
@@ -41,9 +77,16 @@ La regresión también comprueba que esos dos comandos permanezcan separados y o
 ### Configuración administrativa verificada
 
 **Operación 2026-10-17:** la App es **Solventa CI Android** (`solventa-ci-android`),
-conservando ID `5247357`, instalación y credencial. `develop` y `master` requieren
+conservando ID `5247357`, instalación y credencial. En esa fecha, `develop` y `master` requerían
 `Android verification` y `Android UI tests` de Actions (`15368`), más
 `CI / Validación (Jenkins)` de la App `5247357`.
+
+La nueva política conserva ambos checks de Actions y la aprobación; Jenkins
+queda opcional. El especialista de configuración aplica las reglas de GitHub
+por separado. `verified-backport.cjs` también deja de exigir Jenkins al verificar
+la release de origen, sin omitir identidad, SHA, aprobación ni ascendencia/árbol.
+Esa automatización conservará la política anterior hasta integrar su código
+en las ramas desde las que se ejecuta.
 
 La migración añadió el requisito nuevo antes de retirar el anterior y cambió el publicador
 automático del controlador. Por eso también funciona con Jenkinsfiles antiguos. El bootstrap
@@ -66,9 +109,10 @@ inicializador encima del timer existente.
 JUnit se conserva en Jenkins sin otro check. El pipeline publica **Cobertura** y el
 controlador publica el resultado global, sin dos emisores del mismo nombre.
 
-La verificación de evidencia de backport y sus fixtures usan el nuevo nombre y la misma
-App publicadora; un check antiguo o de otra App no satisface esa verificación. Esto no
-activa la automatización de backport ni modifica sus condiciones de seguridad.
+La verificación de backport exige `Android verification` y `Android UI tests`
+de Actions (`15368`); rechaza checks ausentes, pendientes, fallidos o de otra App.
+Jenkins ausente, pendiente o fallido no bloquea esa verificación. Se conservan
+las comprobaciones de autor, PR de origen, SHA y aprobación humana.
 
 La configuración del controlador y el nombre de la App no cambian por integrar este PR.
 Los nombres futuros de jobs de Actions (`CI / Calidad (Actions)`, `CI / Interfaz Android`) requieren
@@ -79,12 +123,12 @@ la misma migración coordinada. La política de backport se verifica dentro de
 | --- | --- | --- |
 | Actions: `Android verification` | PR y push a develop/master | Scripts de automatización, unitarias, lint y compilación |
 | Actions: `Android UI tests` | Después de verification | Pruebas instrumentadas en emulador |
-| Jenkins: `CI / Validación (Jenkins)` | Comentario nuevo `/test-jenkins` de un colaborador | Unitarias con cobertura, lint y compilación |
+| Jenkins opcional: `CI / Validación (Jenkins)` | Comentario nuevo `/test-jenkins` de un colaborador | Unitarias con cobertura, lint y compilación |
 
 `develop` es la rama predeterminada; `master` conserva las entregas estables. Cambiar la
 rama predeterminada no integra código ni altera las protecciones. Los PRs normales siguen
-requiriendo los checks configurados y aprobación. Después de nuevos commits, pedir Jenkins
-otra vez; no duplicar solicitudes mientras hay trabajo para el mismo commit.
+requiriendo los checks de Actions y aprobación. Para repetir Jenkins tras un nuevo
+commit, pedir otra ejecución; no duplicar solicitudes para el mismo commit.
 
 Las pruebas rápidas de los scripts, incluidas las de backport, se ejecutan en el mismo
 job de verificación. No hay otro workflow `Backport validation` ni jobs `backport_policy`.
@@ -103,7 +147,7 @@ e informes ausentes se identifican explícitamente, sin inventar resultados corr
 Cobertura desglosa líneas y ramas, elementos cubiertos, pendientes y distancia al objetivo
 recomendado del 80 %. 🟢 indica objetivo alcanzado; 🟠, mejora pendiente; ⚪, métrica no
 aplicable; 🔴, informe que requiere revisión. Los colores llevan texto para no depender
-solo de la percepción visual. La tabla de pruebas y los enlaces a HTML/JUnit completan el
+solo de la percepción visual. La tabla de pruebas y la revisión compilada completan el
 detalle. No se cambian conclusiones de checks ni protecciones por estar debajo del objetivo.
 
 Etapas: Código → Pruebas unitarias y cobertura → Android Lint → Compilación debug.

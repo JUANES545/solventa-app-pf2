@@ -32,6 +32,10 @@ Only the App ID, installation ID and Jenkins credential ID may be shared for con
 
 The initializer does not integrate a PR, modify GitHub branch protection or read the credential's private-key value. The first scan is started only after the credential and lifecycle prerequisites have been validated. Existing unrelated projects are not overwritten.
 
+The trusted `configure-check-links.groovy` initializer adapts the required check's Details
+URL to GitHub for the three approved Solventa projects without replacing the existing
+publisher or its credentials. See [CI evidence and rollback](ci.md) before reinstalling it.
+
 ## Service identity
 
 The approved matrix retains `JUANES545` as administrator and grants `jenkins-lifecycle` only `Overall/Read` and `Job/Read`. The security realm and administrator password are not changed. No anonymous permissions are added.
