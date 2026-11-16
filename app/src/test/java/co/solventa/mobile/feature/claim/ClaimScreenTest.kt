@@ -40,7 +40,7 @@ class ClaimScreenTest {
         compose.runOnIdle { assertEquals(1, sends) }
     }
 
-    @Test fun descriptionSampleIsExclusiveToMockAndNeverOverwritesExistingText() {
+    @Test fun focusingDescriptionDoesNotInventOrOverwriteText() {
         val state = mutableStateOf(ClaimState(policies = listOf(policy), cachedPolicies = false))
         compose.setContent {
             SolventaTheme(false) { ClaimScreen(state.value, { state.value = state.value.copy(draft = it) },
@@ -48,10 +48,7 @@ class ClaimScreenTest {
         }
         compose.onNodeWithText("Descripción").performScrollTo().performClick()
         compose.runOnIdle {
-            val expected = if (co.solventa.mobile.BuildConfig.BUILD_TYPE == "mock")
-                org.robolectric.RuntimeEnvironment.getApplication().getString(co.solventa.mobile.R.string.claim_sample_description)
-            else ""
-            assertEquals(expected, state.value.draft.description)
+            assertEquals("", state.value.draft.description)
         }
         compose.onNodeWithText("Descripción").performTextReplacement("Mi descripción escrita")
         compose.onNodeWithText("Tipo de evento").performScrollTo().performClick()

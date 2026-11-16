@@ -20,7 +20,10 @@ import kotlinx.coroutines.ensureActive
 import org.json.JSONException
 import org.json.JSONObject
 
-internal data class EvidenceClaim(val id: String, val type: String, val date: String, val description: String)
+internal data class EvidenceClaim(
+    val id: String, val type: String, val date: String, val description: String,
+    val policyId: String? = null, val place: String? = null, val registeredAt: Instant? = null,
+)
 internal data class EvidenceConfiguration(val policy: EvidencePolicy, val maxChunkBytes: Int)
 
 internal class MobileEvidenceApi internal constructor(private val auth: AuthRepository, private val base: String) {
@@ -31,7 +34,11 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
         (0 until entries.length()).map { index ->
             val item = entries.getJSONObject(index)
             EvidenceClaim(uuid(item.getString("id")), item.getString("tipoEvento"), item.getString("fechaEvento"),
-                item.getString("descripcion")).also { Instant.parse(it.date) }
+                item.getString("descripcion"),
+                policyId = if (item.isNull("polizaId")) null else uuid(item.getString("polizaId")),
+                place = if (item.isNull("lugar")) null else item.getString("lugar"),
+                registeredAt = if (item.isNull("registradoEn")) null else Instant.parse(item.getString("registradoEn")),
+            ).also { Instant.parse(it.date) }
         }
     }
 
@@ -56,13 +63,6 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
     suspend fun confirmedIds(scope: EvidenceScope): Set<String> = session(scope.actorId) { grant ->
         val entries = request("GET", "/siniestros/${uuid(scope.claimId)}/evidencias", grant.accessToken).getJSONArray("evidencias")
         (0 until entries.length()).map { uuid(entries.getJSONObject(it).getString("id")) }.toSet()
-    }
-
-    suspend fun removeDemoConfirmed(scope: EvidenceScope, remoteId: String) {
-        check(BuildConfig.BUILD_TYPE == "mock")
-        session(scope.actorId) { grant ->
-            request("DELETE", "/siniestros/${uuid(scope.claimId)}/evidencias/${uuid(remoteId)}", grant.accessToken)
-        }
     }
 
     fun transport(store: EvidenceStore, configuration: EvidenceConfiguration): EvidenceTransport = object : EvidenceTransport {

@@ -2,6 +2,7 @@
 <resources>
     <string name="evidence_error_invalid_request">El servidor rechazó los datos de esta carga. Puedes retirar el archivo y adjuntarlo de nuevo con los datos corregidos.</string>
     <string name="evidence_title">Evidencias</string>
+    <string name="evidence_camera_guide">Añade fotos o vídeo del daño y una foto del recibo con la cámara.</string>
     <string name="evidence_entry">Adjuntar evidencia a un siniestro</string>
     <string name="evidence_claim_reference">Referencia: %1$s</string>
     <string name="evidence_no_claims">No tienes siniestros registrados. Registra el siniestro antes de adjuntar evidencia.</string>

@@ -23,6 +23,10 @@ internal data class ClaimStatusState(
     val fromList: Boolean = false,
     val detail: ClaimStatus? = null,
     val error: ClaimStatusError? = null,
+    val selectedClaim: EvidenceClaim? = null,
+    val caseBusy: Boolean = false,
+    val caseLoaded: Boolean = false,
+    val caseError: ClaimStatusError? = null,
 )
 
 @HiltViewModel
@@ -31,6 +35,7 @@ internal class ClaimStatusViewModel @Inject constructor(private val api: MobileC
     val state = mutable.asStateFlow()
     private var generation = 0L
     private var job: Job? = null
+    private var caseJob: Job? = null
 
     fun bindActor(actor: String?) {
         if (actor != state.value.actor) reset(ClaimStatusState(actor = actor))
@@ -44,7 +49,9 @@ internal class ClaimStatusViewModel @Inject constructor(private val api: MobileC
     fun select(claim: EvidenceClaim) {
         val current = state.value
         if (current.busy || claim !in current.claims) return
-        mutable.value = current.copy(selectedId = claim.id, detail = null)
+        caseJob?.cancel()
+        mutable.value = current.copy(selectedId = claim.id, selectedClaim = claim, detail = null,
+            caseBusy = false, caseLoaded = false, caseError = null)
         refresh()
     }
 
@@ -55,7 +62,37 @@ internal class ClaimStatusViewModel @Inject constructor(private val api: MobileC
     }
 
     fun pause() {
-        reset(state.value.copy(busy = false, claims = emptyList(), detail = null, error = null))
+        reset(state.value.copy(busy = false, claims = emptyList(), detail = null, error = null,
+            selectedClaim = null, caseBusy = false, caseLoaded = false, caseError = null))
+    }
+
+    fun loadCase() {
+        val current = state.value
+        val actor = current.actor ?: return
+        val id = current.selectedId ?: return
+        if (!current.open || current.caseBusy) return
+        val version = generation
+        mutable.value = current.copy(caseBusy = true, caseError = null)
+        caseJob = viewModelScope.launch {
+            try {
+                val claim = withContext(Dispatchers.IO) {
+                    api.claims(actor).singleOrNull { it.id == id }
+                        ?: throw EvidenceHttpProblem(404, "siniestro_no_encontrado", true,
+                            co.solventa.mobile.feature.evidence.EvidenceError.PROTOCOL)
+                }
+                updateCase(version, actor, id) {
+                    copy(selectedClaim = claim, caseLoaded = true)
+                }
+            } catch (error: Exception) {
+                val reason = claimStatusError(error)
+                updateCase(version, actor, id) {
+                    copy(caseError = reason, caseLoaded = false,
+                        selectedClaim = selectedClaim.takeIf { reason == ClaimStatusError.NETWORK })
+                }
+            } finally {
+                updateCase(version, actor, id) { copy(caseBusy = false) }
+            }
+        }
     }
 
     fun refresh() {
@@ -78,7 +115,8 @@ internal class ClaimStatusViewModel @Inject constructor(private val api: MobileC
                 val reason = claimStatusError(error)
                 update(version) {
                     if (reason == ClaimStatusError.NETWORK) copy(error = reason)
-                    else copy(error = reason, claims = emptyList(), detail = null)
+                    else copy(error = reason, claims = emptyList(), detail = null,
+                        selectedClaim = null, caseLoaded = false)
                 }
             } finally {
                 update(version) { copy(busy = false) }
@@ -89,7 +127,12 @@ internal class ClaimStatusViewModel @Inject constructor(private val api: MobileC
     private fun reset(next: ClaimStatusState) {
         generation++
         job?.cancel()
+        caseJob?.cancel()
         mutable.value = next
+    }
+
+    private fun updateCase(version: Long, actor: String, id: String, change: ClaimStatusState.() -> ClaimStatusState) {
+        if (state.value.actor == actor && state.value.selectedId == id) update(version, change)
     }
 
     private fun update(version: Long, change: ClaimStatusState.() -> ClaimStatusState) {

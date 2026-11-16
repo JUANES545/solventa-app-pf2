@@ -1,0 +1,108 @@
+package co.solventa.mobile.feature.policy
+
+import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import co.solventa.mobile.R
+import co.solventa.mobile.core.designsystem.SolventaTheme
+import java.io.File
+import org.junit.Assert.*
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [35], qualifiers = "w360dp-h800dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class PolicyScreenTest {
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+    private val app get() = RuntimeEnvironment.getApplication()
+    private fun text(id: Int) = app.getString(id)
+
+    @Test fun loadingEmptyAndFailuresAreDistinctAndDoNotShowStaleData() {
+        val state = mutableStateOf(PolicyState(busy = true, policies = listOf(policy)))
+        var retries = 0
+        compose.setContent { SolventaTheme(false) { PolicyScreen(state.value, {}, { retries++ }, {}) } }
+        compose.onNodeWithText(text(R.string.policy_loading)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.policy_refresh)).assertIsNotEnabled()
+        compose.onNodeWithText(text(R.string.policy_empty)).assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.policy_auto)).assertDoesNotExist()
+        for (error in PolicyError.entries) {
+            compose.runOnIdle { state.value = state.value.copy(busy = false, error = error) }
+            compose.onNodeWithText(text(policyErrorText(error))).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText(text(R.string.policy_auto)).assertDoesNotExist()
+            compose.onNodeWithText(text(R.string.policy_retry)).performScrollTo().performClick()
+        }
+        compose.runOnIdle { state.value = PolicyState(loaded = true) }
+        compose.onNodeWithText(text(R.string.policy_empty)).performScrollTo().assertIsDisplayed()
+        assertEquals(5, retries)
+    }
+
+    @Test fun listAndDetailUseHonestFieldsThemesLargeTextAndFortyEightDpActions() {
+        val dark = mutableStateOf(false)
+        val scale = mutableStateOf(1f)
+        val state = mutableStateOf(PolicyState(loaded = true, policies = listOf(policy)))
+        var selected: Policy? = null
+        var reported: Policy? = null
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, scale.value)) {
+                SolventaTheme(dark.value) { PolicyScreen(state.value, { selected = it }, {}, {}, { reported = it }) }
+            }
+        }
+        for (theme in listOf(false, true)) {
+            for (fontScale in listOf(1f, 2f)) {
+                compose.runOnIdle {
+                    dark.value = theme
+                    scale.value = fontScale
+                    state.value = PolicyState(loaded = true, policies = listOf(policy))
+                }
+                compose.onNodeWithText(text(R.string.policy_title)).performScrollTo().assertIsDisplayed()
+                    .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
+                capture("list-${if (theme) "dark" else "light"}-$fontScale")
+                compose.onNodeWithText(app.getString(R.string.policy_number, text(R.string.policy_not_available)))
+                    .performScrollTo().assertIsDisplayed()
+                compose.onNodeWithText(app.getString(R.string.policy_coverage, text(R.string.policy_not_available)))
+                    .performScrollTo().assertIsDisplayed()
+                compose.onNodeWithText(policy.id).assertDoesNotExist()
+                compose.onNodeWithText(text(R.string.policy_view_detail)).performScrollTo()
+                    .assertHeightIsAtLeast(48.dp).performClick()
+                assertEquals(policy, selected)
+                compose.runOnIdle { state.value = PolicyState(loaded = true, selectedId = policy.id, detail = policy) }
+                compose.onNodeWithText(text(R.string.policy_detail_title)).performScrollTo().assertIsDisplayed()
+                capture("detail-${if (theme) "dark" else "light"}-$fontScale")
+                compose.onNode(hasText(text(R.string.claim_title)) and hasClickAction()).performScrollTo()
+                    .assertHeightIsAtLeast(48.dp).performClick()
+                assertEquals(policy, reported)
+                capture("detail-action-${if (theme) "dark" else "light"}-$fontScale")
+                for (status in listOf(PolicyStatus.EXPIRED, PolicyStatus.SCHEDULED)) {
+                    compose.runOnIdle { state.value = state.value.copy(detail = policy.copy(status = status)) }
+                    compose.onNodeWithText(text(R.string.policy_report_unavailable)).performScrollTo().assertIsDisplayed()
+                    compose.onNodeWithText(text(R.string.claim_title)).assertDoesNotExist()
+                }
+            }
+        }
+    }
+
+    private fun capture(name: String) = compose.runOnIdle {
+        val view = compose.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        try {
+            view.draw(Canvas(bitmap))
+            val folder = File("build", "reports${File.separator}policy-synthetic-renders").apply { mkdirs() }
+            File(folder, "$name.png").outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        } finally { bitmap.recycle() }
+    }
+}

@@ -3,7 +3,6 @@ package co.solventa.mobile.feature.evidence
 import android.app.Application
 import android.util.Log
 import android.net.Uri
-import co.solventa.mobile.BuildConfig
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -319,10 +318,6 @@ internal class EvidenceViewModel @Inject constructor(
             removeRejected(item)
             return
         }
-        if (item.status == EvidenceStatus.CONFIRMED) {
-            removeDemoConfirmed(checkNotNull(item.remoteId))
-            return
-        }
         if (item.status != EvidenceStatus.PENDING) return
         operation {
             val configuration = current.configuration
@@ -332,18 +327,6 @@ internal class EvidenceViewModel @Inject constructor(
             }
             if (receipt == null) store.removePending(item) else store.confirm(item, receipt)
             update { copy(items = store.list(item.scope)) }
-        }
-    }
-
-    fun removeDemoConfirmed(remoteId: String) {
-        val current = state.value
-        val scope = current.scope ?: return
-        if (BuildConfig.BUILD_TYPE != "mock" || current.busy ||
-            remoteId !in current.confirmedRemoteIds && current.items.none { it.remoteId == remoteId }) return
-        operation {
-            api.removeDemoConfirmed(scope, remoteId)
-            store.list(scope).filter { it.remoteId == remoteId }.forEach(store::removeDemoConfirmed)
-            update { copy(items = store.list(scope), confirmedRemoteIds = confirmedRemoteIds - remoteId) }
         }
     }
 

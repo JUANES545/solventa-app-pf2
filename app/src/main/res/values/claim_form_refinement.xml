@@ -11,5 +11,4 @@
     <string name="claim_location_coordinates">Sin dirección disponible. Revisa las coordenadas.</string>
     <string name="claim_location_address_kept">Sin dirección disponible. Conservamos tu texto.</string>
     <string name="claim_place_hint">Dirección o lugar donde ocurrió</string>
-    <string name="claim_sample_description" translatable="false"></string>
 </resources>

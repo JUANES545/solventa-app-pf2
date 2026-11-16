@@ -1,7 +1,6 @@
 package co.solventa.mobile.feature.claim
 
 import co.solventa.mobile.core.SyncResult
-import co.solventa.mobile.BuildConfig
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -16,7 +15,7 @@ internal enum class ClaimError { REQUIRED, DATE, DESCRIPTION, LENGTH, POLICY, NE
 internal class ClaimProblem(val reason: ClaimError) : Exception()
 internal data class ClaimDraft(
     val policyId: String = "",
-    val date: String = BuildConfig.CLAIM_INITIAL_DATE,
+    val date: String = "",
     val time: String = "",
     val type: String = "",
     val place: String = "",

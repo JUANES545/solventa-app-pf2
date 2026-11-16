@@ -26,12 +26,14 @@ import co.solventa.mobile.feature.claim.ClaimStatusViewModel
 import co.solventa.mobile.feature.notification.AndroidNotificationPresenter
 import co.solventa.mobile.feature.notification.NotificationViewModel
 import co.solventa.mobile.feature.assistance.AssistanceViewModel
+import co.solventa.mobile.feature.policy.PolicyViewModel
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     private val auth by lazy { ViewModelProvider(this)[AuthViewModel::class.java] }
     private val biometrics by lazy { ViewModelProvider(this)[BiometricViewModel::class.java] }
     private val evidence by lazy { ViewModelProvider(this)[EvidenceViewModel::class.java] }
+    private val claimEvidence by lazy { ViewModelProvider(this)["claim-details-evidence", EvidenceViewModel::class.java] }
     private val claims by lazy { ViewModelProvider(this)[ClaimViewModel::class.java] }
     private val claimStatus by lazy { ViewModelProvider(this)[ClaimStatusViewModel::class.java] }
     private val notifications by lazy {
@@ -45,6 +47,7 @@ class MainActivity : FragmentActivity() {
     ) { granted ->
         notifications.permissionResult(granted)
     }
+    private val policies by lazy { ViewModelProvider(this)[PolicyViewModel::class.java] }
     private var signer: AndroidBiometricSigner? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,8 +65,8 @@ class MainActivity : FragmentActivity() {
             PhotoReviewHost(this, auth) { openPhoto, beforeAccessChange ->
                 SolventaApp(auth, if (BuildConfig.BIOMETRIC_LOGIN_ENABLED) biometrics else null, signer,
                     openPhoto, beforeAccessChange, evidence = evidence, claims = claims,
-                    claimStatus = claimStatus, notifications = notifications,
-                    assistance = assistance,
+                    claimStatus = claimStatus, claimEvidence = claimEvidence, notifications = notifications,
+                    assistance = assistance, policies = policies,
                     requestNotificationPermission = ::requestNotificationPermission)
             }
         }

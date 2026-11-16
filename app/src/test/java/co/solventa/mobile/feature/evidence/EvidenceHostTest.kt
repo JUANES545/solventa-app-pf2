@@ -43,6 +43,28 @@ class EvidenceHostTest {
         condition()
     }
 
+    @Test fun returningToEvidenceRefreshesFilesRemovedFromTheCaseDetails() {
+        val app = RuntimeEnvironment.getApplication()
+        val scope = EvidenceScope("actor-a", statusClaim.id)
+        val policy = EvidencePolicy(3, mapOf(EvidenceKind.PHOTO to 1024L), 1000)
+        MockWebServer().use { server ->
+            val model = EvidenceViewModel(app, MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString()))
+            try {
+                compose.runOnUiThread { model.open(scope, policy, setOf(UUID.randomUUID().toString())) }
+                await { !model.state.value.busy }
+                assertEquals(1, model.state.value.confirmedRemoteIds.size)
+                server.enqueue(MockResponse().setBody("""{"evidencias":[]}"""))
+                compose.setContent { EvidenceHost(model) }
+                await { !model.state.value.busy && model.state.value.confirmedRemoteIds.isEmpty() }
+                assertNull(model.state.value.error)
+                assertEquals(1, server.requestCount)
+                assertEquals("/movil/v1/siniestros/${scope.claimId}/evidencias", server.takeRequest().path)
+            } finally {
+                compose.runOnUiThread { androidx.lifecycle.ViewModelStore().apply { put("evidence", model); clear() } }
+            }
+        }
+    }
+
     @Test fun reconnectReconcilesAnAcceptedEvidenceWithoutResendingItsBytes() {
         val app = RuntimeEnvironment.getApplication()
         val visible = mutableStateOf(true)

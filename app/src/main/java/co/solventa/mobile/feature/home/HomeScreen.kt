@@ -103,6 +103,7 @@ internal fun HomeScreen(
     onClaim: (() -> Unit)?,
     onClaimStatus: (() -> Unit)?,
     onEvidence: (() -> Unit)?,
+    onPolicies: (() -> Unit)? = null,
 ) {
     SolventaPage(header = {
         HomeBrand()
@@ -124,10 +125,13 @@ internal fun HomeScreen(
                 Text(stringResource(R.string.claim_title), textAlign = TextAlign.Center)
             }
         }
-        if (onClaimStatus != null || onEvidence != null) {
+        if (onClaimStatus != null || onEvidence != null || onPolicies != null) {
             Text(stringResource(R.string.home_management),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = 8.dp).semantics { heading() })
+            onPolicies?.let {
+                SolventaActionRow(stringResource(R.string.policy_title), onClick = it, enabled = !loading)
+            }
             onClaimStatus?.let {
                 SolventaActionRow(stringResource(R.string.home_status_title),
                     supportingText = stringResource(R.string.home_status_description), onClick = it, enabled = !loading,

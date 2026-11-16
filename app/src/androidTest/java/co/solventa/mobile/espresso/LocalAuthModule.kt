@@ -1,6 +1,7 @@
 package co.solventa.mobile.espresso
 
 import androidx.test.platform.app.InstrumentationRegistry
+import co.solventa.mobile.BuildConfig
 import co.solventa.mobile.feature.auth.AuthModule
 import co.solventa.mobile.feature.auth.AuthRepository
 import co.solventa.mobile.feature.auth.EncryptedAuthStore
@@ -29,6 +30,14 @@ internal fun localBackendUrl(): String {
 object LocalAuthModule {
     @Provides
     @Singleton
-    fun repository(store: EncryptedAuthStore): AuthRepository =
-        AuthRepository(MobileAuthApi(localBackendUrl()), store)
+    fun repository(store: EncryptedAuthStore): AuthRepository {
+        val api = if (BuildConfig.APPLICATION_ID == "co.solventa.mobile.pf2.awstest") {
+            check(InstrumentationRegistry.getArguments().getString("runAwsAcceptance") == "true")
+            check(BuildConfig.AUTH_BASE_URL == "https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1")
+            MobileAuthApi()
+        } else {
+            MobileAuthApi(localBackendUrl())
+        }
+        return AuthRepository(api, store)
+    }
 }

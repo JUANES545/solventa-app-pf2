@@ -26,7 +26,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
-import co.solventa.mobile.BuildConfig
 import co.solventa.mobile.R
 import co.solventa.mobile.feature.claim.claimStatusDate
 import java.io.File
@@ -41,8 +40,7 @@ internal fun evidenceGalleryStatus(item: EvidenceItem): Int = when (item.status)
 }
 
 internal fun evidenceCanRemove(item: EvidenceItem): Boolean =
-    item.status in setOf(EvidenceStatus.PENDING, EvidenceStatus.REJECTED) ||
-        item.status == EvidenceStatus.CONFIRMED && BuildConfig.BUILD_TYPE == "mock"
+    item.status in setOf(EvidenceStatus.PENDING, EvidenceStatus.REJECTED)
 
 private data class GalleryEntry(val id: String, val item: EvidenceItem? = null)
 
@@ -50,16 +48,18 @@ private data class GalleryEntry(val id: String, val item: EvidenceItem? = null)
 internal fun EvidenceGallery(
     state: EvidenceState,
     onRemove: (EvidenceItem) -> Unit,
-    onRemoveRemote: (String) -> Unit,
+    readOnly: Boolean = false,
 ) {
     var selected by remember(state.scope, state.generation) { mutableStateOf<GalleryEntry?>(null) }
-    val entries = state.items.map { GalleryEntry(it.id, it) } +
-        (state.confirmedRemoteIds - state.items.mapNotNull { it.remoteId }.toSet()).map { GalleryEntry(it) }
+    val items = state.items.filter { it.scope == state.scope }
+    val entries = items.map { GalleryEntry(it.id, it) } +
+        (state.confirmedRemoteIds - items.mapNotNull { it.remoteId }.toSet()).map { GalleryEntry(it) }
     Text(stringResource(R.string.evidence_gallery_title), Modifier.semantics { heading() },
         style = MaterialTheme.typography.titleLarge)
     if (entries.isEmpty()) {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.large) {
-            Text(stringResource(R.string.evidence_gallery_empty), Modifier.fillMaxWidth().padding(20.dp))
+            Text(stringResource(if (readOnly) R.string.evidence_gallery_no_reported_files else R.string.evidence_gallery_empty),
+                Modifier.fillMaxWidth().padding(20.dp))
         }
     }
     for (row in entries.chunked(2)) {
@@ -103,11 +103,11 @@ internal fun EvidenceGallery(
         }
     }
     selected?.let { entry ->
-        EvidenceGalleryPreview(entry, onDismiss = { selected = null }, canRemove = !state.busy &&
-            (entry.item?.let(::evidenceCanRemove) ?: (BuildConfig.BUILD_TYPE == "mock")),
+        EvidenceGalleryPreview(entry, onDismiss = { selected = null }, canRemove = !readOnly && !state.busy &&
+            (entry.item?.let(::evidenceCanRemove) == true),
             onRemove = {
                 selected = null
-                entry.item?.let(onRemove) ?: onRemoveRemote(entry.id)
+                entry.item?.let(onRemove)
             })
     }
 }
@@ -155,7 +155,7 @@ private fun EvidenceGalleryPreview(entry: GalleryEntry, onDismiss: () -> Unit, c
                         contentScale = ContentScale.Fit)
                     else -> Box(Modifier.fillMaxWidth().height(180.dp).background(MaterialTheme.colorScheme.surfaceContainerLow),
                         contentAlignment = Alignment.Center) {
-                        Text(stringResource(R.string.evidence_preview_unavailable), Modifier.padding(16.dp))
+                        Text(stringResource(R.string.evidence_gallery_file_unavailable), Modifier.padding(16.dp))
                     }
                 }
                 item?.let {
@@ -179,7 +179,9 @@ private fun EvidenceGalleryPreview(entry: GalleryEntry, onDismiss: () -> Unit, c
         onDismissRequest = { deleting = false },
         title = { Text(stringResource(R.string.evidence_gallery_remove_question)) },
         text = { Text(stringResource(R.string.evidence_gallery_remove_info)) },
-        confirmButton = { TextButton(onClick = onRemove) { Text(stringResource(R.string.evidence_gallery_remove)) } },
+        confirmButton = { TextButton(onClick = onRemove, modifier = Modifier.testTag("evidence-confirm-remove")) {
+            Text(stringResource(R.string.evidence_gallery_remove))
+        } },
         dismissButton = { TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.evidence_gallery_cancel)) } },
     )
 }
@@ -196,5 +198,10 @@ internal fun EvidenceVideoPreview(file: File, onError: () -> Unit = {}) {
     } }
     DisposableEffect(video) { onDispose { video.stopPlayback() } }
     if (failed) Text(stringResource(R.string.evidence_preview_unavailable), Modifier.padding(16.dp))
-    else AndroidView(factory = { video }, modifier = Modifier.fillMaxWidth().height(260.dp))
+    else {
+        AndroidView(factory = { video }, modifier = Modifier.fillMaxWidth().height(260.dp))
+        TextButton(onClick = { video.start() }, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(stringResource(R.string.evidence_gallery_play))
+        }
+    }
 }

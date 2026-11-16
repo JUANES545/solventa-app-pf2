@@ -22,27 +22,38 @@ import org.robolectric.annotation.Config
 class AssistanceScreenTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    @Test fun receiptIsShownOnlyAfterBackendConfirmation() {
+    @Test fun receiptAcknowledgesOnlyTheRegisteredRequestAfterBackendResponse() {
+        val catalogWarning = "El catálogo puede incluir datos de prueba. Registrar una solicitud no confirma atención ni despacho."
         val model = AssistanceViewModel(
             FakeAssistanceGateway(),
             FixedAssistanceLocator(assistanceLocation),
         )
         compose.runOnUiThread {
             model.show("actor-a", UUID.randomUUID().toString())
-            model.locate()
         }
+        compose.setContent { AssistanceScreen(model) }
+        compose.onNodeWithText(catalogWarning).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Confirma dónde necesitas ayuda. Usaremos la ubicación solo para consultar prestadores y registrar esta solicitud.")
+            .performScrollTo().assertIsDisplayed()
+        compose.runOnUiThread { model.locate() }
         compose.waitUntil(10_000) {
             shadowOf(android.os.Looper.getMainLooper()).idle()
             !model.state.value.busy
         }
+        compose.onNodeWithText(catalogWarning).performScrollTo().assertIsDisplayed()
         compose.runOnUiThread { model.select(assistanceProvider) }
-        compose.setContent { AssistanceScreen(model) }
+        compose.onNodeWithText(catalogWarning).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Confirma la solicitud").assertIsDisplayed()
         compose.onNodeWithTag("assistance-receipt-id").assertDoesNotExist()
         compose.onNodeWithTag("assistance-submit").performScrollTo().assertIsDisplayed().performClick()
         compose.waitUntil(10_000) {
             shadowOf(android.os.Looper.getMainLooper()).idle()
             model.state.value.receipt != null
         }
+        compose.onNodeWithText("Solicitud registrada").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("El registro no confirma que se haya avisado a un prestador.")
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Asistencia confirmada").assertDoesNotExist()
         compose.onNodeWithTag("assistance-receipt-id").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("assistance-receipt-status").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(compose.activity.getString(R.string.ui_show_details))

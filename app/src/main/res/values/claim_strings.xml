@@ -3,6 +3,7 @@
     <string name="sync_conflict">Conflicto de sincronización</string>
     <string name="sync_error_conflict">El servidor detectó otros datos para esta operación. Conservamos los datos locales sin sobrescribir los del servidor.</string>
     <string name="claim_title">Reportar un siniestro</string>
+    <string name="claim_camera_evidence_guide">Envía el reporte y continúa en «Agregar evidencias» para capturar el daño y el recibo con la cámara.</string>
     <string name="claim_local_session">Sin conexión al servicio. Puedes consultar tus datos locales y guardar reportes pendientes. Verificaremos la sesión al enviar.</string>
     <string name="claim_back">Volver al inicio</string>
     <string name="claim_policy">Póliza vigente</string>
