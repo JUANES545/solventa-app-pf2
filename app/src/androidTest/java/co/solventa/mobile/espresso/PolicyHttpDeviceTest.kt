@@ -53,8 +53,8 @@ class PolicyHttpDeviceTest {
             val own = policies.list(actor).single { it.id == id }
             assertEquals(PolicyStatus.ACTIVE, own.status)
             assertTrue(own.simulated)
-            assertNull(own.number)
-            assertNull(own.mainCoverage)
+            assertTrue(own.number.isNotBlank())
+            assertTrue(own.mainCoverage.isNotBlank())
             assertEquals(own, policies.detail(actor, id))
             assertEquals(own, policies.detail(actor, id))
             try { policies.detail(actor, config.getString("otherPolicyId")); fail("Foreign policy was exposed") }

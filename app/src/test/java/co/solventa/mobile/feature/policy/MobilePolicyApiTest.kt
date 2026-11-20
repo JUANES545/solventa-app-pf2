@@ -16,23 +16,71 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-internal val policy = Policy("be794f6e-e01d-4d2f-ad25-c9bf118c117a", "b77d84cb-6ed8-490b-bcdd-09d147a79e33",
+internal val policy = Policy("be794f6e-e01d-4d2f-ad25-c9bf118c117a",
     PolicyProduct.AUTO, LocalDate.parse("2026-01-01"), LocalDate.parse("2026-12-31"),
-    PolicyStatus.ACTIVE, true, null, null)
+    PolicyStatus.ACTIVE, true, "POL-20260101-BE794F6E", "Daños y hurto")
 internal fun policyJson(value: Policy = policy) = JSONObject()
-    .put("id", value.id).put("suscripcionId", value.subscriptionId).put("tipo", value.product.code)
-    .put("fechaInicio", value.start.toString()).put("fechaFin", value.end.toString()).put("estado", value.status.code)
-    .put("simulada", value.simulated).put("numero", value.number ?: JSONObject.NULL)
-    .put("coberturaPrincipal", value.mainCoverage ?: JSONObject.NULL)
+    .put("id", value.id).put("suscripcionId", "b77d84cb-6ed8-490b-bcdd-09d147a79e33")
+    .put("producto", JSONObject().put("tipo", value.product.code).put("nombre", "Seguro de Auto"))
+    .put("vigencia", JSONObject().put("inicio", value.start.toString()).put("fin", value.end.toString()))
+    .put("estado", value.status.code).put("simulada", value.simulated).put("numero", value.number)
+    .put("coberturaPrincipal", JSONObject().put("codigo", "danos_hurto").put("nombre", value.mainCoverage))
 internal fun policyList(vararg values: Policy = arrayOf(policy)) =
-    JSONObject().put("polizas", JSONArray(values.map(::policyJson))).toString()
+    JSONObject().put("polizas", JSONArray(values.map { policyJson(it).apply { remove("suscripcionId") } })).toString()
 internal fun policyApi(server: MockWebServer) =
     MobilePolicyApi(MobileEvidenceApi(evidenceAuth(), server.url("/movil/v1").toString()))
+
+// Migue765/backend-solventa@cdc1f849, serializers de consulta.py (producto travel).
+internal fun contractPolicyJson(simulated: Boolean, detail: Boolean) = JSONObject(
+    """{
+        "id":"00000000-0000-0000-0000-000000000001",
+        "numero":"POL-20261119-00000000",
+        "producto":{"tipo":"travel","nombre":"Seguro de Viaje"},
+        "estado":"vigente",
+        "vigencia":{"inicio":"2026-11-19","fin":"2026-11-29"},
+        "coberturaPrincipal":{"codigo":"asistencia_medica","nombre":"Asistencia médica"},
+        "simulada":true
+    }"""
+).put("simulada", simulated).apply {
+    if (detail) {
+        put("suscripcionId", "00000000-0000-0000-0000-000000000002")
+        put("emitidaEn", "2026-11-19T12:00:00+00:00")
+        put("version", JSONObject.NULL)
+        put("plan", JSONObject.NULL)
+        put("coberturas", JSONArray("""[{"codigo":"asistencia_medica","nombre":"Asistencia médica",
+            "descripcion":"Atención por accidente o enfermedad durante el viaje.","opcional":false,"incluida":true}]"""))
+        put("prima", JSONObject.NULL)
+        put("condiciones", JSONArray("""["La cobertura aplica durante las fechas y destinos informados."]"""))
+        put("consultadaEn", "2026-11-20T12:00:00+00:00")
+    }
+}
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
 class MobilePolicyApiTest {
-    @Test fun contractUsesAuthenticatedReadOnlyRequestsAndDoesNotInventMissingFields() = runBlocking {
+    @Test fun currentBffSummaryAndFullDetailAcceptBothSimulationFlagsWithoutChangingFields() = runBlocking {
+        MockWebServer().use { server ->
+            val api = policyApi(server)
+            for (simulated in listOf(true, false)) {
+                val summary = contractPolicyJson(simulated, detail = false)
+                assertFalse(summary.has("suscripcionId"))
+                server.enqueue(MockResponse().setBody(JSONObject().put("polizas", JSONArray().put(summary)).toString()))
+                val listed = api.list("actor-a").single()
+                assertEquals("00000000-0000-0000-0000-000000000001", listed.id)
+                assertEquals("POL-20261119-00000000", listed.number)
+                assertEquals("Asistencia médica", listed.mainCoverage)
+                assertEquals(LocalDate.of(2026, 11, 19), listed.start)
+                assertEquals(LocalDate.of(2026, 11, 29), listed.end)
+                assertEquals(PolicyProduct.TRAVEL, listed.product)
+                assertEquals(PolicyStatus.ACTIVE, listed.status)
+                assertEquals(simulated, listed.simulated)
+                server.enqueue(MockResponse().setBody(contractPolicyJson(simulated, detail = true).toString()))
+                assertEquals(listed, api.detail("actor-a", listed.id))
+            }
+        }
+    }
+
+    @Test fun contractUsesAuthenticatedReadOnlyRequestsForEveryProductAndStatus() = runBlocking {
         MockWebServer().use { server ->
             val api = policyApi(server)
             val all = PolicyProduct.entries.mapIndexed { i, product ->
@@ -52,8 +100,6 @@ class MobilePolicyApiTest {
                 assertNotNull(request.getHeader("Authorization"))
                 assertNull(request.getHeader("Idempotency-Key"))
                 assertEquals(0, request.body.size)
-                assertNull(item.number)
-                assertNull(item.mainCoverage)
             }
             server.enqueue(MockResponse().setBody(policyList(*emptyArray())))
             assertTrue(api.list("actor-a").isEmpty())
@@ -67,13 +113,20 @@ class MobilePolicyApiTest {
                 policyJson().put("id", UUID.randomUUID().toString()),
                 policyJson().put("suscripcionId", "../otro"),
                 policyJson().put("estado", "cancelada"),
-                policyJson().put("tipo", "otro"),
+                policyJson().apply { getJSONObject("producto").put("tipo", "otro") },
                 policyJson().put("simulada", "true"),
-                policyJson().put("simulada", false),
-                policyJson().put("fechaInicio", "2026-02-30"),
-                policyJson().put("fechaFin", "2025-12-31"),
+                policyJson().apply { remove("simulada") },
+                policyJson().apply { getJSONObject("vigencia").put("inicio", "2026-02-30") },
+                policyJson().apply { getJSONObject("vigencia").put("fin", "2025-12-31") },
                 policyJson().put("numero", 123),
                 policyJson().put("coberturaPrincipal", JSONObject()),
+                policyJson().put("coberturaPrincipal", "Daños y hurto"),
+                policyJson().put("coberturaPrincipal", JSONObject.NULL),
+                policyJson().apply { getJSONObject("coberturaPrincipal").put("codigo", " ") },
+                policyJson().apply { getJSONObject("coberturaPrincipal").put("nombre", 123) },
+                policyJson().apply { getJSONObject("producto").remove("nombre") },
+                policyJson().apply { remove("suscripcionId") },
+                policyJson().put("numero", JSONObject.NULL),
                 policyJson().apply { remove("numero") },
                 policyJson().put("numero", " "),
             )

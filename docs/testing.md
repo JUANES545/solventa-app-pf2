@@ -403,20 +403,33 @@ y los roles del tema nativo, con controles de al menos 48 dp y texto que envuelv
 No se cambió el tema global. No se pudieron inspeccionar los adjuntos Jira
 10054/10053; no se afirma fidelidad a esos mocks.
 
-Contrato SOL-316 consumido:
+Contrato de consulta contrastado con `Migue765/backend-solventa@cdc1f849`
+(`contracts/openapi/bff-movil-v1.yaml:532–645` y serializers de `consulta.py`):
 
 - `GET /movil/v1/polizas`: `{"polizas":[...]}`.
 - `GET /movil/v1/polizas/{id}`: objeto directo, con UUID idéntico al solicitado.
-- Campos: `id`, `suscripcionId`, `tipo`, `fechaInicio`, `fechaFin`, `estado`,
-  `simulada`, `numero` y `coberturaPrincipal`.
+- Resumen: `id`, `numero`, `producto{tipo,nombre}`, `estado`,
+  `vigencia{inicio,fin}`, `coberturaPrincipal{codigo,nombre}` y `simulada`.
+  No requiere `suscripcionId`; este UUID solo se valida al consultar detalle.
+  Número y cobertura son obligatorios, no nulos: no se sustituyen por UUID ni
+  textos inventados. El modelo móvil conserva únicamente los campos utilizados.
 - Tipos: `automotive`, `travel`, `life`, `device-protection`, `parametric`,
   `parametric-weather`, `payment-protection`, `mortgage-life`. Estados:
   `programada`, `vigente`, `vencida`. La interfaz traduce los valores.
-- El dominio actual devuelve `simulada: true`, `numero: null` y
-  `coberturaPrincipal: null`. La pantalla dice «Póliza simulada» y
-  «No disponible»; no presenta el UUID como número ni inventa coberturas.
+- El dominio actual devuelve `simulada: true`, un número visible y cobertura.
+  Android acepta ambos booleanos para compatibilidad futura, sin alterar su valor;
+  para `true` conserva «Póliza simulada». Esto no habilita emisión real backend.
+  Lista y detalle muestran número, cobertura y vigencia recibidos. Los fixtures
+  exactos del serializer `travel`, incluidos los nulos de versión/plan/prima del
+  detalle, comprueban presentación con `true` y `false`.
 - `404 poliza_no_encontrada` representa tanto una póliza ajena como inexistente.
   `401/403`, transporte/503 y protocolo inválido tienen estados propios.
+
+La referencia web Inicio → Pólizas → Detalle se inspeccionó para conservar
+jerarquía producto/estado/vigencia y navegación hacia reportar, sin copiar datos
+demo ni rediseñar Android. Jira no estuvo accesible: no se contrastaron criterios
+de aceptación ni se modificaron historias. Offline, renovación y modificación
+(SOL-190/191/192), KYC, push y biometría quedan fuera del refinamiento.
 
 Las consultas reutilizan la sesión verificada y HTTP `no-store`. No hay una
 billetera local ni persistencia de lista/detalle. Refresh, pausa, cierre y
