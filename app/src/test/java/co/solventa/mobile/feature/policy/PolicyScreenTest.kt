@@ -15,6 +15,11 @@ import androidx.compose.ui.unit.dp
 import co.solventa.mobile.R
 import co.solventa.mobile.core.designsystem.SolventaTheme
 import java.io.File
+import kotlinx.coroutines.runBlocking
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -31,6 +36,37 @@ class PolicyScreenTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val app get() = RuntimeEnvironment.getApplication()
     private fun text(id: Int) = app.getString(id)
+
+    @Test fun contractNumberCoverageAndValidityAreVisibleInSummaryAndDetailForBothSimulationFlags() = runBlocking {
+        val state = mutableStateOf(PolicyState(loaded = true))
+        compose.setContent { SolventaTheme(false) { PolicyScreen(state.value, {}, {}, {}) } }
+        MockWebServer().use { server ->
+            val api = policyApi(server)
+            for (simulated in listOf(true, false)) {
+                server.enqueue(MockResponse().setBody(JSONObject().put("polizas",
+                    JSONArray().put(contractPolicyJson(simulated, detail = false))).toString()))
+                val listed = api.list("actor-a").single()
+                server.enqueue(MockResponse().setBody(contractPolicyJson(simulated, detail = true).toString()))
+                val detail = api.detail("actor-a", listed.id)
+                for (selected in listOf(false, true)) {
+                    compose.runOnIdle {
+                        state.value = if (selected) PolicyState(loaded = true, selectedId = detail.id, detail = detail)
+                        else PolicyState(loaded = true, policies = listOf(listed))
+                    }
+                    compose.onNodeWithText(text(R.string.policy_travel)).performScrollTo().assertIsDisplayed()
+                    compose.onNodeWithText(app.getString(R.string.policy_number, "POL-20261119-00000000"))
+                        .performScrollTo().assertIsDisplayed()
+                    compose.onNodeWithText(app.getString(R.string.policy_coverage, "Asistencia médica"))
+                        .performScrollTo().assertIsDisplayed()
+                    compose.onNodeWithText(app.getString(R.string.policy_validity, "19/11/2026", "29/11/2026"))
+                        .performScrollTo().assertIsDisplayed()
+                    if (simulated) compose.onNodeWithText(text(R.string.policy_simulated)).performScrollTo().assertIsDisplayed()
+                    else compose.onNodeWithText(text(R.string.policy_simulated)).assertDoesNotExist()
+                    compose.onNodeWithText(text(R.string.policy_not_available), substring = true).assertDoesNotExist()
+                }
+            }
+        }
+    }
 
     @Test fun loadingEmptyAndFailuresAreDistinctAndDoNotShowStaleData() {
         val state = mutableStateOf(PolicyState(busy = true, policies = listOf(policy)))
@@ -72,9 +108,9 @@ class PolicyScreenTest {
                 compose.onNodeWithText(text(R.string.policy_title)).performScrollTo().assertIsDisplayed()
                     .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
                 capture("list-${if (theme) "dark" else "light"}-$fontScale")
-                compose.onNodeWithText(app.getString(R.string.policy_number, text(R.string.policy_not_available)))
+                compose.onNodeWithText(app.getString(R.string.policy_number, policy.number))
                     .performScrollTo().assertIsDisplayed()
-                compose.onNodeWithText(app.getString(R.string.policy_coverage, text(R.string.policy_not_available)))
+                compose.onNodeWithText(app.getString(R.string.policy_coverage, policy.mainCoverage))
                     .performScrollTo().assertIsDisplayed()
                 compose.onNodeWithText(policy.id).assertDoesNotExist()
                 compose.onNodeWithText(text(R.string.policy_view_detail)).performScrollTo()
