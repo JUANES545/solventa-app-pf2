@@ -36,7 +36,8 @@ import co.solventa.mobile.core.designsystem.SolventaLayout
 @Composable
 fun AccountScreen(user: AuthUser, loading: Boolean, onLogout: () -> Unit, biometricContent: (@Composable () -> Unit)? = null,
     onEvidence: (() -> Unit)? = null, onClaim: (() -> Unit)? = null, offline: Boolean = false,
-    onClaimStatus: (() -> Unit)? = null, onNotifications: (() -> Unit)? = null) {
+    onClaimStatus: (() -> Unit)? = null, onNotifications: (() -> Unit)? = null,
+    onIdentity: (() -> Unit)? = null) {
     var signingOut by remember { mutableStateOf(false) }
     SolventaPage(header = {
             SolventaBrandHeader()
@@ -69,6 +70,12 @@ fun AccountScreen(user: AuthUser, loading: Boolean, onLogout: () -> Unit, biomet
             Text(stringResource(R.string.account_security_body), color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (offline) Text(stringResource(R.string.claim_local_session), color = MaterialTheme.colorScheme.onSurfaceVariant)
             biometricContent?.invoke()
+            onIdentity?.let {
+                Button(onClick = it, enabled = !loading,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                    Text(stringResource(R.string.identity_title))
+                }
+            }
             onNotifications?.let {
                 Button(onClick = it, enabled = !loading,
                     modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {

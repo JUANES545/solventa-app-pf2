@@ -14,6 +14,8 @@ import androidx.compose.ui.unit.dp
 import co.solventa.mobile.core.designsystem.SolventaTheme
 import co.solventa.mobile.feature.auth.*
 import co.solventa.mobile.feature.home.*
+import co.solventa.mobile.feature.identity.*
+import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -103,7 +105,13 @@ class HomeNavigationTest {
             override fun clear() { stored = null }
         }
         val auth = AuthViewModel(AuthRepository(api, store))
-        compose.setContent { SolventaApp(auth) }
+        val identityApi = object : IdentityApi {
+            override suspend fun start(actor: String) = pendingIdentity
+            override suspend fun current(actor: String, id: String) = pendingIdentity
+            override suspend fun submit(actor: String, id: String, attemptId: String) = approvedIdentity
+        }
+        val identity = IdentityViewModel(identityApi, MemoryIdentityAttempts(), Dispatchers.Unconfined)
+        compose.setContent { SolventaApp(auth, identity = identity) }
         compose.runOnIdle { auth.restore() }
         compose.waitUntil(5_000) {
             shadowOf(Looper.getMainLooper()).idle()
@@ -113,6 +121,11 @@ class HomeNavigationTest {
         compose.onNodeWithText(user.email).assertDoesNotExist()
         compose.onNodeWithContentDescription("Mi cuenta").performClick().assertIsSelected()
         compose.onNodeWithText(user.email).assertIsDisplayed()
+        compose.onNodeWithText("Verificación de identidad simulada").performScrollTo().performClick()
+        compose.onNodeWithText("Pendiente de demostración").performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithContentDescription("Mi cuenta").assertIsSelected()
+        assertFalse(identity.state.value.open)
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithContentDescription("Inicio").assertIsSelected()
         assertNotNull(auth.state.value.user)
@@ -125,5 +138,7 @@ class HomeNavigationTest {
         compose.onNodeWithText(user.email).assertDoesNotExist()
         compose.onNodeWithContentDescription("Mi cuenta").assertDoesNotExist()
         compose.onNodeWithText("Inicia sesión").assertIsDisplayed()
+        assertNull(identity.state.value.actor)
+        assertNull(identity.state.value.verification)
     }
 }

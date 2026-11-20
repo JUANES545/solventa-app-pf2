@@ -1,5 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="identity_title">Verificación de identidad simulada</string>
+    <string name="identity_back">Volver a Cuenta</string>
+    <string name="identity_disclaimer">Demostración académica: no verifica tu identidad real ni realiza una prueba de vida real.</string>
+    <string name="identity_fixtures">Se usan un documento y una selfie SINTÉTICOS DE PRUEBA. No tomamos ni enviamos fotos reales. El servidor decide el resultado simulado.</string>
+    <string name="identity_loading">Consultando la verificación simulada…</string>
+    <string name="identity_pending">Pendiente de demostración</string>
+    <string name="identity_approved">Demostración aprobada (simulada)</string>
+    <string name="identity_rejected">Demostración rechazada (simulada)</string>
+    <string name="identity_attempts">Intentos usados: %1$d de %2$d</string>
+    <string name="identity_submit">Enviar referencias de prueba</string>
+    <string name="identity_retry">Reintentar con referencias de prueba</string>
+    <string name="identity_refresh">Consultar / recuperar estado</string>
+    <string name="identity_document_rejected">Resultado ficticio: documento de prueba no válido.</string>
+    <string name="identity_liveness_rejected">Resultado ficticio: prueba de vida simulada no válida.</string>
+    <string name="identity_exhausted">Se agotaron los intentos de esta demostración. Cerrar sesión o reiniciar no restablece el cupo.</string>
+    <string name="identity_network">No pudimos confirmar el resultado. Consulta o recupera el estado: se conservará la misma clave de intento, sin duplicarlo.</string>
+    <string name="identity_session">Tu sesión no permite continuar. Vuelve a ingresar.</string>
+    <string name="identity_denied">Tu cuenta no tiene permiso para esta demostración.</string>
+    <string name="identity_not_found">La verificación no existe o no pertenece a esta cuenta.</string>
+    <string name="identity_conflict">El servidor rechazó la operación por un conflicto. Consulta el estado; no se ha aprobado nada localmente.</string>
+    <string name="identity_unavailable">La demostración está deshabilitada o no disponible. Intenta más tarde. No se ha aprobado ninguna verificación.</string>
+    <string name="identity_protocol">No pudimos validar la respuesta del servicio. No se ha confirmado ningún resultado.</string>
+    <string name="identity_storage">No pudimos guardar o recuperar la clave del intento. No iniciaremos otro para evitar duplicados.</string>
     <string name="app_name" translatable="false">Solventa</string>
     <string name="login_title">Inicia sesión</string>
     <string name="email">Correo electrónico</string>
