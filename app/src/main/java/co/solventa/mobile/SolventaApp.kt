@@ -48,6 +48,8 @@ import co.solventa.mobile.feature.assistance.AssistanceHost
 import co.solventa.mobile.feature.assistance.AssistanceViewModel
 import co.solventa.mobile.feature.policy.PolicyViewModel
 import co.solventa.mobile.feature.policy.PolicyHost
+import co.solventa.mobile.feature.identity.IdentityHost
+import co.solventa.mobile.feature.identity.IdentityViewModel
 
 @Composable
 internal fun SolventaApp(
@@ -65,6 +67,7 @@ internal fun SolventaApp(
     assistance: AssistanceViewModel? = null,
     requestNotificationPermission: () -> Unit = {},
     policies: PolicyViewModel? = null,
+    identity: IdentityViewModel? = null,
 ) {
     SolventaTheme(darkTheme) {
         CompositionLocalProvider(LocalAccessBackgroundState provides rememberAccessBackgroundState()) {
@@ -81,6 +84,7 @@ internal fun SolventaApp(
             val notificationState = notifications?.state?.collectAsState()?.value
             val assistanceState = assistance?.state?.collectAsState()?.value
             val policyState = policies?.state?.collectAsState()?.value
+            val identityState = identity?.state?.collectAsState()?.value
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             DisposableEffect(auth, lifecycle) {
                 val observer = LifecycleEventObserver { _, event ->
@@ -107,6 +111,7 @@ internal fun SolventaApp(
                 }
             }
             LaunchedEffect(user?.id) { policies?.bindActor(user?.id) }
+            LaunchedEffect(user?.id) { identity?.bindActor(user?.id) }
             LaunchedEffect(state.screen) {
                 if (state.screen == AccessScreen.REGISTER_PHOTOS) onPhotoReview?.invoke()
             }
@@ -148,6 +153,8 @@ internal fun SolventaApp(
                         onCancel = { beforeAccessChange(); auth.cancelRegistrationPhotos() })
                     AccessScreen.REGISTERED -> RegistrationSuccessScreen(state.email, onSignIn = auth::showLogin)
                 }
+            } else if (identity != null && identityState?.open == true && identityState.actor == user.id) {
+                IdentityHost(identity)
             } else if (claimStatus != null && claimStatusState?.open == true && claimStatusState.actor == user.id) {
                 ClaimStatusHost(claimStatus, claimEvidence)
             } else if (
@@ -212,6 +219,7 @@ internal fun SolventaApp(
                         AccountScreen(user, state.loading || biometricState?.busy == true,
                     {
                         beforeAccessChange()
+                        identity?.bindActor(null)
                         policies?.bindActor(null)
                         claims?.bindActor(null)
                         claimStatus?.bindActor(null)
@@ -224,7 +232,7 @@ internal fun SolventaApp(
                             { biometrics.enroll(it, device) }, biometrics::loadCredentials,
                             { biometrics.revoke(it, device) })
                         }
-                    }, offline = state.offline)
+                    }, offline = state.offline, onIdentity = identity?.let { { it.show(user.id) } })
                     } else {
                         HomeScreen(user, state.loading, state.offline,
                             onClaim = claims?.let { { it.show(user.id) } },

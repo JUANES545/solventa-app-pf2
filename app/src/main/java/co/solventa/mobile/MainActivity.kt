@@ -27,6 +27,7 @@ import co.solventa.mobile.feature.notification.AndroidNotificationPresenter
 import co.solventa.mobile.feature.notification.NotificationViewModel
 import co.solventa.mobile.feature.assistance.AssistanceViewModel
 import co.solventa.mobile.feature.policy.PolicyViewModel
+import co.solventa.mobile.feature.identity.IdentityViewModel
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -48,6 +49,7 @@ class MainActivity : FragmentActivity() {
         notifications.permissionResult(granted)
     }
     private val policies by lazy { ViewModelProvider(this)[PolicyViewModel::class.java] }
+    private val identity by lazy { ViewModelProvider(this)[IdentityViewModel::class.java] }
     private var signer: AndroidBiometricSigner? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,7 +68,7 @@ class MainActivity : FragmentActivity() {
                 SolventaApp(auth, if (BuildConfig.BIOMETRIC_LOGIN_ENABLED) biometrics else null, signer,
                     openPhoto, beforeAccessChange, evidence = evidence, claims = claims,
                     claimStatus = claimStatus, claimEvidence = claimEvidence, notifications = notifications,
-                    assistance = assistance, policies = policies,
+                    assistance = assistance, policies = policies, identity = identity,
                     requestNotificationPermission = ::requestNotificationPermission)
             }
         }
