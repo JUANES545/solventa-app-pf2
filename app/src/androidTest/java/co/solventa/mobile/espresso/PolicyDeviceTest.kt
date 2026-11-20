@@ -37,9 +37,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-private val syntheticPolicy = Policy("be794f6e-e01d-4d2f-ad25-c9bf118c117a", "b77d84cb-6ed8-490b-bcdd-09d147a79e33",
+private val syntheticPolicy = Policy("be794f6e-e01d-4d2f-ad25-c9bf118c117a",
     PolicyProduct.AUTO, LocalDate.parse("2026-01-01"), LocalDate.parse("2026-12-31"),
-    PolicyStatus.ACTIVE, true, null, null)
+    PolicyStatus.ACTIVE, true, "POL-20260101-BE794F6E", "Daños y hurto")
 
 @ClaimDeviceE2e
 @RunWith(AndroidJUnit4::class)
@@ -61,16 +61,19 @@ class PolicyDeviceTest {
         try {
             MockWebServer().use { server ->
                 var mutations = 0
-                val data = JSONObject().put("id", syntheticPolicy.id).put("suscripcionId", syntheticPolicy.subscriptionId)
-                    .put("tipo", "automotive").put("fechaInicio", "2026-01-01").put("fechaFin", "2026-12-31")
+                val data = JSONObject().put("id", syntheticPolicy.id)
+                    .put("producto", JSONObject().put("tipo", "automotive").put("nombre", "Seguro de Auto"))
+                    .put("vigencia", JSONObject().put("inicio", "2026-01-01").put("fin", "2026-12-31"))
                     .put("estado", "vigente").put("simulada", true)
-                    .put("numero", JSONObject.NULL).put("coberturaPrincipal", JSONObject.NULL).toString()
+                    .put("numero", syntheticPolicy.number)
+                    .put("coberturaPrincipal", JSONObject().put("codigo", "danos_hurto").put("nombre", syntheticPolicy.mainCoverage))
+                val detail = JSONObject(data.toString()).put("suscripcionId", "b77d84cb-6ed8-490b-bcdd-09d147a79e33")
                 server.dispatcher = object : Dispatcher() {
                     override fun dispatch(request: RecordedRequest): MockResponse {
                         if (request.method != "GET") { mutations++; return MockResponse().setResponseCode(500) }
                         return when (request.path) {
                             "/movil/v1/polizas" -> MockResponse().setBody("""{"polizas":[$data]}""")
-                            "/movil/v1/polizas/${syntheticPolicy.id}" -> MockResponse().setBody(data)
+                            "/movil/v1/polizas/${syntheticPolicy.id}" -> MockResponse().setBody(detail.toString())
                             else -> MockResponse().setResponseCode(404)
                         }
                     }

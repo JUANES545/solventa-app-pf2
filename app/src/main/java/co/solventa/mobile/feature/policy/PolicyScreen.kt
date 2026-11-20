@@ -149,11 +149,11 @@ internal fun PolicyScreen(
 private fun PolicyContent(policy: Policy) {
     Text(stringResource(policyProductText(policy.product)), Modifier.semantics { heading() },
         style = MaterialTheme.typography.titleLarge)
-    Text(stringResource(R.string.policy_number, policy.number ?: stringResource(R.string.policy_not_available)))
+    Text(stringResource(R.string.policy_number, policy.number))
     Text(stringResource(R.string.policy_status, stringResource(policyStatusText(policy.status))))
     val dates = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.forLanguageTag("es-CO"))
     Text(stringResource(R.string.policy_validity, dates.format(policy.start), dates.format(policy.end)))
-    Text(stringResource(R.string.policy_coverage, policy.mainCoverage ?: stringResource(R.string.policy_not_available)))
+    Text(stringResource(R.string.policy_coverage, policy.mainCoverage))
     if (policy.simulated) Text(stringResource(R.string.policy_simulated), color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 

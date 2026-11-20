@@ -19,14 +19,13 @@ internal enum class PolicyProduct(val code: String) {
 
 internal data class Policy(
     val id: String,
-    val subscriptionId: String,
     val product: PolicyProduct,
     val start: LocalDate,
     val end: LocalDate,
     val status: PolicyStatus,
     val simulated: Boolean,
-    val number: String?,
-    val mainCoverage: String?,
+    val number: String,
+    val mainCoverage: String,
 ) {
     fun claimPolicy() = ClaimPolicy(id, product.code, start, end)
 }
@@ -40,24 +39,29 @@ internal class MobilePolicyApi @Inject constructor(private val http: MobileEvide
     }
 
     suspend fun detail(actor: String, id: String): Policy = http.session(actor) { grant ->
-        parse(http.request("GET", "/polizas/${claimUuid(id)}", grant.accessToken)).also {
+        parse(http.request("GET", "/polizas/${claimUuid(id)}", grant.accessToken), detail = true).also {
             require(it.id == id)
         }
     }
 
-    private fun parse(data: JSONObject): Policy {
-        fun text(key: String) = requireNotNull(data.get(key) as? String).also { require(it.isNotBlank()) }
-        fun nullableText(key: String): String? =
-            if (data.get(key) == JSONObject.NULL) null else text(key)
-        val start = LocalDate.parse(text("fechaInicio"))
-        val end = LocalDate.parse(text("fechaFin"))
+    private fun parse(data: JSONObject, detail: Boolean = false): Policy {
+        fun JSONObject.text(key: String) =
+            requireNotNull(get(key) as? String).also { require(it.isNotBlank()) }
+        val product = data.getJSONObject("producto")
+        val validity = data.getJSONObject("vigencia")
+        val coverage = data.getJSONObject("coberturaPrincipal")
+        product.text("nombre")
+        coverage.text("codigo")
+        if (detail) claimUuid(data.text("suscripcionId"))
+        val start = LocalDate.parse(validity.text("inicio"))
+        val end = LocalDate.parse(validity.text("fin"))
         require(!end.isBefore(start))
         return Policy(
-            claimUuid(text("id")), claimUuid(text("suscripcionId")),
-            requireNotNull(PolicyProduct.entries.find { it.code == text("tipo") }),
-            start, end, requireNotNull(PolicyStatus.entries.find { it.code == text("estado") }),
-            requireNotNull(data.get("simulada") as? Boolean).also { require(it) },
-            nullableText("numero"), nullableText("coberturaPrincipal"),
+            claimUuid(data.text("id")),
+            requireNotNull(PolicyProduct.entries.find { it.code == product.text("tipo") }),
+            start, end, requireNotNull(PolicyStatus.entries.find { it.code == data.text("estado") }),
+            requireNotNull(data.get("simulada") as? Boolean),
+            data.text("numero"), coverage.text("nombre"),
         )
     }
 }
