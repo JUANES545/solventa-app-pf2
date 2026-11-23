@@ -27,7 +27,7 @@ solo representa una respuesta valida sin elementos. El contrato de referencia
 vive en `contracts/openapi` del repositorio backend: `bff-movil-v1.yaml`,
 `siniestros-v1.yaml`, `asistencias-v1.yaml` y `notificaciones-v1.yaml`.
 
-El registro de cuenta usa `POST /usuarios`, pero la revision de documento y
+El registro de cuenta usa `POST /usuarios`, pero la revisión de documento y
 selfie es un paso local separado. `PhotoReviewViewModel` elimina las capturas
 temporales al aceptarlas o salir y no tiene dependencia de red. La pantalla
 informa este limite y conserva el consentimiento existente. No confundas ese
