@@ -23,6 +23,12 @@ internal class MobileNotificationApi internal constructor(
 ) : NotificationApi {
     @Inject constructor(auth: AuthRepository) : this(auth, BuildConfig.AUTH_BASE_URL)
 
+    override suspend fun confirmedPaymentClaim(actor: String, paymentId: String): String = session(actor) { grant ->
+        val data = request("GET", "/pagos-parametricos/${uuid(paymentId)}", grant.accessToken)
+        require(data.get("id") == paymentId && data.get("estado") == "confirmado" && data.get("simulado") == true)
+        uuid(data.getString("siniestroId"))
+    }
+
     override suspend fun notifications(actor: String): List<MobileNotification> =
         session(actor) { grant ->
             val entries = request("GET", "/notificaciones", grant.accessToken)

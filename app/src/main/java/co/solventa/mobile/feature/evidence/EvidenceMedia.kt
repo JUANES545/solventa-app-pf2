@@ -70,7 +70,7 @@ internal class EvidenceMedia(cacheDirectory: File) {
         if (!file.isFile || file.length() !in 1..(policy.maxBytes[kind] ?: 0)) throw EvidenceProblem(EvidenceError.SIZE)
         if (kind != EvidenceKind.VIDEO) {
             policy.validate(kind, file.length())
-            return EvidencePreview(image(file, 1600))
+            return EvidencePreview(if (kind == EvidenceKind.PDF) pdfPage(file,0).first else image(file, 1600))
         }
         try {
             val retriever = MediaMetadataRetriever()
@@ -187,11 +187,11 @@ internal class EvidenceMedia(cacheDirectory: File) {
         }
     }
 
-    internal fun image(file: File, maxEdge: Int): Bitmap {
+    internal fun image(file: File, maxEdge: Int, allowPng: Boolean = false): Bitmap {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         file.inputStream().use { BitmapFactory.decodeStream(it, null, bounds) }
         // Bound native allocations independently of the server's byte limit.
-        if (bounds.outMimeType != "image/jpeg" || bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
+        if ((bounds.outMimeType != "image/jpeg" && !(allowPng && bounds.outMimeType == "image/png")) || bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
             bounds.outWidth.toLong() * bounds.outHeight > 16_000_000) throw EvidenceProblem(EvidenceError.FORMAT)
         val options = BitmapFactory.Options().apply { inSampleSize = 1 }
         if (maxEdge > 0) while (maxOf(bounds.outWidth, bounds.outHeight) / options.inSampleSize > maxEdge) options.inSampleSize *= 2

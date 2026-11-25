@@ -19,10 +19,8 @@ import co.solventa.mobile.core.ui.SolventaPage
 import co.solventa.mobile.core.ui.SolventaActionRow
 import co.solventa.mobile.feature.auth.AuthUser
 import androidx.compose.foundation.Canvas
-import androidx.compose.ui.graphics.Path
+import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 
 internal enum class HomeDestination(val label: Int, val icon: Int) {
@@ -104,13 +102,37 @@ internal fun HomeScreen(
     onClaimStatus: (() -> Unit)?,
     onEvidence: (() -> Unit)?,
     onPolicies: (() -> Unit)? = null,
+    onTravel: (() -> Unit)? = null,
 ) {
     SolventaPage(header = {
-        HomeBrand()
+        SolventaBrandHeader()
     }) {
-        Text(stringResource(R.string.session_greeting, user.name),
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics { heading() })
+        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.primaryContainer) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.session_greeting, user.name), Modifier.weight(1f).semantics { heading() },
+                        style = MaterialTheme.typography.headlineSmall)
+                    val motion = co.solventa.mobile.core.ui.LocalAccessBackgroundState.current
+                    val orbit = if (motion?.resumed == true && motion.durationScale > 0f)
+                        rememberInfiniteTransition(label="Órbita").animateFloat(0f, 1f,
+                            infiniteRepeatable(tween(4200, easing=LinearEasing)),label="Punto") else null
+                    val accent = MaterialTheme.colorScheme.primary
+                    val orbitSize = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * .102f)
+                        .coerceIn(64f, 88f).dp
+                    Box(Modifier.size(orbitSize), contentAlignment = Alignment.Center) {
+                        co.solventa.mobile.core.ui.SolventaBrandMark(orbitSize * .84f)
+                        Canvas(Modifier.fillMaxSize()) {
+                            drawOval(accent.copy(alpha=.35f), topLeft=androidx.compose.ui.geometry.Offset(1.dp.toPx(), size.height*.22f),
+                                size=androidx.compose.ui.geometry.Size(size.width-2.dp.toPx(), size.height*.56f), style=Stroke(1.dp.toPx()))
+                            val angle = ((orbit?.value ?: 0f) * 2 * Math.PI + Math.PI * .32)
+                            drawCircle(accent, 3.dp.toPx(), androidx.compose.ui.geometry.Offset(center.x+(Math.cos(angle)*size.width*.48).toFloat(),
+                                center.y+(Math.sin(angle)*size.height*.28).toFloat()))
+                        }
+                    }
+                }
+                Text(stringResource(R.string.home_reassurance_body), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
         if (offline) {
             Surface(color = MaterialTheme.colorScheme.secondaryContainer,
                 shape = MaterialTheme.shapes.medium) {
@@ -125,19 +147,20 @@ internal fun HomeScreen(
                 Text(stringResource(R.string.claim_title), textAlign = TextAlign.Center)
             }
         }
+        onTravel?.let { OutlinedButton(onClick=it, enabled=!loading, modifier=Modifier.fillMaxWidth().heightIn(min=SolventaLayout.controlHeight),
+            shape=SolventaLayout.controlShape) { Text(stringResource(R.string.catalog_quote)) } }
         if (onClaimStatus != null || onEvidence != null || onPolicies != null) {
             Text(stringResource(R.string.home_management),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = 8.dp).semantics { heading() })
             onPolicies?.let {
-                SolventaActionRow(stringResource(R.string.policy_title), onClick = it, enabled = !loading)
+                SolventaActionRow(stringResource(R.string.policy_title), onClick = it, enabled = !loading, icon=R.drawable.ic_policy_wallet)
             }
             onClaimStatus?.let {
-                SolventaActionRow(stringResource(R.string.home_status_title),
-                    supportingText = stringResource(R.string.home_status_description), onClick = it, enabled = !loading,
+                SolventaActionRow(stringResource(R.string.home_my_claims), onClick = it, enabled = !loading,
                     icon = R.drawable.ic_claim_status)
             }
-            onEvidence?.let {
+            onEvidence?.takeIf { onClaimStatus == null }?.let {
                 SolventaActionRow(stringResource(R.string.home_evidence_title),
                     supportingText = stringResource(R.string.home_evidence_description), onClick = it, enabled = !loading,
                     icon = R.drawable.ic_evidence)
@@ -151,24 +174,5 @@ internal fun HomeScreen(
                 Text(stringResource(R.string.session_checking))
             }
         }
-
-    }
-}
-
-@Composable
-private fun HomeBrand() {
-    val accent = MaterialTheme.colorScheme.secondary.copy(alpha = .14f)
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        if (maxWidth >= 320.dp && LocalDensity.current.fontScale < 1.3f) {
-            Canvas(Modifier.align(Alignment.CenterEnd).size(44.dp, 32.dp).clearAndSetSemantics {}) {
-                val curve = Path().apply {
-                    moveTo(size.width, 0f)
-                    cubicTo(0f, 0f, 0f, size.height * .5f, size.width * .55f, size.height * .5f)
-                    cubicTo(size.width, size.height * .5f, size.width, size.height, 0f, size.height)
-                }
-                drawPath(curve, accent, style = Stroke(6.dp.toPx(), cap = StrokeCap.Round))
-            }
-        }
-        SolventaBrandHeader()
     }
 }

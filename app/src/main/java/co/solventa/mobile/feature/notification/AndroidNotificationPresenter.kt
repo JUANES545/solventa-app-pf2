@@ -65,6 +65,7 @@ internal class AndroidNotificationPresenter @Inject constructor(
             NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(notification.title)
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setContentText(notification.content)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(notification.content))
                 .setContentIntent(pending)

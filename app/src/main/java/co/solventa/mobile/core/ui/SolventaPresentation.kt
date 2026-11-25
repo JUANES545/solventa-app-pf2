@@ -32,10 +32,11 @@ internal fun SolventaScreenHeader(
     title: String,
     backLabel: String? = null,
     onBack: (() -> Unit)? = null,
+    backEnabled: Boolean = true,
 ) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (backLabel != null && onBack != null) {
-            TextButton(onClick = onBack, modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) {
+            TextButton(onClick = onBack, enabled = backEnabled, modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) {
                 Icon(painterResource(R.drawable.arrow_back), null, Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(backLabel, textAlign = TextAlign.Center)

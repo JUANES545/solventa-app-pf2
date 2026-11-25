@@ -1,0 +1,13 @@
+<resources>
+    <string name="recovery_link">Olvidé mi contraseña</string>
+    <string name="recovery_title">Recuperar contraseña</string>
+    <string name="recovery_send">Enviar enlace</string>
+    <string name="recovery_instructions">Si el correo está registrado, recibirás un enlace. Pégalo aquí.</string>
+    <string name="recovery_code">Enlace de recuperación</string>
+    <string name="recovery_password">Nueva contraseña</string>
+    <string name="recovery_save">Cambiar contraseña</string>
+    <string name="recovery_done">Contraseña actualizada</string>
+    <string name="recovery_invalid">El enlace no es válido o ya venció. Solicita otro.</string>
+    <string name="recovery_restart">Solicitar otro enlace</string>
+    <string name="recovery_has_link">Ya tengo un enlace</string>
+</resources>

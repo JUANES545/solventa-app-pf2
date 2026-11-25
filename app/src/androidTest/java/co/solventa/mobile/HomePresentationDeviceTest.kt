@@ -58,7 +58,7 @@ class HomePresentationDeviceTest {
                 compose.onNodeWithContentDescription("Mi cuenta").performClick().assertIsSelected()
                 compose.onNodeWithText(user.email).performScrollTo().assertIsDisplayed()
                 capture("account-${if (night) "dark" else "light"}-${font.toInt()}")
-                compose.onNodeWithText("Cerrar sesión").performScrollTo().assertIsDisplayed()
+                compose.onNodeWithText("Cerrar sesión").assertIsDisplayed()
             }
         }
     }

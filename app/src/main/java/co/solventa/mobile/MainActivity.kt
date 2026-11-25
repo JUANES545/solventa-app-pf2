@@ -6,6 +6,9 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Intent
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -31,6 +34,8 @@ import co.solventa.mobile.feature.identity.IdentityViewModel
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
+    @javax.inject.Inject internal lateinit var travel: co.solventa.mobile.feature.travel.TravelApi
+    @javax.inject.Inject internal lateinit var policyActions: co.solventa.mobile.feature.policy.PolicyActionsApi
     private val auth by lazy { ViewModelProvider(this)[AuthViewModel::class.java] }
     private val biometrics by lazy { ViewModelProvider(this)[BiometricViewModel::class.java] }
     private val evidence by lazy { ViewModelProvider(this)[EvidenceViewModel::class.java] }
@@ -47,6 +52,7 @@ class MainActivity : FragmentActivity() {
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         notifications.permissionResult(granted)
+        if (granted) notifications.startDemoIfPermitted()
     }
     private val policies by lazy { ViewModelProvider(this)[PolicyViewModel::class.java] }
     private val identity by lazy { ViewModelProvider(this)[IdentityViewModel::class.java] }
@@ -55,6 +61,19 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+        if (BuildConfig.BUILD_TYPE in setOf("notificationTest","videoTest")) {
+            val service = Intent(this, co.solventa.mobile.feature.notification.DemoListenerService::class.java)
+            lifecycleScope.launch {
+                lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+                    notifications.state.collect { if (it.actor != null && it.permissionGranted && it.error != co.solventa.mobile.feature.notification.NotificationError.SESSION) notifications.startDemoIfPermitted() }
+                }
+            }
+            lifecycleScope.launch {
+                notifications.demoListening.collect { enabled ->
+                    if (enabled) startForegroundService(service) else stopService(service)
+                }
+            }
+        }
         if (savedInstanceState == null) {
             splash.setOnExitAnimationListener { provider ->
                 fadeSplashExit(provider.view, provider::remove)
@@ -69,6 +88,8 @@ class MainActivity : FragmentActivity() {
                     openPhoto, beforeAccessChange, evidence = evidence, claims = claims,
                     claimStatus = claimStatus, claimEvidence = claimEvidence, notifications = notifications,
                     assistance = assistance, policies = policies, identity = identity,
+                    travel = travel.takeIf { BuildConfig.BUILD_TYPE in setOf("release", "preview", "travelTest", "autoTest", "videoTest") },
+                    policyActions = policyActions.takeIf { BuildConfig.BUILD_TYPE in setOf("release", "preview", "travelTest", "autoTest","videoTest") },
                     requestNotificationPermission = ::requestNotificationPermission)
             }
         }

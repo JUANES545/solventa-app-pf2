@@ -97,7 +97,8 @@ internal fun AssistanceContent(
     onRetryProviders: () -> Unit,
     onSubmit: () -> Unit,
 ) {
-    BackHandler(enabled = !state.busy) {
+    BackHandler {
+        if (state.busy) return@BackHandler
         if (state.step in setOf(AssistanceStep.LOCATION, AssistanceStep.SUCCESS)) {
             onClose()
         } else {
@@ -109,20 +110,8 @@ internal fun AssistanceContent(
         isRefreshing = state.busy,
         headerAlignment = Alignment.Start,
         header = {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(
-                    onClick = {
-                        if (state.step in setOf(AssistanceStep.LOCATION, AssistanceStep.SUCCESS)) onClose() else onBack()
-                    },
-                    enabled = !state.busy,
-                    modifier = Modifier.heightIn(min = SolventaLayout.controlHeight),
-                ) {
-                    Icon(painterResource(R.drawable.arrow_back), null, Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.assistance_back), textAlign = TextAlign.Center)
-                }
-                SolventaScreenHeader(stringResource(R.string.assistance_title))
-            }
+            SolventaScreenHeader(stringResource(R.string.assistance_title),stringResource(R.string.assistance_back),
+                { if (state.step in setOf(AssistanceStep.LOCATION, AssistanceStep.SUCCESS)) onClose() else onBack() }, !state.busy)
         },
     ) {
         if (state.step != AssistanceStep.SUCCESS) {

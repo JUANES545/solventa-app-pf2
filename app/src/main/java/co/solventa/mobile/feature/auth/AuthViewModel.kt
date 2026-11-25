@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class AccessScreen { LOGIN, REGISTER_REFERENCE, REGISTER, REGISTER_PHOTOS, REGISTER_CONFIRM, REGISTERED }
+enum class AccessScreen { LOGIN, REGISTER_REFERENCE, REGISTER, REGISTER_PHOTOS, REGISTER_CONFIRM, REGISTERED, RECOVER, RECOVER_CONFIRM, RECOVERED }
 
 data class AuthUiState(
     val user: AuthUser? = null,
@@ -20,13 +20,17 @@ data class AuthUiState(
     val screen: AccessScreen = AccessScreen.LOGIN,
     val email: String = "",
     val offline: Boolean = false,
+    val registeredId: String? = null,
 )
 
 @HiltViewModel
-class AuthViewModel @Inject constructor(private val repository: AuthRepository) : ViewModel() {
+class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
+    private lateinit var recoveryApi: MobileAuthApi
+    @Inject constructor(repository: AuthRepository, api: MobileAuthApi) : this(repository) { recoveryApi = api }
     private val mutableState = MutableStateFlow(AuthUiState())
     val state = mutableState.asStateFlow()
-    private class RegistrationDraft(val name: String, val email: String, val password: String, val withPhotos: Boolean)
+    private class RegistrationDraft(val name: String, val email: String, val password: String, val withPhotos: Boolean,
+        var profile: RegistrationProfile? = null)
     private var registrationDraft: RegistrationDraft? = null
     private var operation = 0L
     private var operationSessionRevision = -1L
@@ -99,6 +103,38 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
             registrationDraft = null
             mutableState.value = AuthUiState(email = mutableState.value.email)
         }
+
+    }
+
+    fun recover(email: String) {
+        if (!mutableState.value.loading) mutableState.value = AuthUiState(screen = AccessScreen.RECOVER, email = email)
+    }
+
+    fun requestLink(email: String) {
+        if (mutableState.value.screen != AccessScreen.RECOVER) return
+        perform {
+            validateEmail(email)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { recoveryApi.requestRecovery(email.trim()) }
+            AuthUiState(screen = AccessScreen.RECOVER_CONFIRM, email = email.trim())
+        }
+
+    }
+
+    fun showLinkForm() {
+        if (!mutableState.value.loading && mutableState.value.screen == AccessScreen.RECOVER) {
+            mutableState.value = AuthUiState(screen = AccessScreen.RECOVER_CONFIRM, email = mutableState.value.email)
+        }
+    }
+
+    fun changePassword(link: String, password: String) {
+        val current = mutableState.value
+        if (current.screen != AccessScreen.RECOVER_CONFIRM) return
+        perform {
+            val token = recoveryToken(link, co.solventa.mobile.BuildConfig.RECOVERY_LINK_ENTRY)
+            if (password.codePointCount(0, password.length) !in 8..128) throw AuthProblem(AuthError.PASSWORD)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { recoveryApi.confirmRecovery(token, password) }
+            AuthUiState(screen = AccessScreen.RECOVERED, email = current.email)
+        }
     }
 
     fun register(name: String, email: String, password: String, confirmation: String) {
@@ -111,8 +147,8 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
         }
         mutableState.value = mutableState.value.copy(email = email.trim())
         perform {
-            repository.register(name, email, password, confirmation)
-            AuthUiState(screen = AccessScreen.REGISTERED, email = email.trim())
+            val registered = repository.register(name, email, password, confirmation)
+            AuthUiState(screen = AccessScreen.REGISTERED, email = email.trim(), registeredId = registered.id)
         }
     }
 
@@ -142,9 +178,26 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
         }
     }
 
+    fun completeProfile(profile:RegistrationProfile, photos:Boolean) {
+        val draft=registrationDraft ?: return
+        if (state.value.loading || state.value.screen!=AccessScreen.REGISTER_REFERENCE || !profile.valid()) return
+        draft.profile=profile
+        if (photos && draft.withPhotos) mutableState.value=state.value.copy(screen=AccessScreen.REGISTER_PHOTOS)
+        else submitComplete(draft,profile)
+    }
+
+    private fun submitComplete(draft:RegistrationDraft, profile:RegistrationProfile) {
+        perform {
+            val user=repository.register(draft.name,draft.email,draft.password,draft.password,profile)
+            registrationDraft=null
+            AuthUiState(screen=AccessScreen.REGISTERED,email=draft.email,registeredId=user.id)
+        }
+    }
+
     fun confirmRegistration() {
         if (mutableState.value.screen != AccessScreen.REGISTER_CONFIRM || mutableState.value.loading) return
         val draft = registrationDraft ?: return
+        draft.profile?.let { submitComplete(draft,it); return }
         registrationDraft = null
         mutableState.value = AuthUiState(screen = AccessScreen.REGISTER, email = draft.email)
         register(draft.name, draft.email, draft.password, draft.password)

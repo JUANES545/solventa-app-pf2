@@ -54,6 +54,13 @@ class PolicyScreenTest {
                         else PolicyState(loaded = true, policies = listOf(listed))
                     }
                     compose.onNodeWithText(text(R.string.policy_travel)).performScrollTo().assertIsDisplayed()
+                    if (!selected) {
+                        compose.onNodeWithText(app.getString(R.string.wallet_reference, listed.number.takeLast(4)))
+                            .performScrollTo().assertIsDisplayed()
+                        compose.onNodeWithText(listed.number, substring = true).assertDoesNotExist()
+                        continue
+                    }
+                    compose.onNodeWithText(text(R.string.wallet_show_number)).performScrollTo().performClick()
                     compose.onNodeWithText(app.getString(R.string.policy_number, "POL-20261119-00000000"))
                         .performScrollTo().assertIsDisplayed()
                     compose.onNodeWithText(app.getString(R.string.policy_coverage, "Asistencia médica"))
@@ -68,19 +75,20 @@ class PolicyScreenTest {
         }
     }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test fun loadingEmptyAndFailuresAreDistinctAndDoNotShowStaleData() {
         val state = mutableStateOf(PolicyState(busy = true, policies = listOf(policy)))
         var retries = 0
         compose.setContent { SolventaTheme(false) { PolicyScreen(state.value, {}, { retries++ }, {}) } }
-        compose.onNodeWithText(text(R.string.policy_loading)).assertIsDisplayed()
-        compose.onNodeWithText(text(R.string.policy_refresh)).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(text(R.string.policy_loading)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.policy_refresh)).assertDoesNotExist()
         compose.onNodeWithText(text(R.string.policy_empty)).assertDoesNotExist()
         compose.onNodeWithText(text(R.string.policy_auto)).assertDoesNotExist()
         for (error in PolicyError.entries) {
             compose.runOnIdle { state.value = state.value.copy(busy = false, error = error) }
             compose.onNodeWithText(text(policyErrorText(error))).performScrollTo().assertIsDisplayed()
             compose.onNodeWithText(text(R.string.policy_auto)).assertDoesNotExist()
-            compose.onNodeWithText(text(R.string.policy_retry)).performScrollTo().performClick()
+            compose.onNodeWithTag("page-refresh").performCustomAccessibilityActionWithLabel("Actualizar")
         }
         compose.runOnIdle { state.value = PolicyState(loaded = true) }
         compose.onNodeWithText(text(R.string.policy_empty)).performScrollTo().assertIsDisplayed()
@@ -108,12 +116,10 @@ class PolicyScreenTest {
                 compose.onNodeWithText(text(R.string.policy_title)).performScrollTo().assertIsDisplayed()
                     .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
                 capture("list-${if (theme) "dark" else "light"}-$fontScale")
-                compose.onNodeWithText(app.getString(R.string.policy_number, policy.number))
-                    .performScrollTo().assertIsDisplayed()
-                compose.onNodeWithText(app.getString(R.string.policy_coverage, policy.mainCoverage))
+                compose.onNodeWithText(app.getString(R.string.wallet_reference, policy.number.takeLast(4)))
                     .performScrollTo().assertIsDisplayed()
                 compose.onNodeWithText(policy.id).assertDoesNotExist()
-                compose.onNodeWithText(text(R.string.policy_view_detail)).performScrollTo()
+                compose.onNode(hasText(text(policyProductText(policy.product))) and hasClickAction()).performScrollTo()
                     .assertHeightIsAtLeast(48.dp).performClick()
                 assertEquals(policy, selected)
                 compose.runOnIdle { state.value = PolicyState(loaded = true, selectedId = policy.id, detail = policy) }

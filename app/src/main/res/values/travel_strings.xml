@@ -1,0 +1,35 @@
+<resources>
+    <string name="travel_country">País de destino</string>
+    <string name="travel_departure">Salida</string>
+    <string name="travel_return">Regreso</string>
+    <string name="travel_quote">Cotizar viaje</string>
+    <string name="catalog_quote">Cotizar un seguro</string>
+    <string name="home_reassurance">Tu tranquilidad viaja contigo</string>
+    <string name="home_reassurance_body">Cotiza, contrata y administra tus pólizas desde una experiencia clara.</string>
+    <string name="home_my_claims">Mis siniestros</string>
+    <string name="catalog_title">¿Qué quieres asegurar?</string>
+    <string name="catalog_auto">Auto</string>
+    <string name="catalog_travel">Viaje</string>
+    <string name="catalog_plate">Placa del vehículo</string>
+    <string name="catalog_ongoing">En curso</string>
+    <string name="catalog_resume">Retomar cotización</string>
+    <string name="catalog_empty">No tienes cotizaciones en curso.</string>
+    <string name="catalog_back">Volver</string>
+    <string name="travel_registration_consent">Quiero autorizar el perfilamiento para cotizar (opcional).</string>
+    <string name="travel_registration_notice">Al ingresar podrás confirmar o rechazar el permiso para consultar tu indicador de riesgo en Open Finance y Open Data.</string>
+    <string name="travel_consent">Consentimiento de perfilamiento</string>
+    <string name="travel_authorized">Autorizado</string>
+    <string name="travel_not_authorized">Sin autorización vigente</string>
+    <string name="travel_terms">Para cotizar, autorizas consultar el indicador de riesgo en Open Finance y Open Data durante 29 días. Puedes retirar el permiso en Mi cuenta.</string>
+    <string name="travel_authorize">Autorizar perfilamiento</string>
+    <string name="travel_revoke">Retirar autorización</string>
+    <string name="travel_choose">Seleccionar plan</string>
+    <string name="travel_accept">Aceptar oferta</string>
+    <string name="travel_subscribe">Solicitar contratación</string>
+    <string name="travel_pay">Confirmar pago</string>
+    <string name="travel_issued">Póliza emitida. Consúltala en Mis pólizas.</string>
+    <string name="travel_reconciling">Emisión pendiente de confirmar.</string>
+    <string name="travel_failed">No se pudo emitir la póliza.</string>
+    <string name="travel_no_offers">No hay ofertas disponibles.</string>
+    <string name="travel_check_error">No pudimos confirmar la operación. Actualiza antes de reintentar.</string>
+</resources>

@@ -49,6 +49,7 @@ internal fun EvidenceGallery(
     state: EvidenceState,
     onRemove: (EvidenceItem) -> Unit,
     readOnly: Boolean = false,
+    original: (suspend (EvidenceScope,String,File) -> String)? = null,
 ) {
     var selected by remember(state.scope, state.generation) { mutableStateOf<GalleryEntry?>(null) }
     val items = state.items.filter { it.scope == state.scope }
@@ -62,7 +63,10 @@ internal fun EvidenceGallery(
                 Modifier.fillMaxWidth().padding(20.dp))
         }
     }
-    for (row in entries.chunked(2)) {
+    for ((confirmed, group) in entries.groupBy { it.item == null || it.item.status == EvidenceStatus.CONFIRMED }.toSortedMap()) {
+        Text(stringResource(if (confirmed) R.string.evidence_received_group else R.string.evidence_unconfirmed_group, group.size),
+            Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+        for (row in group.chunked(2)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             for (entry in row) {
                 val item = entry.item
@@ -80,7 +84,7 @@ internal fun EvidenceGallery(
                                 Icon(painterResource(when (item.kind) {
                                     EvidenceKind.PHOTO -> R.drawable.evidence_photo
                                     EvidenceKind.VIDEO -> R.drawable.evidence_video
-                                    EvidenceKind.DOCUMENT -> R.drawable.evidence_document
+                                    EvidenceKind.DOCUMENT, EvidenceKind.PDF -> R.drawable.evidence_document
                                 }), null, Modifier.padding(8.dp).size(20.dp))
                             }
                         }
@@ -101,8 +105,15 @@ internal fun EvidenceGallery(
             }
             if (row.size == 1) Spacer(Modifier.weight(1f))
         }
+        }
     }
     selected?.let { entry ->
+        val remoteId = entry.item?.remoteId ?: entry.id
+        val scope = state.scope
+        if (original != null && scope != null && remoteId in state.confirmedRemoteIds) {
+            RemoteEvidencePreview(scope, remoteId, original) { selected = null }
+            return@let
+        }
         EvidenceGalleryPreview(entry, onDismiss = { selected = null }, canRemove = !readOnly && !state.busy &&
             (entry.item?.let(::evidenceCanRemove) == true),
             onRemove = {
@@ -125,7 +136,7 @@ private fun EvidenceGalleryPreview(entry: GalleryEntry, onDismiss: () -> Unit, c
             try {
                 EvidenceStore(context.noBackupFilesDir).use { store ->
                     val file = store.file(item)
-                    StoredPreview(file, if (item.kind == EvidenceKind.VIDEO) null
+                    StoredPreview(file, if (item.kind in setOf(EvidenceKind.VIDEO,EvidenceKind.PDF)) null
                         else EvidenceMedia(context.cacheDir).image(file, 1600), loading = false)
                 }
             } catch (_: java.io.IOException) { StoredPreview(loading = false) }
@@ -150,6 +161,7 @@ private fun EvidenceGalleryPreview(entry: GalleryEntry, onDismiss: () -> Unit, c
                         CircularProgressIndicator()
                     }
                     file != null && item?.kind == EvidenceKind.VIDEO -> EvidenceVideoPreview(file)
+                    file != null && item?.kind == EvidenceKind.PDF -> PdfPreview(file)
                     bitmap != null -> Image(bitmap.asImageBitmap(), stringResource(R.string.evidence_local_preview),
                         Modifier.fillMaxWidth().heightIn(max = 360.dp).aspectRatio(bitmap.width.toFloat() / bitmap.height),
                         contentScale = ContentScale.Fit)

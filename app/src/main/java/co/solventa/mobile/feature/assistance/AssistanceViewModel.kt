@@ -43,6 +43,7 @@ internal class AssistanceViewModel @Inject constructor(
     private val mutable = MutableStateFlow(AssistanceState())
     val state = mutable.asStateFlow()
     private var job: Job? = null
+    private val pendingRequests = mutableMapOf<Pair<AssistanceProvider, AssistanceLocation>, String>()
 
     fun bindActor(actor: String?) {
         if (state.value.actor != actor) close()
@@ -59,6 +60,7 @@ internal class AssistanceViewModel @Inject constructor(
 
     fun close() {
         job?.cancel()
+        pendingRequests.clear()
         mutable.value = AssistanceState()
     }
 
@@ -140,10 +142,12 @@ internal class AssistanceViewModel @Inject constructor(
         val location = current.location ?: return
         val provider = current.selected ?: return
         if (current.busy || current.receipt != null) return
-        val operationId = current.operationId ?: UUID.randomUUID().toString()
+        val intent = provider to location
+        val operationId = pendingRequests.getOrPut(intent) { UUID.randomUUID().toString() }
         mutable.value = current.copy(operationId = operationId, error = null)
         operation {
             val receipt = api.request(actor, claim, provider, location, operationId)
+            pendingRequests.remove(intent)
             update {
                 copy(
                     step = AssistanceStep.SUCCESS,
@@ -185,7 +189,8 @@ internal class AssistanceViewModel @Inject constructor(
             copy(step = AssistanceStep.PROVIDERS, location = location,
                 providers = providers.takeIf { this.location == location }.orEmpty())
         }
-        val providers = api.providers(actor, location)
+        val providers = if (co.solventa.mobile.BuildConfig.BUILD_TYPE == "videoTest") api.providers(actor, location, radiusKm = 5)
+            else api.providers(actor, location)
         update {
             copy(
                 step = AssistanceStep.PROVIDERS,

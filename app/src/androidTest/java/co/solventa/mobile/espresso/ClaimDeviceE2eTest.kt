@@ -92,7 +92,7 @@ class ClaimDeviceE2eTest {
     }
 
     @Test fun formValidationConfirmationEvidenceAndActorIsolation() {
-        compose.onNodeWithText(context.getString(R.string.claim_submit)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.claim_review_before_send)).performScrollTo().performClick()
         compose.onNodeWithText(context.getString(R.string.claim_error_required)).performScrollTo().assertIsDisplayed()
         val draft = form("Formulario fisico SOL170 ${UUID.randomUUID()}")
         compose.onNodeWithTag("claim-policy-${draft.policyId}")
@@ -106,7 +106,8 @@ class ClaimDeviceE2eTest {
             R.string.claim_place to draft.place, R.string.claim_description to draft.description)) {
             compose.onNodeWithText(context.getString(label)).performScrollTo().performTextInput(value)
         }
-        compose.onNodeWithText(context.getString(R.string.claim_submit)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.claim_review_before_send)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.claim_submit)).performClick()
         compose.runOnIdle { model.submit() }
         settle()
         val report = model.state.value.reports.single { it.payload.type == draft.type }

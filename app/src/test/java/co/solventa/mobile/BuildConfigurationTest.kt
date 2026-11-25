@@ -14,8 +14,6 @@ class BuildConfigurationTest {
     fun applicationIdDoesNotReplaceThePreviousPrototype() {
         if (BuildConfig.BUILD_TYPE == "awsTest") {
             assertEquals("co.solventa.mobile.pf2.awstest", BuildConfig.APPLICATION_ID)
-            assertEquals("https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1", BuildConfig.AUTH_BASE_URL)
-            assertEquals("https://65qgzhody9.execute-api.us-east-2.amazonaws.com", BuildConfig.AUTH_ISSUER)
             assertTrue(BuildConfig.DEBUG)
         } else if (BuildConfig.BUILD_TYPE == "claimTest") {
             assertEquals("co.solventa.mobile.pf2.claimtest", BuildConfig.APPLICATION_ID)
@@ -36,8 +34,12 @@ class BuildConfigurationTest {
             assertTrue(BuildConfig.DEBUG)
         } else {
             assertEquals("co.solventa.mobile.pf2", BuildConfig.APPLICATION_ID)
-            assertEquals("https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1", BuildConfig.AUTH_BASE_URL)
-            assertEquals("https://65qgzhody9.execute-api.us-east-2.amazonaws.com", BuildConfig.AUTH_ISSUER)
+            if (BuildConfig.BUILD_TYPE in setOf("release", "preview")) {
+                assertTrue(BuildConfig.AUTH_BASE_URL.startsWith("https://"))
+                assertTrue(BuildConfig.AUTH_BASE_URL.endsWith("/movil/v1"))
+                assertTrue(BuildConfig.AUTH_ISSUER.isNotBlank())
+                assertEquals(BuildConfig.AUTH_BASE_URL, BuildConfig.REGISTRATION_API_BASE)
+            }
             assertTrue(BuildConfig.BIOMETRIC_LOGIN_ENABLED)
             assertTrue(BuildConfig.PHOTO_REVIEW_ENABLED)
         }

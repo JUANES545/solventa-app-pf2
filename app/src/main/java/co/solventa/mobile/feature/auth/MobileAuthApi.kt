@@ -8,12 +8,41 @@ import java.time.OffsetDateTime
 import java.util.UUID
 import javax.inject.Inject
 
-class MobileAuthApi internal constructor(private val base: String) : AuthApi, BiometricApi {
-    @Inject constructor() : this(BuildConfig.AUTH_BASE_URL)
+class MobileAuthApi internal constructor(private val base: String, private val recoveryBase: String = base,
+    private val registrationBase: String = base) : AuthApi, BiometricApi, CompleteRegistrationApi {
+    @Inject constructor() : this(BuildConfig.AUTH_BASE_URL, BuildConfig.RECOVERY_API_BASE.ifEmpty { BuildConfig.AUTH_BASE_URL },
+        BuildConfig.REGISTRATION_API_BASE.ifEmpty { BuildConfig.AUTH_BASE_URL })
+    private var recoveryRetryAt = 0L
+
+    internal fun requestRecovery(email: String) {
+        checkRecoveryRetry()
+        val result = request("POST", "/recuperacion-contrasena", JSONObject().put("correo", email), expectedStatus = 202)
+        require(strictString(result, "mensaje").isNotBlank())
+    }
+
+    internal fun confirmRecovery(token: String, password: String) {
+        checkRecoveryRetry()
+        val challenge = request("GET", "/recuperacion-contrasena/desafio", expectedStatus = 200)
+        val sealed = encryptRecovery(challenge, token, password)
+        request("POST", "/recuperacion-contrasena/confirmar",
+            JSONObject().put("token", token).put("credencialCifrada", sealed), expectedStatus = 204)
+    }
+
+    private fun checkRecoveryRetry() {
+        if (android.os.SystemClock.elapsedRealtime() < recoveryRetryAt) throw AuthProblem(AuthError.RATE_LIMIT)
+    }
 
     override fun register(name: String, email: String, password: String) = decodeUser(
         request("POST", "/usuarios", JSONObject().put("nombre", name).put("correo", email).put("contrasena", password)),
     )
+
+    override fun registerComplete(name: String, email: String, password: String, profile: RegistrationProfile): AuthUser {
+        require(profile.valid())
+        val challenge=request("GET","/usuarios/desafio", expectedStatus=200)
+        val sealed=encryptCredential(challenge,"solventa-register+jwe",JSONObject().put("correo",email).put("contrasena",password))
+        return decodeUser(request("POST","/usuarios/registro-completo",profile.json().put("nombre",name).put("correo",email)
+            .put("credencialCifrada",sealed),expectedStatus=201))
+    }
 
     override fun login(email: String, password: String) = decodeGrant(
         request("POST", "/sesiones", JSONObject().put("correo", email).put("contrasena", password)),
@@ -83,7 +112,12 @@ class MobileAuthApi internal constructor(private val base: String) : AuthApi, Bi
     private fun request(method: String, path: String, body: JSONObject? = null, token: String? = null, expectedStatus: Int? = null): JSONObject {
         val encodedBody = body?.toString()?.toByteArray(Charsets.UTF_8)
         if (expectedStatus != null && encodedBody != null) require(encodedBody.size <= 8192)
-        val connection = URL(base + path).openConnection() as HttpURLConnection
+        val origin = when {
+            path.startsWith("/usuarios/") -> registrationBase
+            path.startsWith("/recuperacion-contrasena") -> recoveryBase
+            else -> base
+        }
+        val connection = URL(origin + path).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = method
             connection.instanceFollowRedirects = false
@@ -97,28 +131,50 @@ class MobileAuthApi internal constructor(private val base: String) : AuthApi, Bi
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 // Account creation must not be replayed automatically after a lost response.
-                if (path == "/usuarios") connection.setFixedLengthStreamingMode(checkNotNull(encodedBody).size)
+                if (path.startsWith("/usuarios") || path.startsWith("/recuperacion-contrasena")) {
+                    connection.setFixedLengthStreamingMode(checkNotNull(encodedBody).size)
+                }
                 connection.outputStream.use { it.write(checkNotNull(encodedBody)) }
             }
             val status = connection.responseCode
+            if (path.startsWith("/recuperacion-contrasena")) {
+                if (status == 429) {
+                    val header = connection.getHeaderField("Retry-After")
+                    val wait = header?.toLongOrNull()?.coerceIn(0, Int.MAX_VALUE.toLong())?.times(1000)
+                        ?: (connection.getHeaderFieldDate("Retry-After", 0) - System.currentTimeMillis()).coerceAtLeast(0)
+                    recoveryRetryAt = android.os.SystemClock.elapsedRealtime() + wait
+                }
+                if (status == 400) {
+                    val raw = connection.errorStream?.bufferedReader()?.use { it.readTextBounded() }
+                    if (raw != null) {
+                        val data = JSONObject(raw)
+                        if (data.optString("code") == "recuperacion_invalida") {
+                            throw AuthProblem(AuthError.RECOVERY_LINK)
+                        }
+                    }
+                }
+            }
             if (status !in 200..299) throw AuthHttpError(status)
             if (expectedStatus != null && status != expectedStatus) throw AuthProblem(AuthError.UNAVAILABLE)
             if (status == 204) return JSONObject()
-            val text = connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-                val buffer = CharArray(65_537)
-                var size = 0
-                while (size < buffer.size) {
-                    val count = reader.read(buffer, size, buffer.size - size)
-                    if (count == -1) break
-                    size += count
-                }
-                if (size > 65_536) throw AuthProblem(AuthError.UNAVAILABLE)
-                String(buffer, 0, size)
-            }
+            val text = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readTextBounded() }
             return JSONObject(text)
         } finally {
             connection.disconnect()
         }
+
+    }
+
+    private fun java.io.Reader.readTextBounded(): String {
+        val buffer = CharArray(65_537)
+        var size = 0
+        while (size < buffer.size) {
+            val count = read(buffer, size, buffer.size - size)
+            if (count == -1) break
+            size += count
+        }
+        if (size > 65_536) throw AuthProblem(AuthError.UNAVAILABLE)
+        return String(buffer, 0, size)
     }
 }
 

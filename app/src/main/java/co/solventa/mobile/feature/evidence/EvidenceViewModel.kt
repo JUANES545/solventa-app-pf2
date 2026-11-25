@@ -176,6 +176,12 @@ internal class EvidenceViewModel @Inject constructor(
     fun importPhoto(uri: Uri, scope: EvidenceScope, generation: Long) =
         importFile(uri, EvidenceKind.PHOTO, scope, generation)
 
+    suspend fun original(scope: EvidenceScope, id: String, file: File): String {
+        val current = state.value
+        require(current.scope == scope && id in current.confirmedRemoteIds)
+        return api.original(scope,id,file,checkNotNull(current.policy))
+    }
+
     fun importFile(uri: Uri, kind: EvidenceKind, scope: EvidenceScope, generation: Long) {
         val current = state.value
         if (current.scope != scope || current.generation != generation || current.busy ||
@@ -210,7 +216,7 @@ internal class EvidenceViewModel @Inject constructor(
     fun crop(crop: EvidenceCrop) {
         val current = state.value
         val draft = current.draft ?: return
-        if (current.step != EvidenceStep.REVIEW || current.busy || draft.kind == EvidenceKind.VIDEO) return
+        if (current.step != EvidenceStep.REVIEW || current.busy || draft.kind in setOf(EvidenceKind.VIDEO, EvidenceKind.PDF)) return
         val policy = checkNotNull(current.policy)
         operation {
             media.crop(draft.file, crop, policy, draft.kind)
@@ -228,8 +234,8 @@ internal class EvidenceViewModel @Inject constructor(
         val ids = current.confirmedRemoteIds
         operation {
             // Re-encode photos even without a crop so EXIF cannot leak location without consent.
-            if (draft.kind != EvidenceKind.VIDEO) media.crop(draft.file, EvidenceCrop(), policy, draft.kind)
-            else media.stripVideoMetadata(draft.file, policy)
+            if (draft.kind == EvidenceKind.VIDEO) media.stripVideoMetadata(draft.file, policy)
+            else if (draft.kind != EvidenceKind.PDF) media.crop(draft.file, EvidenceCrop(), policy, draft.kind)
             val inspected = media.inspect(draft.file, draft.kind, policy)
             store.enqueue(scope, draft.kind, draft.file, draft.capturedAt,
                 current.location.takeIf { locationPermission && current.locationEnabled }, inspected.durationMillis, policy, ids)

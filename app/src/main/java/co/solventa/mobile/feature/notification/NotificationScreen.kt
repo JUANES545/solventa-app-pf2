@@ -164,8 +164,16 @@ internal fun NotificationScreen(
         refreshEnabled = !state.busy, headerAlignment = Alignment.Start, header = {
         SolventaScreenHeader(stringResource(R.string.notification_title), stringResource(R.string.notification_back), back)
     }) {
+        state.paymentNotice?.let {
+            Text(stringResource(R.string.demo_payment_detail), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.demo_payment_confirmed))
+        }
         if (!state.permissionGranted || (state.pushPreferencesKnown && !state.pushEnabled)) {
             NotificationPermissionCard(state, requestPermission, togglePush, settingsRequired)
+        }
+        state.preferencesError?.let {
+            Text(stringResource(R.string.notification_preferences_error), color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
         if (state.items.any { !it.read }) {
             TextButton(

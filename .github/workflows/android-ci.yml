@@ -12,6 +12,11 @@ permissions:
   pull-requests: read
   checks: read
 
+env:
+  SOLVENTA_API_ENDPOINT: ${{ vars.SOLVENTA_API_ENDPOINT }}
+  SOLVENTA_JWT_ISSUER: ${{ vars.SOLVENTA_JWT_ISSUER }}
+  RECOVERY_WEB_URL: ${{ vars.RECOVERY_WEB_URL }}
+
 concurrency:
   group: android-ci-${{ github.ref == 'refs/heads/master' && github.sha || github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}

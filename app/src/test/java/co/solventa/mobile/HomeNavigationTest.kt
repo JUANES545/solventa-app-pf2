@@ -130,7 +130,7 @@ class HomeNavigationTest {
         compose.onNodeWithContentDescription("Inicio").assertIsSelected()
         assertNotNull(auth.state.value.user)
         compose.onNodeWithContentDescription("Mi cuenta").performClick()
-        compose.onNodeWithText("Cerrar sesión").performScrollTo().performClick()
+        compose.onNodeWithText("Cerrar sesión").performClick()
         compose.waitUntil(5_000) {
             shadowOf(Looper.getMainLooper()).idle()
             auth.state.value.user == null && !auth.state.value.loading

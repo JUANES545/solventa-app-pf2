@@ -247,7 +247,7 @@ class OperationalStatePresentationTest {
             SolventaTheme(false) { ClaimScreen(ClaimState(busy = true), {}, {}, {}, {}, {}, {}) }
         }
         compose.onNodeWithContentDescription(app.getString(R.string.operational_loading_policies)).assertDoesNotExist()
-        compose.onNodeWithText(app.getString(R.string.claim_submit)).performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText(app.getString(R.string.claim_review_before_send)).performScrollTo().assertIsNotEnabled()
     }
 
     @Test fun notificationQueryEmptyFailureAndPermissionSaveHaveDifferentFeedback() {
@@ -361,9 +361,9 @@ class OperationalStatePresentationTest {
         compose.onNodeWithContentDescription(app.getString(R.string.claim_status_loading)).assertDoesNotExist()
         compose.onNodeWithContentDescription(app.getString(R.string.ui_refreshing)).performScrollTo().assertIsDisplayed()
         val displayDate = app.getString(R.string.operational_date_device_zone, claimStatusDate(date), ZoneId.systemDefault().id)
-        compose.onNodeWithText(app.getString(R.string.claim_status_updated, displayDate)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(app.getString(R.string.claim_status_updated, displayDate)).assertDoesNotExist()
         compose.onNodeWithText(date.toString(), substring = true).assertDoesNotExist()
-        compose.onNodeWithText(app.getString(R.string.ui_show_details)).performScrollTo().performClick()
+        compose.onNodeWithText(app.getString(R.string.claim_history_references)).performScrollTo().performClick()
         compose.onNodeWithText(app.getString(R.string.operational_updated_instant)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(date.toString()).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(app.getString(R.string.operational_display_zone)).performScrollTo().assertIsDisplayed()

@@ -52,12 +52,7 @@ internal fun IdentityHost(model: IdentityViewModel) {
 @Composable
 internal fun IdentityScreen(state: IdentityState, submit: () -> Unit, refresh: () -> Unit, back: () -> Unit) {
     SolventaPage {
-        SolventaBrandHeader()
-        TextButton(onClick = back, modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) {
-            Text(stringResource(R.string.identity_back))
-        }
-        Text(stringResource(R.string.identity_title), Modifier.semantics { heading() },
-            style = MaterialTheme.typography.headlineSmall)
+        co.solventa.mobile.core.ui.SolventaScreenHeader(stringResource(R.string.identity_title),stringResource(R.string.identity_back),back)
         Text(stringResource(R.string.identity_disclaimer))
         Text(stringResource(R.string.identity_fixtures), color = MaterialTheme.colorScheme.onSurfaceVariant)
         when {

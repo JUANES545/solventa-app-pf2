@@ -56,10 +56,10 @@ class ClaimStatusScreenTest {
                 }
             }
         }
-        compose.onNodeWithText(text(R.string.ui_show_details)).performScrollTo().performClick()
+        compose.onNodeWithText(text(R.string.claim_history_references)).performScrollTo().performClick()
         for (theme in listOf(false, true)) for (fontScale in listOf(1f, 2f)) {
             compose.runOnIdle { dark.value = theme; scale.value = fontScale }
-            compose.onNodeWithText(text(R.string.claim_status_report_details)).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText(checkNotNull(claim.place)).performScrollTo().assertIsDisplayed()
             saveVisual("$orientation-report-$theme-$fontScale")
             for (value in listOf(claim.description, claim.id, checkNotNull(claim.policyId))) {
                 val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
@@ -102,14 +102,15 @@ class ClaimStatusScreenTest {
         compose.onNodeWithText(claim.type).assertIsDisplayed()
         compose.onNodeWithText(text(R.string.claim_status_title)).assertDoesNotExist()
         compose.onNodeWithText(text(R.string.claim_status_report_details)).assertDoesNotExist()
-        compose.onNodeWithText(text(R.string.ui_show_details)).performScrollTo().performClick()
-        compose.onNodeWithText(text(R.string.claim_status_report_details)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(claim.id).assertDoesNotExist()
+        compose.onNodeWithText("Adjuntos de actor-a/${claim.id}").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.claim_history_references)).performScrollTo().performClick()
         for (value in listOf(checkNotNull(claim.policyId), checkNotNull(claim.place), claim.description, claim.id)) {
             compose.onNodeWithText(value).performScrollTo().assertIsDisplayed()
         }
         compose.onNodeWithText("Adjuntos de actor-a/${claim.id}").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(text(R.string.ui_hide_details)).performScrollTo().performClick()
-        compose.onNodeWithText(claim.description).assertDoesNotExist()
+        compose.onNodeWithText(claim.description).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { state.value = ClaimStatusState() }
         compose.onNodeWithText(text(R.string.claim_status_title)).assertIsDisplayed()
     }
@@ -164,8 +165,7 @@ class ClaimStatusScreenTest {
                 }
                 compose.onNodeWithText(text(claimProgressText(progress))).performScrollTo().assertIsDisplayed()
                     .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
-                compose.onNodeWithText(app.getString(R.string.claim_status_updated, displayDate()))
-                    .performScrollTo().assertIsDisplayed()
+                compose.onNodeWithText(app.getString(R.string.claim_status_updated, displayDate())).assertDoesNotExist()
                 compose.onNodeWithText(app.getString(R.string.evidence_claim_reference, operationalReference(statusClaim.id))).assertDoesNotExist()
                 compose.onNodeWithTag("page-refresh").assertExists()
             }
@@ -185,11 +185,10 @@ class ClaimStatusScreenTest {
             "Detalle desde el servicio.", statusDate))) {
             compose.runOnIdle { state.value = ClaimStatusState(detail = detail, error = ClaimStatusError.NETWORK) }
             compose.onNodeWithText(text(R.string.claim_status_network)).performScrollTo().assertIsDisplayed()
-            compose.onNodeWithText(text(R.string.claim_status_retry)).performScrollTo()
-                .assertIsDisplayed().assertHeightIsAtLeast(48.dp).performClick()
+            compose.onNodeWithTag("page-refresh").performCustomAccessibilityActionWithLabel("Actualizar")
         }
         compose.runOnIdle { assertEquals(2, retries); state.value = state.value.copy(busy = true) }
-        compose.onNodeWithText(text(R.string.claim_status_retry)).assertIsNotEnabled()
+        compose.onNodeWithText(text(R.string.claim_status_retry)).assertDoesNotExist()
         compose.runOnIdle { state.value = state.value.copy(busy = false, error = null) }
         compose.onNodeWithText(text(R.string.claim_status_retry)).assertDoesNotExist()
         compose.onNodeWithTag("page-refresh").performCustomAccessibilityActionWithLabel("Actualizar")

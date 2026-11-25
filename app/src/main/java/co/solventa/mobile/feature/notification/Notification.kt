@@ -74,6 +74,7 @@ internal class NotificationProblem(val reason: NotificationError, cause: Throwab
     Exception(cause)
 
 internal interface NotificationApi {
+    suspend fun confirmedPaymentClaim(actor: String, paymentId: String): String
     suspend fun notifications(actor: String): List<MobileNotification>
     suspend fun preferences(actor: String): List<NotificationPreference>
     suspend fun updatePush(actor: String, enabled: Boolean): List<NotificationPreference>

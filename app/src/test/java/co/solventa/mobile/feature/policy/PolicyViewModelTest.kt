@@ -38,9 +38,10 @@ class PolicyViewModelTest {
             model.select(policy); await(model)
             assertEquals(policy, model.state.value.detail)
             for (status in listOf(503, 403, 404)) {
+                val before = model.state.value.detail
                 server.enqueue(MockResponse().setResponseCode(status).setBody("""{"code":"poliza_no_encontrada"}"""))
                 model.refresh()
-                assertNull(model.state.value.detail)
+                assertEquals(before, model.state.value.detail)
                 await(model)
                 assertFalse(model.state.value.loaded)
                 assertNotNull(model.state.value.error)

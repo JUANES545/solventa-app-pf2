@@ -146,6 +146,8 @@ class AssistanceViewModelTest {
         assertNull(model.state.value.receipt)
         val firstOperation = model.state.value.operationId
         assertNotNull(firstOperation)
+        model.back()
+        model.select(assistanceProvider)
         gateway.requestError = null
         model.submit()
         await(model)

@@ -12,9 +12,12 @@ import javax.inject.Inject
 import org.json.JSONException
 import org.json.JSONObject
 
-internal class MobileAssistanceApi @Inject constructor(
+internal class MobileAssistanceApi internal constructor(
     private val http: MobileEvidenceApi,
 ) : AssistanceGateway {
+    @Inject constructor(auth: co.solventa.mobile.feature.auth.AuthRepository) : this(
+        MobileEvidenceApi(auth, co.solventa.mobile.BuildConfig.ASSISTANCE_API_BASE.ifEmpty { co.solventa.mobile.BuildConfig.AUTH_BASE_URL })
+    )
     override suspend fun providers(
         actor: String,
         location: AssistanceLocation,

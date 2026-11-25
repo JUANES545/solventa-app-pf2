@@ -31,6 +31,32 @@ class MobileAuthApiTest {
     }
     @After fun tearDown() { server.shutdown() }
 
+    @Test fun recoveryRequiresExactEntryAndAnOpaqueFragment() {
+        val entry = "https://localhost:45445/"
+        val token = "a".repeat(64)
+        val link = "$entry?recuperacion=1#token=$token"
+        assertEquals(token, recoveryToken(link, entry))
+        for (invalid in listOf(link.replace("https:", "http:"), link.replace("localhost:", "localhost.example:"),
+            link.replace("#token", "&token"), "$link/extra", link.dropLast(1))) {
+            assertEquals(AuthError.RECOVERY_LINK, assertThrows(AuthProblem::class.java) { recoveryToken(invalid, entry) }.reason)
+        }
+    }
+
+    @Test fun recoveryOnlyAcceptsGeneric202AndRespectsRetryAfter() {
+        server.enqueue(MockResponse().setResponseCode(202).setBody("""{"mensaje":"Revisa tu correo."}"""))
+        api.requestRecovery("cliente@example.org")
+        val request = server.takeRequest()
+        assertEquals("/movil/v1/recuperacion-contrasena", request.path)
+        assertEquals(setOf("correo"), JSONObject(request.body.readUtf8()).keys().asSequence().toSet())
+        assertNull(request.getHeader("Authorization"))
+        server.enqueue(MockResponse().setResponseCode(503))
+        assertEquals(503, assertThrows(AuthHttpError::class.java) { api.requestRecovery("cliente@example.org") }.status)
+        server.enqueue(MockResponse().setResponseCode(429).addHeader("Retry-After", "60"))
+        assertEquals(429, assertThrows(AuthHttpError::class.java) { api.requestRecovery("cliente@example.org") }.status)
+        assertEquals(AuthError.RATE_LIMIT, assertThrows(AuthProblem::class.java) { api.requestRecovery("cliente@example.org") }.reason)
+        assertEquals(3, server.requestCount)
+    }
+
     @Test fun registrationUsesMobileContractWithoutSendingConfirmationOrAuthorization() {
         server.enqueue(MockResponse().setResponseCode(201).setBody(userResponse))
         val user = api.register("Cliente", "cliente@example.org", " password ")
@@ -46,6 +72,20 @@ class MobileAuthApiTest {
         assertNull(request.getHeader("Authorization"))
         assertEquals("no-store", request.getHeader("Cache-Control"))
         assertEquals("application/json; charset=utf-8", request.getHeader("Content-Type"))
+    }
+
+    @Test fun recoveryDistinguishesInvalidLinkFromInvalidRequestByProblemCode() {
+        for (code in listOf("recuperacion_invalida", "solicitud_invalida")) {
+            server.enqueue(MockResponse().setResponseCode(400).setHeader("Content-Type", "application/problem+json")
+                .setBody("""{"code":"$code","status":400,"title":"Error"}"""))
+            if (code == "recuperacion_invalida") {
+                assertEquals(AuthError.RECOVERY_LINK, assertThrows(AuthProblem::class.java) {
+                    api.requestRecovery("cliente@example.org")
+                }.reason)
+            } else {
+                assertEquals(400, assertThrows(AuthHttpError::class.java) { api.requestRecovery("cliente@example.org") }.status)
+            }
+        }
     }
 
     @Test fun loginRefreshCurrentAndLogoutUseExpectedPayloadsAndTokens() {

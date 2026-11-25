@@ -94,6 +94,7 @@ internal fun EvidenceScreen(
         onReload = model::refresh,
         onCamera = model::camera,
         onRemove = model::remove,
+        original = model::original,
         onCrop = model::crop,
         onAccept = { model.accept(hasEvidenceLocationPermission(context)) },
         onError = model::fail,
@@ -126,6 +127,7 @@ internal fun EvidenceContent(
     onChoosePhoto: (() -> Unit)? = null,
     feedback: (@Composable () -> Unit)? = null,
     onChooseFile: ((EvidenceKind) -> Unit)? = null,
+    original: (suspend (EvidenceScope,String,java.io.File) -> String)? = null,
 ) {
     var sourceKind by remember(state.scope, state.generation) { mutableStateOf<EvidenceKind?>(null) }
     if (!state.open) return
@@ -134,6 +136,9 @@ internal fun EvidenceContent(
             title = { Text(stringResource(evidenceKindMessage(kind))) },
             text = {
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.claims.singleOrNull { it.id == state.scope?.claimId }?.let {
+                        Text(co.solventa.mobile.feature.claim.claimDisplayType(it.type), style = MaterialTheme.typography.titleMedium)
+                    }
                     Button(onClick = { sourceKind = null; onCamera(kind) }, enabled = !state.busy,
                         modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight).testTag("evidence-source-camera")) {
                         Text(stringResource(R.string.evidence_gallery_capture))
@@ -186,24 +191,24 @@ internal fun EvidenceContent(
         when (state.step) {
             EvidenceStep.LIST -> {
                 val policy = checkNotNull(state.policy)
-                EvidenceGallery(state, onRemove)
+                EvidenceGallery(state, onRemove, original = original)
                 Text(stringResource(R.string.evidence_gallery_add), Modifier.semantics { heading() },
                     style = MaterialTheme.typography.titleLarge)
-                Text(stringResource(R.string.evidence_camera_guide),
-                    style = MaterialTheme.typography.bodyMedium)
-                for (kind in listOf(EvidenceKind.PHOTO, EvidenceKind.VIDEO, EvidenceKind.DOCUMENT).filter { it in policy.maxBytes }) {
+                for (kind in EvidenceKind.entries.filter { it in policy.maxBytes }) {
                     SolventaActionRow(
                         modifier = Modifier.testTag(when (kind) {
                             EvidenceKind.PHOTO -> "evidence-add-photo"
                             EvidenceKind.VIDEO -> "evidence-add-video"
                             EvidenceKind.DOCUMENT -> "evidence-add-document"
+                            EvidenceKind.PDF -> "evidence-add-pdf"
                         }),
                         title = stringResource(when (kind) {
                             EvidenceKind.PHOTO -> R.string.evidence_gallery_photo
                             EvidenceKind.DOCUMENT -> R.string.evidence_gallery_document
                             EvidenceKind.VIDEO -> R.string.evidence_gallery_video
+                            EvidenceKind.PDF -> R.string.evidence_pdf
                         }),
-                        onClick = { sourceKind = kind }, enabled = !state.busy,
+                        onClick = { if (kind == EvidenceKind.PDF) onChooseFile?.invoke(kind) else sourceKind = kind }, enabled = !state.busy,
                     )
                 }
                 state.progress?.let { (bytes, total) ->
@@ -211,6 +216,12 @@ internal fun EvidenceContent(
                     LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                     Text(stringResource(R.string.evidence_gallery_sending, (progress * 100).toInt()),
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                }
+                onAssistance?.let { open ->
+                    OutlinedButton(onClick = open, enabled = !state.busy,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                        Text(stringResource(R.string.assistance_title))
+                    }
                 }
                 if (onRetry != null && state.items.any { it.status == EvidenceStatus.PENDING }) Button(
                     onClick = onRetry, enabled = !state.busy,
@@ -227,7 +238,8 @@ internal fun EvidenceContent(
                     if (draft.kind == EvidenceKind.VIDEO) {
                         EvidenceVideoPreview(draft.file) { onError(EvidenceError.FORMAT) }
                         Text(stringResource(R.string.evidence_video_silent))
-                    } else CropReview(state, onCrop, cropping) { cropping = it }
+                    } else if (draft.kind == EvidenceKind.PDF) PdfPreview(draft.file)
+                    else CropReview(state, onCrop, cropping) { cropping = it }
                 } else camera()
                 locationChoice()
                 if (state.step == EvidenceStep.REVIEW) {
@@ -235,7 +247,7 @@ internal fun EvidenceContent(
                         modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
                         Text(stringResource(R.string.evidence_gallery_attach), textAlign = TextAlign.Center)
                     }
-                    TextButton(onClick = { sourceKind = state.kind }, enabled = !state.busy) {
+                    TextButton(onClick = { if (state.kind == EvidenceKind.PDF) onChooseFile?.invoke(state.kind) else sourceKind = state.kind }, enabled = !state.busy) {
                         Text(stringResource(R.string.evidence_gallery_replace), textAlign = TextAlign.Center)
                     }
                 } else onAssistance?.takeIf {
@@ -374,6 +386,7 @@ private fun CropSlider(label: Int, value: Float, range: ClosedFloatingPointRange
 internal fun evidenceKindMessage(kind: EvidenceKind): Int = when (kind) {
     EvidenceKind.PHOTO -> R.string.evidence_kind_photo
     EvidenceKind.DOCUMENT -> R.string.evidence_kind_document
+    EvidenceKind.PDF -> R.string.evidence_pdf
     EvidenceKind.VIDEO -> R.string.evidence_kind_video
 }
 

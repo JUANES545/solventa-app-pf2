@@ -23,6 +23,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,19 +50,40 @@ import java.util.Locale
 @Composable
 internal fun PolicyHost(
     model: PolicyViewModel, report: ((Policy) -> Boolean)?, continueDraft: () -> Unit, reportBusy: Boolean = false,
+    actions: PolicyActionsApi? = null,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val state by model.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    var downloadMessage by remember(state.actor,state.selectedId) { mutableStateOf(0) }
+    var actionBusy by remember(state.actor,state.selectedId) { mutableStateOf(false) }
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/html")) { uri ->
+        val actor = state.actor
+        val id = state.selectedId
+        if (uri != null && actions != null && actor != null && id != null) scope.launch {
+            try {
+                val bytes = actions.document(actor,id)
+                if (model.state.value.actor != actor || model.state.value.selectedId != id) return@launch
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    requireNotNull(context.contentResolver.openOutputStream(uri,"wt")).use { it.write(bytes) }
+                }
+                downloadMessage = R.string.wallet_downloaded
+            } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+            catch (_: Exception) { downloadMessage = R.string.travel_check_error }
+        }
+    }
     var draftConflict by remember(state.actor, state.selectedId) { mutableStateOf(false) }
     DisposableEffect(model, lifecycle, context) {
         val window = (context as? Activity)?.window
         val wasSecure = window != null && window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
-        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        if (co.solventa.mobile.BuildConfig.BUILD_TYPE !in setOf("travelTest","autoTest","videoTest") || !co.solventa.mobile.BuildConfig.SCREEN_CAPTURE_ALLOWED) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> model.refresh()
-                Lifecycle.Event.ON_STOP -> { draftConflict = false; model.pause() }
+                Lifecycle.Event.ON_RESUME -> if (!actionBusy) model.refresh()
+                Lifecycle.Event.ON_STOP -> { draftConflict = false; if (!actionBusy) model.pause() }
                 else -> Unit
             }
         }
@@ -69,9 +94,10 @@ internal fun PolicyHost(
             if (!wasSecure) window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
     }
-    BackHandler(onBack = model::back)
+    BackHandler { if (!actionBusy) model.back() }
     PolicyScreen(state, model::select, model::refresh, model::back,
-        report?.let { action -> { policy -> draftConflict = !action(policy) } }, reportBusy)
+        report?.let { action -> { policy -> draftConflict = !action(policy) } }, reportBusy, actions,
+        downloadMessage, { state.selectedId?.let { save.launch("poliza-$it.html") } },actionBusy,{ actionBusy=it })
     if (draftConflict) {
         AlertDialog(onDismissRequest = { draftConflict = false },
             title = { Text(stringResource(R.string.policy_draft_title)) },
@@ -94,28 +120,32 @@ internal fun PolicyHost(
 @Composable
 internal fun PolicyScreen(
     state: PolicyState, select: (Policy) -> Unit, refresh: () -> Unit, back: () -> Unit,
-    report: ((Policy) -> Unit)? = null, reportBusy: Boolean = false,
+    report: ((Policy) -> Unit)? = null, reportBusy: Boolean = false, actions: PolicyActionsApi? = null,
+    downloadMessage: Int = 0, download: () -> Unit = {},
+    actionBusy: Boolean = false, onActionBusy: (Boolean) -> Unit = {},
 ) {
-    SolventaPage {
-        SolventaBrandHeader()
-        TextButton(onClick = back, modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) {
-            Text(stringResource(if (state.selectedId == null) R.string.policy_back_home else R.string.policy_back_list))
+    SolventaPage(onRefresh = refresh, isRefreshing = state.busy, refreshEnabled = !state.busy && !actionBusy) {
+        co.solventa.mobile.core.ui.SolventaScreenHeader(
+            stringResource(if (state.selectedId == null) R.string.policy_title else R.string.policy_detail_title),
+            stringResource(if (state.selectedId == null) R.string.policy_back_home else R.string.policy_back_list), back, !actionBusy)
+        state.cachedAt?.let {
+            Text(stringResource(R.string.policy_cached_at, java.text.DateFormat.getDateTimeInstance()
+                .format(java.util.Date(it))), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
-        Text(stringResource(if (state.selectedId == null) R.string.policy_title else R.string.policy_detail_title),
-            Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineMedium)
         when {
-            state.busy || (!state.loaded && state.error == null) -> {
-                CircularProgressIndicator()
-                Text(stringResource(R.string.policy_loading), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            !state.loaded && state.error == null -> {
+                co.solventa.mobile.core.ui.CollectionLoading(stringResource(R.string.policy_loading), state.selectedId != null)
             }
             state.error != null -> Text(stringResource(policyErrorText(state.error)),
                 Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
             state.detail != null -> {
                 PolicyContent(state.detail)
+                if (state.actor != null && state.cachedAt == null && actions != null) PolicyActions(state.actor,state.detail,actions,download,onActionBusy)
+                if (downloadMessage != 0) Text(stringResource(downloadMessage), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 if (state.detail.status == PolicyStatus.ACTIVE && report != null) {
                     if (reportBusy) Text(stringResource(R.string.policy_report_busy),
                         Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                    Button(onClick = { report(state.detail) }, enabled = !reportBusy,
+                    Button(onClick = { report(state.detail) }, enabled = !reportBusy && !actionBusy,
                         modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight),
                         shape = SolventaLayout.controlShape) {
                         Text(stringResource(R.string.claim_title))
@@ -125,22 +155,7 @@ internal fun PolicyScreen(
                 }
             }
             state.selectedId == null && state.policies.isEmpty() -> Text(stringResource(R.string.policy_empty))
-            state.selectedId == null -> state.policies.forEach { policy ->
-                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        PolicyContent(policy)
-                        OutlinedButton(onClick = { select(policy) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
-                            Text(stringResource(R.string.policy_view_detail))
-                        }
-                    }
-                }
-            }
-        }
-        OutlinedButton(onClick = refresh, enabled = !state.busy,
-            modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
-            Text(stringResource(if (state.error == null) R.string.policy_refresh else R.string.policy_retry))
+            state.selectedId == null -> PolicyCollection(state.policies, select)
         }
     }
 }
@@ -149,12 +164,16 @@ internal fun PolicyScreen(
 private fun PolicyContent(policy: Policy) {
     Text(stringResource(policyProductText(policy.product)), Modifier.semantics { heading() },
         style = MaterialTheme.typography.titleLarge)
-    Text(stringResource(R.string.policy_number, policy.number))
     Text(stringResource(R.string.policy_status, stringResource(policyStatusText(policy.status))))
+    Text(stringResource(R.string.policy_coverage, policy.mainCoverage), style = MaterialTheme.typography.titleMedium)
     val dates = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.forLanguageTag("es-CO"))
     Text(stringResource(R.string.policy_validity, dates.format(policy.start), dates.format(policy.end)))
-    Text(stringResource(R.string.policy_coverage, policy.mainCoverage))
-    if (policy.simulated) Text(stringResource(R.string.policy_simulated), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    var expanded by remember(policy.id) { mutableStateOf(false) }
+    if (policy.simulated) Text(stringResource(R.string.policy_simulated), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    TextButton(onClick = { expanded = !expanded }, modifier = Modifier.heightIn(min = 48.dp)) {
+        Text(stringResource(if (expanded) R.string.ui_hide_details else R.string.wallet_show_number))
+    }
+    if (expanded) androidx.compose.foundation.text.selection.SelectionContainer { Text(stringResource(R.string.policy_number, policy.number)) }
 }
 
 internal fun policyStatusText(status: PolicyStatus): Int = when (status) {

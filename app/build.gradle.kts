@@ -1,3 +1,4 @@
+import java.net.URI
 import java.util.Properties
 import org.gradle.testing.jacoco.tasks.JacocoReport
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
@@ -64,6 +65,40 @@ val appVersion = Properties().apply {
     rootProject.file("version.properties").inputStream().use(::load)
 }
 
+fun environmentValue(name: String) =
+    providers.gradleProperty(name).orElse(providers.environmentVariable(name)).orNull.orEmpty()
+
+fun publicHttps(value: String): URI = URI(value).also { uri ->
+    val host = uri.host.orEmpty().lowercase()
+    require(uri.scheme == "https" && uri.port in setOf(-1, 443) && uri.rawUserInfo == null &&
+        uri.rawQuery == null && uri.rawFragment == null && host.matches(Regex("[a-z0-9.-]+\\.[a-z]{2,}")) &&
+        listOf(".localhost", ".local", ".test", ".internal", ".invalid").none(host::endsWith)) {
+        "Se requiere una URL HTTPS pública sin credenciales, parámetros ni fragmento."
+    }
+}
+
+val gateway = environmentValue("SOLVENTA_API_ENDPOINT").trimEnd('/').also {
+    if (it.isNotEmpty()) require(!publicHttps(it).path.endsWith("/movil/v1")) {
+        "SOLVENTA_API_ENDPOINT debe ser la salida api_endpoint sin el prefijo móvil."
+    }
+}
+val issuer = environmentValue("SOLVENTA_JWT_ISSUER").also {
+    if (it.isNotEmpty() && !it.startsWith("urn:")) publicHttps(it)
+    if (it.startsWith("urn:")) require(URI(it).isOpaque && URI(it).rawFragment == null)
+}
+val recoveryWeb = environmentValue("RECOVERY_WEB_URL").trimEnd('/').also {
+    if (it.isNotEmpty()) publicHttps(it)
+}
+val requireReleaseGateway = tasks.register("requireReleaseGateway") {
+    doLast {
+        require(gateway.isNotEmpty() && issuer.isNotEmpty()) {
+            "Configura SOLVENTA_API_ENDPOINT y SOLVENTA_JWT_ISSUER con las salidas del entorno."
+        }
+    }
+}
+tasks.matching { it.name in setOf("preReleaseBuild", "prePreviewBuild") }
+    .configureEach { dependsOn(requireReleaseGateway) }
+
 android {
     namespace = "co.solventa.mobile"
     compileSdk = 35
@@ -74,11 +109,15 @@ android {
         targetSdk = 35
         versionCode = appVersion.getProperty("VERSION_CODE").toInt()
         versionName = appVersion.getProperty("VERSION_NAME")
-        buildConfigField("String", "AUTH_BASE_URL", "\"https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1\"")
-        buildConfigField("String", "AUTH_ISSUER", "\"https://65qgzhody9.execute-api.us-east-2.amazonaws.com\"")
+        buildConfigField("String", "AUTH_BASE_URL", "\"${if (gateway.isEmpty()) "" else "$gateway/movil/v1"}\"")
+        buildConfigField("String", "AUTH_ISSUER", "\"$issuer\"")
         buildConfigField("boolean", "BIOMETRIC_LOGIN_ENABLED", "true")
         buildConfigField("boolean", "PHOTO_REVIEW_ENABLED", "true")
         buildConfigField("boolean", "SCREEN_CAPTURE_ALLOWED", "false")
+        buildConfigField("String", "RECOVERY_LINK_ENTRY", "\"\"")
+        buildConfigField("String", "RECOVERY_API_BASE", "\"\"")
+        buildConfigField("String", "REGISTRATION_API_BASE", "\"\"")
+        buildConfigField("String", "ASSISTANCE_API_BASE", "\"\"")
         testInstrumentationRunner = "co.solventa.mobile.espresso.SolventaTestRunner"
         val backendE2e = providers.gradleProperty("backendE2e").orNull == "true"
         testInstrumentationRunnerArguments[if (backendE2e) "annotation" else "notAnnotation"] =
@@ -99,6 +138,10 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+    buildTypes.getByName("release") {
+        buildConfigField("String", "REGISTRATION_API_BASE", "AUTH_BASE_URL")
+        buildConfigField("String", "RECOVERY_LINK_ENTRY", "\"${if (recoveryWeb.isEmpty()) "" else "$recoveryWeb/"}\"")
     }
     buildFeatures {
         compose = true
@@ -153,6 +196,39 @@ android {
         buildConfigField("String", "AUTH_ISSUER", "\"urn:solventa:claims-local\"")
     }
     sourceSets.getByName("claimTest") { res.srcDir("src/debug/res") }
+    mapOf("recoveryTest" to 45445, "travelTest" to 45446, "autoTest" to 45447, "notificationTest" to 45448, "videoTest" to 45449).forEach { (variant, port) ->
+        val certificate = providers.gradleProperty("${variant}Ca").orNull ?: return@forEach
+        buildTypes.create(variant) {
+            initWith(buildTypes.getByName("debug"))
+            applicationIdSuffix = ".${variant.lowercase()}"
+            matchingFallbacks += "debug"
+            buildConfigField("String", "AUTH_BASE_URL", "\"https://localhost:$port/movil/v1\"")
+            val issuer = if (variant != "recoveryTest") "https://identity.local.solventa.test" else "urn:solventa:claims-local"
+            buildConfigField("String", "AUTH_ISSUER", "\"$issuer\"")
+            if (variant in setOf("recoveryTest", "videoTest")) {
+                buildConfigField("String", "RECOVERY_LINK_ENTRY", "\"https://localhost:$port/\"")
+            }
+            if (variant == "videoTest") buildConfigField("String", "RECOVERY_API_BASE", "\"https://localhost:45450/movil/v1\"")
+            if (variant == "videoTest") buildConfigField("String", "REGISTRATION_API_BASE", "\"https://localhost:45451/movil/v1\"")
+            if (variant == "videoTest") buildConfigField("String", "ASSISTANCE_API_BASE", "\"https://localhost:45453/movil/v1\"")
+        }
+        val capitalized = variant.replaceFirstChar { it.uppercase() }
+        val output = layout.buildDirectory.dir("generated/$variant-ca")
+        val copyCa = tasks.register<Sync>("prepare${capitalized}Ca") {
+            from(file(certificate)) { rename { "recovery_ca.crt" } }
+            into(output.map { it.dir("raw") })
+            doFirst {
+                require(file(certificate).readText().trim().matches(
+                    Regex("-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\\s]+-----END CERTIFICATE-----")
+                )) { "Se requiere un único certificado público PEM de recuperación." }
+            }
+        }
+        sourceSets.getByName(variant).apply {
+            manifest.srcFile(if (variant in setOf("notificationTest","videoTest")) "src/notificationTest/AndroidManifest.xml" else "src/recoveryTest/AndroidManifest.xml")
+            res.setSrcDirs(listOf("src/recoveryTest/res", output))
+        }
+        tasks.matching { it.name == "pre${capitalized}Build" }.configureEach { dependsOn(copyCa) }
+    }
     if (providers.gradleProperty("claimDeviceTests").orNull == "true") {
         testBuildType = "claimTest"
     }
