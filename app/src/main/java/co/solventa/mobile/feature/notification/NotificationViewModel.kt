@@ -356,7 +356,7 @@ internal class NotificationViewModel @Inject constructor(
         }
         try {
             store.markRead(actor, authorized.notification.id)
-            if (target.resource.kind == NotificationResourceKind.PAYMENT) {
+            if (target.resource.kind == NotificationResourceKind.PAYMENT && co.solventa.mobile.BuildConfig.BUILD_TYPE == "videoTest") {
                 val version = generation
                 mutable.value = state.value.copy(open = true, busy = true, error = null, paymentNotice = null, message = null)
                 job = viewModelScope.launch {
@@ -381,9 +381,9 @@ internal class NotificationViewModel @Inject constructor(
                 navigation = when (target.resource.kind) {
                     NotificationResourceKind.CLAIM -> NotificationNavigation.Claim(target.resource.id)
                     NotificationResourceKind.POLICY -> NotificationNavigation.Policy(target.resource.id)
-                    NotificationResourceKind.PAYMENT -> null
+                    NotificationResourceKind.PAYMENT -> NotificationNavigation.Payment
                 },
-                paymentNotice = null,
+                paymentNotice = authorized.notification.takeIf { target.resource.kind == NotificationResourceKind.PAYMENT },
                 message = null,
             )
         } catch (problem: NotificationProblem) {

@@ -164,9 +164,14 @@ internal fun NotificationScreen(
         refreshEnabled = !state.busy, headerAlignment = Alignment.Start, header = {
         SolventaScreenHeader(stringResource(R.string.notification_title), stringResource(R.string.notification_back), back)
     }) {
-        state.paymentNotice?.let {
-            Text(stringResource(R.string.demo_payment_detail), style = MaterialTheme.typography.titleLarge)
-            Text(stringResource(R.string.demo_payment_confirmed))
+        state.paymentNotice?.let { notice ->
+            if (co.solventa.mobile.BuildConfig.BUILD_TYPE == "videoTest") {
+                Text(stringResource(R.string.demo_payment_detail), style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.demo_payment_confirmed))
+            } else {
+                Text(notice.title, style = MaterialTheme.typography.titleLarge)
+                Text(notice.content)
+            }
         }
         if (!state.permissionGranted || (state.pushPreferencesKnown && !state.pushEnabled)) {
             NotificationPermissionCard(state, requestPermission, togglePush, settingsRequired)

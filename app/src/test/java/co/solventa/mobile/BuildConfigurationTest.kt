@@ -39,8 +39,9 @@ class BuildConfigurationTest {
                 assertTrue(BuildConfig.AUTH_BASE_URL.endsWith("/movil/v1"))
                 assertTrue(BuildConfig.AUTH_ISSUER.isNotBlank())
                 assertEquals(BuildConfig.AUTH_BASE_URL, BuildConfig.REGISTRATION_API_BASE)
+            } else {
+                assertTrue(BuildConfig.BIOMETRIC_LOGIN_ENABLED)
             }
-            assertTrue(BuildConfig.BIOMETRIC_LOGIN_ENABLED)
             assertTrue(BuildConfig.PHOTO_REVIEW_ENABLED)
         }
     }

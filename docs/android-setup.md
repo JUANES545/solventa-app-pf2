@@ -30,10 +30,13 @@ El cliente usa un solo BFF HTTPS. Gradle acepta estas propiedades (`-P`) o varia
 | `SOLVENTA_API_ENDPOINT` | Salida `api_endpoint` de `terraform/environments/prod/primary`, o `deployment_context.api_endpoint` en `nueva-cuenta/primary`. No incluir `/movil/v1`: Android lo añade una vez. |
 | `SOLVENTA_JWT_ISSUER` | `jwt_issuer` del mismo entorno (`deployment_context.jwt_issuer` en nueva cuenta). Debe coincidir exactamente, no se deriva del Gateway. |
 | `RECOVERY_WEB_URL` | Opcional. URL HTTPS con el origen y la ruta de `identidad-config` usados por el correo. Sin ella no se ofrece recuperación. |
+| `BIOMETRIC_LOGIN_ENABLED` | Opcional, `false` por defecto. Usar `true` solo si el BFF del mismo entorno admite acceso biométrico. Con `false` se conserva el acceso por contraseña y no se ofrece enrolamiento biométrico. |
 
 Sin Gateway o issuer no se genera el APK `release` ni `preview`. CI toma estas entradas de variables de repositorio. No son credenciales. Una prueba AWS en dispositivo requiere además `approvedAwsBaseUrl` como argumento de instrumentación, con la base completa autorizada para esa ejecución.
 
 El alta completa y la recuperación cifran la credencial mediante JWE. El enlace se pega en la app y debe coincidir con `<RECOVERY_WEB_URL>/?recuperacion=1#token=…`. No hay App Links ni supuesto de entrega del correo. Contratar no cobra: no se ofrece pago simulado en `release` ni `preview`. La emisión solo se muestra cuando la saga la confirma y existe una póliza propia para esa suscripción. Los avisos consultan el buzón; no se incorpora FCM.
+
+En `release` y `preview`, abrir un aviso de pago muestra el título y el texto del buzón autenticado. No se consulta un detalle de pago ni se confirma una transferencia. Solo `videoTest` consulta el detalle simulado de su entorno.
 
 ## Variantes locales aisladas
 

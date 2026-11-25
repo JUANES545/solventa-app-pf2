@@ -140,6 +140,9 @@ android {
         jvmTarget = "17"
     }
     buildTypes.getByName("release") {
+        val biometric = environmentValue("BIOMETRIC_LOGIN_ENABLED").ifEmpty { "false" }
+        require(biometric in setOf("true", "false")) { "BIOMETRIC_LOGIN_ENABLED debe ser true o false." }
+        buildConfigField("boolean", "BIOMETRIC_LOGIN_ENABLED", biometric)
         buildConfigField("String", "REGISTRATION_API_BASE", "AUTH_BASE_URL")
         buildConfigField("String", "RECOVERY_LINK_ENTRY", "\"${if (recoveryWeb.isEmpty()) "" else "$recoveryWeb/"}\"")
     }

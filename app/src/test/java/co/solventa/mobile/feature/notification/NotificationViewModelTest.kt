@@ -16,7 +16,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 private class FakeNotificationApi : NotificationApi {
-    override suspend fun confirmedPaymentClaim(actor: String, paymentId: String) = notificationResourceId
+    var paymentQueries = 0
+    override suspend fun confirmedPaymentClaim(actor: String, paymentId: String): String {
+        paymentQueries++
+        return notificationResourceId
+    }
     var values = listOf(
         MobileNotification(
             notificationId,
@@ -389,6 +393,7 @@ class NotificationViewModelTest {
         model.open(model.state.value.items.single())
         await(model)
         assertEquals(NotificationNavigation.Payment, model.state.value.navigation)
+        assertEquals(0, api.paymentQueries)
         assertTrue(model.state.value.open)
         assertEquals(api.values.single(), model.state.value.paymentNotice)
         assertNull(model.state.value.message)
