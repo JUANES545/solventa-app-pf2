@@ -83,13 +83,14 @@ class EvidenceCameraPermissionTest {
             EvidenceKind.PHOTO -> "evidence-add-photo"
             EvidenceKind.VIDEO -> "evidence-add-video"
             EvidenceKind.DOCUMENT -> "evidence-add-document"
+            EvidenceKind.PDF -> "evidence-add-pdf"
         }).performScrollTo().performClick()
-        compose.onNodeWithTag(if (camera) "evidence-source-camera" else "evidence-source-file").performClick()
+        if (kind != EvidenceKind.PDF) compose.onNodeWithTag(if (camera) "evidence-source-camera" else "evidence-source-file").performClick()
         compose.waitForIdle()
     }
 
     @Test fun grantingCameraContinuesTheChosenPhotoVideoOrDocumentWithoutStartingCapture() {
-        for (kind in EvidenceKind.entries) {
+        for (kind in EvidenceKind.entries.filter { it != EvidenceKind.PDF }) {
             compose.runOnIdle { shadowOf(app).denyPermissions(Manifest.permission.CAMERA) }
             choose(kind)
             assertTrue(launches.last().contract is ActivityResultContracts.RequestMultiplePermissions)
@@ -156,7 +157,7 @@ class EvidenceCameraPermissionTest {
             assertEquals(EvidenceStep.LIST, model.state.value.step)
             assertNull(model.state.value.draft)
         }
-        assertEquals(3, launches.size)
+        assertEquals(EvidenceKind.entries.size, launches.size)
     }
 
     @Test fun latePermissionAfterChangingActorOrClaimDoesNotOpenCamera() {

@@ -20,6 +20,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import co.solventa.mobile.core.designsystem.SolventaTheme
 import co.solventa.mobile.feature.auth.*
+import co.solventa.mobile.feature.home.HomeDestination
+import co.solventa.mobile.feature.home.HomeNavigation
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -59,8 +61,10 @@ class AdaptiveAccessTest(private val dark: Boolean, private val landscape: Boole
                                 screen.value = 3
                             }, onBack = { screen.value = 1 })
                             3 -> RegistrationSuccessScreen("cliente@example.org", onSignIn = { signIns++ })
-                            else -> AccountScreen(AuthUser("id", "Cliente", "cliente@example.org"), false,
-                                onLogout = { logout++ })
+                            else -> HomeNavigation(HomeDestination.ACCOUNT, true, true, {}) {
+                                AccountScreen(AuthUser("id", "Cliente", "cliente@example.org"), false,
+                                    onLogout = { logout++ }, onIdentity = {})
+                            }
                         }
                     }
                 }
@@ -91,7 +95,13 @@ class AdaptiveAccessTest(private val dark: Boolean, private val landscape: Boole
         compose.onNodeWithText("Continuar").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
         compose.onNodeWithText("Iniciar sesión").performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, signIns); screen.value = 4 }
-        compose.onNodeWithText("Cerrar sesión").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Verificación de identidad simulada").performScrollTo().assertIsDisplayed()
+        val exit = compose.onNodeWithText("Cerrar sesión").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        if (!landscape) {
+            val bar = compose.onNodeWithContentDescription("Inicio").fetchSemanticsNode().boundsInRoot
+            assertTrue(exit.fetchSemanticsNode().boundsInRoot.bottom <= bar.top)
+        }
+        exit.performClick()
         compose.runOnIdle { assertEquals(1, logout) }
     }
 }

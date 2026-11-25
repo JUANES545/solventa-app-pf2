@@ -58,7 +58,7 @@ import co.solventa.mobile.core.ui.rememberAccessBackgroundState
 import co.solventa.mobile.core.ui.status
 
 @Composable
-fun RegistrationReferenceScreen(onContinue: (Boolean) -> Unit, onBack: () -> Unit) {
+fun RegistrationReferenceScreen(onContinue: (Boolean) -> Unit, onBack: () -> Unit, onFinance: ((Boolean) -> Unit)? = null) {
     var terms by remember { mutableStateOf(false) }
     var finance by remember { mutableStateOf(false) }
     SolventaPage(headerAlignment = Alignment.Start, header = {
@@ -68,7 +68,7 @@ fun RegistrationReferenceScreen(onContinue: (Boolean) -> Unit, onBack: () -> Uni
             onBack = onBack,
         )
     }, actions = {
-        Button(onClick = { onContinue(terms) }, enabled = terms,
+        Button(onClick = { onFinance?.invoke(finance); onContinue(terms) }, enabled = terms,
             modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight),
             shape = SolventaLayout.controlShape) {
             Text(stringResource(R.string.registration_continue), textAlign = TextAlign.Center)
@@ -89,10 +89,10 @@ fun RegistrationReferenceScreen(onContinue: (Boolean) -> Unit, onBack: () -> Uni
                 .toggleable(finance, role = Role.Checkbox, onValueChange = { finance = it }).padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(finance, null)
-                Text(stringResource(R.string.registration_finance), Modifier.weight(1f).padding(start = 8.dp))
+                Text(stringResource(if (onFinance == null) R.string.registration_finance else R.string.travel_registration_consent), Modifier.weight(1f).padding(start = 8.dp))
             }
         }
-        Text(stringResource(R.string.registration_reference_notice), style = MaterialTheme.typography.bodyMedium,
+        Text(stringResource(if (onFinance == null) R.string.registration_reference_notice else R.string.travel_registration_notice), style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -106,6 +106,7 @@ fun RegistrationScreen(
     showTerms: Boolean = false,
     onContinueTerms: (Boolean) -> Unit = {},
     onTermsBack: () -> Unit = {},
+    onFinance: ((Boolean) -> Unit)? = null,
 ) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -133,7 +134,7 @@ fun RegistrationScreen(
     }
 
     if (showTerms) {
-        RegistrationReferenceScreen(onContinueTerms, onTermsBack)
+        RegistrationReferenceScreen(onContinueTerms, onTermsBack, onFinance)
         return
     }
 
@@ -145,15 +146,8 @@ fun RegistrationScreen(
     }
 
     SolventaPage(header = {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { focus.clearFocus(); onBack() }, enabled = !loading,
-                modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) {
-                Text(stringResource(R.string.back_to_login), textAlign = TextAlign.Center)
-            }
-            Text(stringResource(R.string.registration_title), modifier = Modifier.fillMaxWidth().semantics { heading() },
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.headlineMedium)
-        }
+        SolventaScreenHeader(stringResource(R.string.registration_title), stringResource(R.string.back_to_login),
+            { focus.clearFocus(); onBack() }, !loading)
     }, actions = {
         Button(onClick = { submit() }, enabled = !loading,
             modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight), shape = SolventaLayout.controlShape) {

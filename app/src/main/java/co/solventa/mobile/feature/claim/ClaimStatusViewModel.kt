@@ -55,6 +55,8 @@ internal class ClaimStatusViewModel @Inject constructor(private val api: MobileC
         refresh()
     }
 
+    fun close() = reset(ClaimStatusState(actor = state.value.actor))
+
     fun back() {
         val current = state.value
         if (current.fromList && current.selectedId != null && current.actor != null) show(current.actor)

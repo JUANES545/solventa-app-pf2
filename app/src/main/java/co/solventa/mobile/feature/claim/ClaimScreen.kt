@@ -1,5 +1,8 @@
 package co.solventa.mobile.feature.claim
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -104,6 +107,7 @@ internal fun ClaimScreen(
     onLocationActiveChange: (Boolean) -> Unit = {},
 ) {
     val feedback = remember { SnackbarHostState() }
+    var reviewing by remember(state.actor, state.draft) { mutableStateOf(false) }
     SolventaPage(headerAlignment = Alignment.Start, feedback = { SnackbarHost(feedback) },
         onRefresh = refresh, isRefreshing = state.loadingPolicies, refreshEnabled = !state.busy, header = {
         SolventaScreenHeader(stringResource(R.string.claim_title), stringResource(backLabel), back)
@@ -122,8 +126,6 @@ internal fun ClaimScreen(
         if (sent != null) ClaimSentCard(sent, state.busy, evidence, status)
         if (review.isNotEmpty()) ClaimReviewCard(review, state.busy, !state.editing, correct)
         if (state.editing) {
-            Text(stringResource(R.string.claim_camera_evidence_guide),
-                style = MaterialTheme.typography.bodyMedium)
             Text(stringResource(R.string.claim_policy), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
             if (state.cachedPolicies && state.policies.isNotEmpty() && !state.loadingPolicies) {
                 Text(stringResource(R.string.claim_cached_policies), style = MaterialTheme.typography.bodyMedium,
@@ -181,9 +183,18 @@ internal fun ClaimScreen(
                     onActiveChange = onLocationActiveChange)
             }
             ClaimField(R.string.claim_description, state.draft.description, state.busy, multiline = true) { edit(state.draft.copy(description = it)) }
-            Button(onClick = submit, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
-                Text(stringResource(R.string.claim_submit), textAlign = TextAlign.Center)
+            Button(onClick = {
+                try { state.draft.payload(state.policies); reviewing=true }
+                catch (_: ClaimProblem) { submit() }
+            }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {
+                Text(stringResource(R.string.claim_review_before_send), textAlign = TextAlign.Center)
             }
+            if(reviewing) androidx.compose.material3.AlertDialog(onDismissRequest={reviewing=false},
+                title={Text(stringResource(R.string.claim_review_before_send))},
+                text={ Text("${state.policies.firstOrNull { it.id==state.draft.policyId }?.type.orEmpty()} · ${state.draft.type}\n${state.draft.date} · ${state.draft.time}\n${state.draft.place}\n${state.draft.description}",
+                    Modifier.verticalScroll(rememberScrollState())) },
+                confirmButton={TextButton(onClick={reviewing=false;submit()},enabled=!state.busy){Text(stringResource(R.string.claim_submit))}},
+                dismissButton={TextButton(onClick={reviewing=false}){Text(stringResource(R.string.claim_edit_before_send))}})
         } else {
             OutlinedButton(onClick = newReport, enabled = !state.busy,
                 modifier = Modifier.fillMaxWidth().heightIn(min = SolventaLayout.controlHeight)) {

@@ -57,6 +57,27 @@ internal fun notificationApi(server: MockWebServer) =
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
 class NotificationApiTest {
+    @Test fun paymentDetailIsAuthenticatedReadOnlyAndMatchesTheRequestedResource() = runBlocking {
+        MockWebServer().use { server ->
+            val api = notificationApi(server)
+            val payment = JSONObject().put("id", notificationResourceId).put("siniestroId", notificationId)
+                .put("estado", "confirmado").put("simulado", true)
+            server.enqueue(MockResponse().setBody(payment.toString()))
+            assertEquals(notificationId, api.confirmedPaymentClaim("actor-a", notificationResourceId))
+            val request = server.takeRequest()
+            assertEquals("GET", request.method)
+            assertEquals("/movil/v1/pagos-parametricos/$notificationResourceId", request.path)
+            assertEquals("Bearer synthetic-access", request.getHeader("Authorization"))
+            server.enqueue(MockResponse().setBody(payment.put("id", notificationId).toString()))
+            try {
+                api.confirmedPaymentClaim("actor-a", notificationResourceId)
+                fail("No debe aceptar otro pago")
+            } catch (error: NotificationProblem) {
+                assertEquals(NotificationError.PROTOCOL, error.reason)
+            }
+        }
+    }
+
     @Test
     fun unauthorizedRequestRetriesOnceWithTheRotatedToken() = runBlocking {
         MockWebServer().use { server ->

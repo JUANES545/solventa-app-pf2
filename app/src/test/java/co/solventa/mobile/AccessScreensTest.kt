@@ -257,10 +257,10 @@ class AccessScreensTest {
         compose.setContent { AccountScreen(user, loading.value, onLogout = { loading.value = true }) }
         compose.onNodeWithText("Mi cuenta").assertIsDisplayed()
         compose.onNodeWithText(user.email).assertIsDisplayed()
-        compose.onNodeWithText("Verificando sesión…").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Verificando sesión…").assertIsNotEnabled()
         compose.runOnIdle { loading.value = false }
-        compose.onNodeWithText("Cerrar sesión").performScrollTo().performClick()
-        compose.onNodeWithText("Cerrando sesión…").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Cerrar sesión").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Cerrando sesión…").assertIsNotEnabled()
     }
 
     @Test fun applicationRoutesRegistrationAndConfirmationWithoutAutomaticSession() {

@@ -1,0 +1,12 @@
+<resources>
+    <string name="reg_profile">Datos para tu seguro</string>
+    <string name="reg_cc">Cédula de ciudadanía</string>
+    <string name="reg_ce">Cédula de extranjería</string>
+    <string name="reg_passport">Pasaporte</string>
+    <string name="reg_ppt">Permiso por protección temporal</string>
+    <string name="reg_doc">Número de documento</string>
+    <string name="reg_phone">Teléfono en Colombia (10 dígitos)</string>
+    <string name="reg_birth">Fecha de nacimiento</string>
+    <string name="reg_profiling">Autorizo consultar mi indicador de riesgo en Open Finance y Open Data para cotizar durante 30 días (opcional).</string>
+    <string name="reg_photos">Revisar fotos del documento y la selfie en este teléfono (opcional).</string>
+</resources>

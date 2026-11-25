@@ -3,8 +3,8 @@
 ## Recorrido normal contra el BFF movil
 
 Usa el icono **Solventa** (`co.solventa.mobile.pf2`) para acceder al backend.
-Las variantes `debug`, `preview` y `release` usan
-`https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1`.
+Las variantes `debug`, `preview` y `release` usan el Gateway configurado para
+el entorno más `/movil/v1`; véase [Android setup](android-setup.md).
 Hilt inyecta `MobileAuthApi`, `MobileClaimApi`, `MobileEvidenceApi`,
 `MobileNotificationApi` y `MobileAssistanceApi`; no hay un servidor simulado
 ni un fallback a datos de practica. Se retiro la variante demo y su servidor.
@@ -1370,7 +1370,7 @@ fotos con la variante aislada. CAMERA y ambas cámaras opcionales se declaran
 en el manifiesto común; no se añaden permisos de micrófono, almacenamiento
 o galería. Se elimina el host vacío `noPhoto`.
 
-`debug`, `preview` y `release` compilan sin propiedades privadas con:
+Configuración histórica de aquella base (no usar como valor predeterminado actual):
 
 | Campo | Valor |
 | --- | --- |

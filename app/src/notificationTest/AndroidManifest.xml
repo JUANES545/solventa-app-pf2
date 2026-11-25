@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <application android:networkSecurityConfig="@xml/recovery_network">
+        <service android:name=".feature.notification.DemoListenerService"
+            android:exported="false" android:foregroundServiceType="dataSync" />
+    </application>
+</manifest>

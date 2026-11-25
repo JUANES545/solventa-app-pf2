@@ -134,7 +134,7 @@ class ClaimStatusDeviceE2eTest {
         compose.onNodeWithText(updated(changedDate)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(text(R.string.claim_status_network)).performScrollTo().assertIsDisplayed()
         control("online")
-        compose.onNodeWithText(text(R.string.claim_status_retry)).performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithTag("page-refresh").performCustomAccessibilityActionWithLabel(text(R.string.claim_status_refresh))
         compose.waitUntil(30_000) { !model.state.value.busy && model.state.value.detail?.id == id }
         assertEquals(changedDate, model.state.value.detail!!.updatedAt)
         assertNull(model.state.value.error)

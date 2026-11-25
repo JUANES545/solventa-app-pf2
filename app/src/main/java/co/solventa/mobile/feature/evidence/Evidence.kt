@@ -11,7 +11,7 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 
 internal enum class EvidenceKind(val mime: String, val extension: String) {
-    PHOTO("image/jpeg", "jpg"), DOCUMENT("image/jpeg", "jpg"), VIDEO("video/mp4", "mp4"),
+    PHOTO("image/jpeg", "jpg"), DOCUMENT("image/jpeg", "jpg"), VIDEO("video/mp4", "mp4"), PDF("application/pdf","pdf"),
 }
 
 internal data class EvidenceScope(val actorId: String, val claimId: String) {

@@ -80,11 +80,8 @@ Estas pruebas no sustituyen una comprobación en hardware ni de lector de pantal
 
 ### SOL-169: acceso con clave protegida por biometría
 
-El candidato normal habilita el flujo con el contrato público confirmado:
-BFF `https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1` e issuer
-exacto `https://65qgzhody9.execute-api.us-east-2.amazonaws.com`, sin barra final
-ni ruta del BFF. Ese issuer procede del documento OIDC público verificado por
-el backend; no se infiere ni normaliza a partir de la URL de la API.
+El candidato usa el BFF e issuer publicados por el entorno. El issuer no se
+infiere ni normaliza a partir de la URL de la API. Véase [Android setup](android-setup.md).
 La variante `biometricTest` conserva su backend local autorizado e issuer `.test`;
 no se comparten applicationId, tokens ni credenciales entre esas instalaciones.
 

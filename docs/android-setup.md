@@ -21,7 +21,28 @@ instrumented authentication journeys clear this app's local session. Compiling i
 tests does not execute them. See [testing.md](testing.md) for the Espresso + Compose HTTP
 suite and the separately selected E2E against a disposable real backend.
 
-## Initial technical baseline
+## Gateway de `release` y `preview`
+
+El cliente usa un solo BFF HTTPS. Gradle acepta estas propiedades (`-P`) o variables de entorno con el mismo nombre:
+
+| Entrada | Fuente y uso |
+| --- | --- |
+| `SOLVENTA_API_ENDPOINT` | Salida `api_endpoint` de `terraform/environments/prod/primary`, o `deployment_context.api_endpoint` en `nueva-cuenta/primary`. No incluir `/movil/v1`: Android lo añade una vez. |
+| `SOLVENTA_JWT_ISSUER` | `jwt_issuer` del mismo entorno (`deployment_context.jwt_issuer` en nueva cuenta). Debe coincidir exactamente, no se deriva del Gateway. |
+| `RECOVERY_WEB_URL` | Opcional. URL HTTPS con el origen y la ruta de `identidad-config` usados por el correo. Sin ella no se ofrece recuperación. |
+| `BIOMETRIC_LOGIN_ENABLED` | Opcional, `false` por defecto. Usar `true` solo si el BFF del mismo entorno admite acceso biométrico. Con `false` se conserva el acceso por contraseña y no se ofrece enrolamiento biométrico. |
+
+Sin Gateway o issuer no se genera el APK `release` ni `preview`. CI toma estas entradas de variables de repositorio. No son credenciales. Una prueba AWS en dispositivo requiere además `approvedAwsBaseUrl` como argumento de instrumentación, con la base completa autorizada para esa ejecución.
+
+El alta completa y la recuperación cifran la credencial mediante JWE. El enlace se pega en la app y debe coincidir con `<RECOVERY_WEB_URL>/?recuperacion=1#token=…`. No hay App Links ni supuesto de entrega del correo. Contratar no cobra: no se ofrece pago simulado en `release` ni `preview`. La emisión solo se muestra cuando la saga la confirma y existe una póliza propia para esa suscripción. Los avisos consultan el buzón; no se incorpora FCM.
+
+En `release` y `preview`, abrir un aviso de pago muestra el título y el texto del buzón autenticado. No se consulta un detalle de pago ni se confirma una transferencia. Solo `videoTest` consulta el detalle simulado de su entorno.
+
+## Variantes locales aisladas
+
+Para probar **Recuperar contraseña** sin reemplazar otras instalaciones, inicia el BFF local de recuperación y compila `:app:assembleRecoveryTest` con `-PrecoveryTestCa=<ruta absoluta al certificado PEM público del entorno>`. La variante `co.solventa.mobile.pf2.recoverytest` conecta con `https://localhost:45445` por túnel USB (`adb reverse --no-rebind tcp:45445 tcp:45445`). La CA solo se acepta para `localhost`; no se instala en el sistema.
+
+En el login, selecciona **Olvidé mi contraseña**. Tras solicitar el correo, introduce el enlace completo recibido y la nueva contraseña. **Ya tengo un enlace** permite volver al formulario sin pedir otro. El enlace es de un solo uso. No lo guardes en logs ni capturas. La apertura automática desde el correo requiere un dominio con Android App Links verificados; no está habilitada en esta variante ni en release.
 
 The initial versions come from the previous Android repository: Gradle 8.11.1, Android Gradle Plugin 8.9.2, Kotlin 2.1.20, Compose BOM 2025.03.01 and Hilt 2.56.1. The version catalog contains only the dependencies used by this scaffold.
 
@@ -30,6 +51,14 @@ The application ID is `co.solventa.mobile.pf2`, so this app can coexist with the
 The single `app` module contains an application class, an activity and a minimal Compose entry point. Feature packages, repository contracts and the design system will be added with the corresponding approved work. The entry point and the temporary Android framework icon are not business designs or replacements for the Figma design. App backup and data transfer are disabled in this initial setup.
 
 ## Continuous integration
+
+Para el recorrido físico de Viaje y billetera, usa `:app:assembleTravelTest` con `-PtravelTestCa=<ruta al PEM público del BFF móvil local>`. El paquete `co.solventa.mobile.pf2.traveltest` está aislado de recuperación y siniestros. Necesita `adb reverse --no-rebind tcp:45446 tcp:45446`. El cliente verifica la emisión consultando la suscripción y el detalle de la póliza propia. La descarga de HTML es explícita y se verifica contra `X-Content-SHA256`.
+
+En `videoTest`, conserva los túneles USB `45449` y `45450`. El login y el enlace de correo usan `https://localhost:45449`; solo solicitud, desafío y confirmación de recuperación usan `https://localhost:45450/movil/v1`. Ambos servicios comparten la identidad del vídeo y su CA local.
+
+El alta completa necesita además `adb reverse --no-rebind tcp:45451 tcp:45451`. Solo el desafío y el registro se envían a `https://localhost:45451/movil/v1`; la contraseña se envía dentro del sobre JWE del desafío. Crear la cuenta no inicia sesión. La aceptación de términos y la autorización opcional de perfilamiento son decisiones separadas; el teléfono se conserva para cotizar aun si el cliente decide autorizar el perfilamiento más tarde.
+
+En esta configuración de `videoTest`, asistencia requiere el auxiliar HTTPS `45453` y `adb reverse --no-rebind tcp:45453 tcp:45453`. Solo la consulta de prestadores (5 km) y el registro de asistencia usan ese origen, con la sesión de `45449`. Un recibo `registrada` no acredita despacho. No se presupone que el lanzador principal arranque ese auxiliar.
 
 `.github/workflows/android-ci.yml` runs on pull requests to `develop` and `master`, and on pushes to those branches. It uses GitHub-hosted Linux runners, JDK 17 and the Gradle Wrapper.
 

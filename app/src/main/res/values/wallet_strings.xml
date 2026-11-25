@@ -1,0 +1,27 @@
+<resources>
+    <string name="wallet_show_number">Ver número completo</string>
+    <plurals name="wallet_count"><item quantity="one">%d póliza</item><item quantity="other">%d pólizas</item></plurals>
+    <string name="wallet_list">Lista</string>
+    <string name="wallet_grid">Cuadrícula</string>
+    <string name="wallet_reference">Póliza •••• %1$s</string>
+    <string name="policy_cached_at">Sin conexión. Última actualización: %1$s.</string>
+    <string name="wallet_download">Descargar documento</string>
+    <string name="wallet_downloaded">Documento guardado</string>
+    <string name="cancel_check">Consultar cancelación</string>
+    <string name="cancel_product">Este producto no admite cancelación.</string>
+    <string name="cancel_done">Póliza cancelada</string>
+    <string name="cancel_scheduled">La póliza aún no ha iniciado.</string>
+    <string name="cancel_ended">La vigencia ha terminado.</string>
+    <string name="cancel_unavailable">La póliza no se puede cancelar en este momento.</string>
+    <string name="cancel_settlement">Si confirmas, tu cobertura terminaría el %1$s.\nDevolución: %2$s\nSaldo pendiente: %3$s</string>
+    <string name="cancel_reason">Motivo de cancelación</string>
+    <string name="cancel_need">Ya no la necesito</string>
+    <string name="cancel_cost">Costo</string>
+    <string name="cancel_switch">Cambio de aseguradora</string>
+    <string name="cancel_unsatisfied">Insatisfacción</string>
+    <string name="cancel_other">Otro</string>
+    <string name="cancel_request">Cancelar póliza</string>
+    <string name="cancel_confirm_text">¿Confirmas la cancelación con la liquidación indicada?</string>
+    <string name="cancel_yes">Confirmar cancelación</string>
+    <string name="cancel_keep">Conservar póliza</string>
+</resources>

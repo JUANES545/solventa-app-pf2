@@ -51,8 +51,8 @@ class OperationalPresentationDeviceTest {
     @Test fun compactViewportAtTwoHundredPercentKeepsActionsReachable() = captureScenes(2f)
 
     private enum class Scene(val fileName: String, val action: Int) {
-        CLAIM("claim", R.string.claim_submit),
-        CLAIM_LOADING("claim-loading", R.string.claim_submit),
+        CLAIM("claim", R.string.claim_review_before_send),
+        CLAIM_LOADING("claim-loading", R.string.claim_review_before_send),
         HISTORY("claim-history", R.string.claim_add_evidence),
         STATUS_LIST("status-list", R.string.claim_status_back),
         STATUS_LIST_LOADING("status-list-loading", R.string.claim_status_back),

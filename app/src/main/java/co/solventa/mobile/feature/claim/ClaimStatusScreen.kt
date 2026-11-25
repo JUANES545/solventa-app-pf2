@@ -1,5 +1,7 @@
 package co.solventa.mobile.feature.claim
 
+import androidx.compose.ui.platform.testTag
+
 import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -56,7 +58,8 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 @Composable
-internal fun ClaimStatusHost(model: ClaimStatusViewModel, evidence: EvidenceViewModel? = null) {
+internal fun ClaimStatusHost(model: ClaimStatusViewModel, evidence: EvidenceViewModel? = null,
+    manage: ((EvidenceClaim) -> Unit)? = null) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val state by model.state.collectAsState()
@@ -80,8 +83,11 @@ internal fun ClaimStatusHost(model: ClaimStatusViewModel, evidence: EvidenceView
         }
     }
     BackHandler(onBack = model::back)
-    ClaimStatusScreen(state, model::select, { model.refresh(); model.loadCase(); evidence?.refresh() }, model::back,
+    ClaimStatusScreen(state, model::select, { model.refresh(); if (state.selectedId != null) { model.loadCase(); evidence?.refresh() } }, model::back,
         attachments = { scope, claim ->
+            if (manage != null) androidx.compose.material3.Button(onClick = { manage(claim) }) {
+                Text(stringResource(R.string.evidence_manage))
+            }
             if (evidence != null) ClaimCaseAttachments(evidence, scope, claim)
             else Text(stringResource(R.string.claim_status_attachments_error), color = MaterialTheme.colorScheme.error)
         })
@@ -95,9 +101,9 @@ internal fun ClaimStatusScreen(
     },
 ) {
     var expanded by rememberSaveable(state.actor, state.selectedId) { mutableStateOf(false) }
-    SolventaPage(headerAlignment = Alignment.Start, onRefresh = refresh, isRefreshing = state.busy, header = {
+    SolventaPage(headerAlignment = Alignment.Start, onRefresh = refresh, isRefreshing = state.busy, refreshEnabled = !state.busy, header = {
         val title = if (state.selectedId == null) stringResource(R.string.claim_status_title)
-            else state.selectedClaim?.takeIf { it.id == state.selectedId }?.type
+            else state.selectedClaim?.takeIf { it.id == state.selectedId }?.let { claimDisplayType(it.type) }
                 ?: stringResource(R.string.claim_status_detail_title)
         SolventaScreenHeader(title, stringResource(R.string.claim_status_back), back)
     }) {
@@ -108,8 +114,7 @@ internal fun ClaimStatusScreen(
         }
         when {
             state.busy && !hasContent -> {
-                if (state.selectedId == null) SolventaSkeletonList(stringResource(R.string.claim_status_loading))
-                else SolventaSkeletonDetail(stringResource(R.string.claim_status_loading))
+                co.solventa.mobile.core.ui.CollectionLoading(stringResource(R.string.claim_status_loading), state.selectedId != null)
             }
             state.error != null && !hasContent -> SolventaLoadError(
                 stringResource(R.string.ui_load_claim_status_error),
@@ -123,34 +128,20 @@ internal fun ClaimStatusScreen(
                             Modifier.semantics { heading(); liveRegion = LiveRegionMode.Polite },
                             style = MaterialTheme.typography.titleLarge)
                         Text(state.detail.description)
-                        Text(stringResource(R.string.claim_status_updated, operationalDate(state.detail.updatedAt)),
-                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        val expandedLabel = stringResource(if (expanded) R.string.ui_details_expanded else R.string.ui_details_collapsed)
-                        TextButton(onClick = { expanded = !expanded },
-                            modifier = Modifier.heightIn(min = 48.dp).semantics { stateDescription = expandedLabel }) {
-                            Text(stringResource(if (expanded) R.string.ui_hide_details else R.string.ui_show_details))
-                        }
                     }
                 }
-                if (expanded) {
+                val actor = state.actor
+                val claim = state.selectedClaim?.takeIf { state.caseLoaded && state.caseError == null && it.id == state.selectedId }
                     SolventaSection {
-                        Text(stringResource(R.string.claim_status_report_details), Modifier.semantics { heading() },
-                            style = MaterialTheme.typography.titleLarge)
                         when {
                             state.caseBusy -> SolventaSkeletonDetail(stringResource(R.string.claim_status_loading))
                             state.caseError != null -> SolventaLoadError(
                                 stringResource(R.string.claim_status_details_error),
                                 stringResource(claimStatusErrorText(state.caseError)), detail = true)
-                            state.caseLoaded && state.selectedClaim?.id == state.selectedId -> {
-                                val claim = checkNotNull(state.selectedClaim)
-                                ClaimCaseField(stringResource(R.string.claim_type), claim.type)
-                                ClaimCaseField(stringResource(R.string.claim_date),
-                                    operationalDate(Instant.parse(claim.date)))
-                                claim.place?.let { ClaimCaseField(stringResource(R.string.claim_place), it) }
-                                ClaimCaseField(stringResource(R.string.claim_description), claim.description)
-                                claim.registeredAt?.let {
-                                    ClaimCaseField(stringResource(R.string.claim_status_registered), operationalDate(it))
-                                }
+                            claim != null -> {
+                                Text(stringResource(R.string.claim_status_event, operationalDate(Instant.parse(claim.date))), style = MaterialTheme.typography.labelLarge)
+                                claim.place?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
+                                Text(claim.description)
                                 if (claim.policyId == null || claim.place == null) {
                                     Text(stringResource(R.string.claim_status_partial_details),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -159,41 +150,41 @@ internal fun ClaimStatusScreen(
                             else -> Text(stringResource(R.string.claim_status_partial_details))
                         }
                     }
-                    val actor = state.actor
-                    val claim = state.selectedClaim
-                    val caseAvailable = state.caseLoaded && state.caseError == null && claim?.id == state.selectedId
+                if (claim != null && actor != null) attachments(EvidenceScope(actor, claim.id), claim)
+                val expandedLabel = stringResource(if (expanded) R.string.ui_details_expanded else R.string.ui_details_collapsed)
+                TextButton(onClick = { expanded = !expanded },
+                    modifier = Modifier.heightIn(min = 48.dp).semantics { stateDescription = expandedLabel }) {
+                    Text(stringResource(if (expanded) R.string.ui_hide_details else R.string.claim_history_references))
+                }
+                if (expanded) {
                     SolventaSection {
-                        Text(stringResource(R.string.claim_status_references), Modifier.semantics { heading() },
-                            style = MaterialTheme.typography.titleMedium)
+                        claim?.registeredAt?.let { ClaimCaseField(stringResource(R.string.claim_status_registered), operationalDate(it)) }
+                        Text(stringResource(R.string.claim_status_updated, operationalDate(state.detail.updatedAt)))
                         ClaimCaseField(stringResource(R.string.claim_status_reference), state.detail.id, reference = true)
-                        if (caseAvailable) {
-                            claim?.policyId?.let {
-                                ClaimCaseField(stringResource(R.string.claim_status_policy), it, reference = true)
-                            }
-                        }
+                        claim?.policyId?.let { ClaimCaseField(stringResource(R.string.claim_status_policy), it, reference = true) }
                         ClaimCaseField(stringResource(R.string.operational_updated_instant), state.detail.updatedAt.toString())
                         ClaimCaseField(stringResource(R.string.operational_display_zone), ZoneId.systemDefault().id)
-                    }
-                    if (caseAvailable && claim != null && actor != null) {
-                        attachments(EvidenceScope(actor, claim.id), claim)
                     }
                 }
             }
             state.selectedId == null && state.claims.isEmpty() && state.error == null ->
                 SolventaEmptyState(stringResource(R.string.claim_status_empty))
             state.selectedId == null -> {
-                state.claims.forEach { claim ->
-                    ClaimCard(claim, state.actor, state.busy, state.claims) { select(claim) }
-                }
-            }
-        }
-        if (state.error == ClaimStatusError.NETWORK) {
-            TextButton(
-                onClick = refresh,
-                enabled = !state.busy,
-                modifier = Modifier.heightIn(min = SolventaLayout.controlHeight),
-            ) {
-                Text(stringResource(R.string.claim_status_retry))
+                co.solventa.mobile.feature.policy.VisualCollection(state.claims, "claim-appearance",
+                    R.plurals.claim_collection_count, select,
+                    { claim, size -> co.solventa.mobile.feature.evidence.EvidenceThumbnail(
+                        state.actor?.let { EvidenceScope(it, claim.id) }, modifier = size, illustration = claimIllustration(claim.type)) },
+                    { claim, size ->
+                        Column(size, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (claim.registrationStatus == "registrado") Text(stringResource(R.string.claim_registration_received),
+                                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary)
+                            Text(claimDisplayType(claim.type), style = MaterialTheme.typography.titleMedium)
+                            Text(operationalDate(java.time.Instant.parse(claim.date)), style = MaterialTheme.typography.bodySmall)
+                            val peers = state.claims.filter { it.type == claim.type && it.date == claim.date }
+                            if (peers.size > 1) Text(stringResource(R.string.evidence_claim_reference,
+                                operationalReference(claim.id, peers.map { it.id })))
+                        }
+                    }, { Modifier.testTag("claim-${it.id}") })
             }
         }
     }
@@ -234,7 +225,7 @@ internal fun ClaimCaseAttachments(model: EvidenceViewModel, scope: EvidenceScope
                 Text(stringResource(R.string.evidence_gallery_title), Modifier.semantics { heading() },
                     style = MaterialTheme.typography.titleLarge)
                 Text(stringResource(R.string.evidence_gallery_no_reported_files))
-            } else EvidenceGallery(state, model::remove)
+            } else EvidenceGallery(state, model::remove, original = model::original)
         } else if (!sameActor || state.error == null) {
             SolventaSkeletonDetail(stringResource(R.string.claim_status_attachments_loading))
         }

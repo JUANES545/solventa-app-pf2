@@ -35,8 +35,10 @@ class ClaimScreenTest {
         }
 
         compose.runOnIdle { assertEquals(draft, state.value.draft) }
-        compose.onNodeWithText("Enviar reporte").performScrollTo().performClick()
-        compose.onNodeWithText("Enviar reporte").assertIsNotEnabled()
+        compose.onNodeWithText("Revisar reporte").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(0, sends) }
+        compose.onNodeWithText("Enviar reporte").performClick()
+        compose.onNodeWithText("Revisar reporte").assertIsNotEnabled()
         compose.runOnIdle { assertEquals(1, sends) }
     }
 
@@ -122,7 +124,7 @@ class ClaimScreenTest {
         }
         compose.onNodeWithText("Robo antiguo", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Versión anterior", substring = true).assertDoesNotExist()
-        compose.onNodeWithText(text(R.string.claim_submit)).performScrollTo().assertIsEnabled()
+        compose.onNodeWithText(text(R.string.claim_review_before_send)).performScrollTo().assertIsEnabled()
         compose.onNodeWithText(quantity(R.plurals.claim_pending_count, 2)).performScrollTo().assertIsDisplayed()
             .assert(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Heading))
         compose.onNodeWithText("Choque 1 · Choque 2").assertIsDisplayed()
@@ -138,7 +140,7 @@ class ClaimScreenTest {
         compose.runOnIdle { state.value = state.value.copy(busy = true) }
         compose.onNodeWithText(text(R.string.claim_sending)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(text(R.string.claim_send_pending)).assertIsNotEnabled()
-        compose.onNodeWithText(text(R.string.claim_submit)).assertIsNotEnabled()
+        compose.onNodeWithText(text(R.string.claim_review_before_send)).assertIsNotEnabled()
     }
 
     @Test fun pendingNeverExposesReceiptAndConfirmedLinksToEvidence() {

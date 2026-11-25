@@ -95,8 +95,7 @@
     <string name="registration_unavailable">No pudimos confirmar el registro. Revisa tu conexión o inicia sesión si ya tienes cuenta.</string>
     <string name="home_title">Inicio</string>
     <string name="account_title">Mi cuenta</string>
-    <string name="account_security_title">Sesión</string>
-    <string name="account_security_body">Guardada en el almacenamiento seguro del teléfono.</string>
+    <string name="account_privacy_access">Privacidad y acceso</string>
     <string name="session_checking">Verificando sesión…</string>
     <string name="show_password">Mostrar contraseña</string>
     <string name="hide_password">Ocultar contraseña</string>

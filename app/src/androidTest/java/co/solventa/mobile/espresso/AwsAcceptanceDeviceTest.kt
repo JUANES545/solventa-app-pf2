@@ -42,7 +42,6 @@ class AwsAcceptanceDeviceTest {
 
     @Test fun authorizedSyntheticAccountUsesOfficialClientsOverHttps() {
         check(BuildConfig.APPLICATION_ID == "co.solventa.mobile.pf2.awstest")
-        check(BuildConfig.AUTH_BASE_URL == "https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1")
         check(BuildConfig.SCREEN_CAPTURE_ALLOWED)
         check(InstrumentationRegistry.getArguments().getString("runAwsAcceptance") == "true")
         hilt.inject()

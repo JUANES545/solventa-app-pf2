@@ -16,6 +16,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 private class FakeNotificationApi : NotificationApi {
+    var paymentQueries = 0
+    override suspend fun confirmedPaymentClaim(actor: String, paymentId: String): String {
+        paymentQueries++
+        return notificationResourceId
+    }
     var values = listOf(
         MobileNotification(
             notificationId,
@@ -28,6 +33,7 @@ private class FakeNotificationApi : NotificationApi {
     )
     var push = true
     var error: NotificationError? = null
+    var preferencesError: NotificationError? = null
     var notificationsGate: CompletableDeferred<Unit>? = null
     var notificationQueries = 0
     val updates = mutableListOf<Boolean>()
@@ -39,8 +45,9 @@ private class FakeNotificationApi : NotificationApi {
         return values
     }
 
-    override suspend fun preferences(actor: String): List<NotificationPreference> =
-        NotificationKind.entries.flatMap { kind ->
+    override suspend fun preferences(actor: String): List<NotificationPreference> {
+        preferencesError?.let { throw NotificationProblem(it) }
+        return NotificationKind.entries.flatMap { kind ->
             NotificationChannel.entries.map { channel ->
                 NotificationPreference(
                     kind,
@@ -49,6 +56,8 @@ private class FakeNotificationApi : NotificationApi {
                 )
             }
         }
+
+    }
 
     override suspend fun updatePush(
         actor: String,
@@ -361,7 +370,19 @@ class NotificationViewModelTest {
     }
 
     @Test
-    fun unavailableResourcesAndNetworkErrorsDoNotSimulateSuccess() {
+    fun preferencesFailureKeepsAuthorizedInboxWithoutSystemAlerts() {
+        val api = FakeNotificationApi().apply { preferencesError = NotificationError.NETWORK }
+        val presenter = FakePresenter(granted = true)
+        val model = NotificationViewModel(api, MemoryNotificationStore(), presenter)
+        model.bindActor("11111111-1111-4111-8111-111111111111")
+        await(model)
+        assertEquals(1, model.state.value.items.size)
+        assertEquals(NotificationError.NETWORK, model.state.value.preferencesError)
+        assertNull(model.state.value.error)
+        assertTrue(presenter.shown.isEmpty())
+    }
+
+    @Test fun unavailableResourcesAndNetworkErrorsDoNotSimulateSuccess() {
         val api = FakeNotificationApi()
         api.values = api.values.map {
             it.copy(resource = NotificationResource(NotificationResourceKind.PAYMENT, notificationResourceId))
@@ -370,9 +391,12 @@ class NotificationViewModelTest {
         model.bindActor("11111111-1111-4111-8111-111111111111")
         await(model)
         model.open(model.state.value.items.single())
-        assertNull(model.state.value.navigation)
+        await(model)
+        assertEquals(NotificationNavigation.Payment, model.state.value.navigation)
+        assertEquals(0, api.paymentQueries)
         assertTrue(model.state.value.open)
-        assertEquals(NotificationMessage.RESOURCE_UNAVAILABLE, model.state.value.message)
+        assertEquals(api.values.single(), model.state.value.paymentNotice)
+        assertNull(model.state.value.message)
 
         api.error = NotificationError.NETWORK
         model.synchronize("11111111-1111-4111-8111-111111111111")

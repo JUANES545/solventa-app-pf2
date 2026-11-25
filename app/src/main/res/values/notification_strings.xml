@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="notification_preferences_error">No pudimos consultar tus preferencias de avisos. Desliza para actualizar.</string>
     <string name="notification_channel_name">Avisos de Solventa</string>
     <string name="notification_channel_description">Pagos, vencimientos, renovaciones y avances de siniestros.</string>
     <string name="notification_entry">Avisos</string>

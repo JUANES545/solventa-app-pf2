@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="claim_registration_received">Reporte registrado</string>
+    <string name="claim_accumulated_rain">Lluvia acumulada</string>
+    <string name="claim_history_references">Historial y referencias</string>
     <string name="claim_status_title">Mis siniestros</string>
     <string name="claim_status_detail_title">Detalle del siniestro</string>
     <string name="claim_status_report_details">Datos del reporte</string>

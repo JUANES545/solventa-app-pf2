@@ -90,6 +90,7 @@ class EvidenceDeviceE2eTest {
         click(when (kind) {
             EvidenceKind.PHOTO -> R.string.evidence_gallery_photo
             EvidenceKind.DOCUMENT -> R.string.evidence_gallery_document
+            EvidenceKind.PDF -> R.string.evidence_pdf
             EvidenceKind.VIDEO -> R.string.evidence_gallery_video
         })
         compose.onNodeWithTag("evidence-source-camera").performClick()

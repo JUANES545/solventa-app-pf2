@@ -1,4 +1,14 @@
 <resources>
+    <string name="evidence_photo_title">Foto adjunta</string>
+    <string name="evidence_video_title">Video adjunto</string>
+    <string name="evidence_received_group">Recibidos (%1$d)</string>
+    <string name="evidence_unconfirmed_group">Sin confirmar (%1$d)</string>
+    <string name="evidence_manage">Adjuntar archivo</string>
+    <string name="evidence_pdf">Documento PDF</string>
+    <string name="evidence_original">Abrir original</string>
+    <string name="evidence_pages">Página %1$d de %2$d</string>
+    <string name="evidence_next">Siguiente</string>
+    <string name="evidence_previous">Anterior</string>
     <string name="evidence_gallery_title">Archivos adjuntos</string>
     <string name="evidence_gallery_empty">Añade fotos, vídeos o documentos del siniestro.</string>
     <string name="evidence_gallery_no_reported_files">Este siniestro no tiene archivos adjuntos guardados.</string>

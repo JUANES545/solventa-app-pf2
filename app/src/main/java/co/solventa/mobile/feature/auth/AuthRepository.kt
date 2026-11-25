@@ -26,7 +26,7 @@ internal data class AuthSession(
     val error: AuthError? = null,
 )
 
-enum class AuthError { REQUIRED, NAME, EMAIL, PASSWORD, PASSWORD_MISMATCH, EMAIL_EXISTS, INVALID_REQUEST, INVALID_CREDENTIALS, EXPIRED, RATE_LIMIT, UNAVAILABLE, STORAGE, LOGOUT_REMOTE }
+enum class AuthError { REQUIRED, NAME, EMAIL, PASSWORD, PASSWORD_MISMATCH, EMAIL_EXISTS, INVALID_REQUEST, INVALID_CREDENTIALS, EXPIRED, RATE_LIMIT, UNAVAILABLE, STORAGE, LOGOUT_REMOTE, RECOVERY_LINK }
 class AuthProblem(val reason: AuthError) : Exception()
 class AuthHttpError(val status: Int) : Exception()
 
@@ -46,10 +46,14 @@ interface AuthStore {
 
 fun validateLogin(email: String, password: String) {
     if (email.isBlank() || password.isBlank()) throw AuthProblem(AuthError.REQUIRED)
+    validateEmail(email)
+    if (password.codePointCount(0, password.length) !in 8..128) throw AuthProblem(AuthError.PASSWORD)
+}
+
+internal fun validateEmail(email: String) {
     if (email.trim().length > 254 || !email.trim().matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))) {
         throw AuthProblem(AuthError.EMAIL)
     }
-    if (password.codePointCount(0, password.length) !in 8..128) throw AuthProblem(AuthError.PASSWORD)
 }
 
 fun validateRegistration(name: String, email: String, password: String, confirmation: String) {
@@ -107,10 +111,11 @@ class AuthRepository(
         }
     }
 
-    suspend fun register(name: String, email: String, password: String, confirmation: String): AuthUser = withContext(dispatcher) {
+    suspend fun register(name: String, email: String, password: String, confirmation: String, profile: RegistrationProfile? = null): AuthUser = withContext(dispatcher) {
         validateRegistration(name, email, password, confirmation)
         mutex.withLock {
-            val user = api.register(name.trim(), email.trim(), password)
+            val user = if(profile == null) api.register(name.trim(), email.trim(), password)
+                else (api as CompleteRegistrationApi).registerComplete(name.trim(), email.trim(), password, profile)
             // A new account must not restore a previously cached identity on the next resume.
             clearSession()
             user

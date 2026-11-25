@@ -33,7 +33,8 @@ object LocalAuthModule {
     fun repository(store: EncryptedAuthStore): AuthRepository {
         val api = if (BuildConfig.APPLICATION_ID == "co.solventa.mobile.pf2.awstest") {
             check(InstrumentationRegistry.getArguments().getString("runAwsAcceptance") == "true")
-            check(BuildConfig.AUTH_BASE_URL == "https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1")
+            check(BuildConfig.AUTH_BASE_URL.startsWith("https://") && BuildConfig.AUTH_BASE_URL ==
+                InstrumentationRegistry.getArguments().getString("approvedAwsBaseUrl"))
             MobileAuthApi()
         } else {
             MobileAuthApi(localBackendUrl())

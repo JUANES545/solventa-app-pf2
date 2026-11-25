@@ -23,6 +23,7 @@ import org.json.JSONObject
 internal data class EvidenceClaim(
     val id: String, val type: String, val date: String, val description: String,
     val policyId: String? = null, val place: String? = null, val registeredAt: Instant? = null,
+    val registrationStatus: String? = null,
 )
 internal data class EvidenceConfiguration(val policy: EvidencePolicy, val maxChunkBytes: Int)
 
@@ -38,6 +39,7 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
                 policyId = if (item.isNull("polizaId")) null else uuid(item.getString("polizaId")),
                 place = if (item.isNull("lugar")) null else item.getString("lugar"),
                 registeredAt = if (item.isNull("registradoEn")) null else Instant.parse(item.getString("registradoEn")),
+                registrationStatus = if (item.isNull("estado")) null else item.getString("estado"),
             ).also { Instant.parse(it.date) }
         }
     }
@@ -63,6 +65,40 @@ internal class MobileEvidenceApi internal constructor(private val auth: AuthRepo
     suspend fun confirmedIds(scope: EvidenceScope): Set<String> = session(scope.actorId) { grant ->
         val entries = request("GET", "/siniestros/${uuid(scope.claimId)}/evidencias", grant.accessToken).getJSONArray("evidencias")
         (0 until entries.length()).map { uuid(entries.getJSONObject(it).getString("id")) }.toSet()
+    }
+
+    suspend fun original(scope: EvidenceScope, id: String, target: File, policy: EvidencePolicy): String = session(scope.actorId) { grant ->
+        val path = "/siniestros/${uuid(scope.claimId)}/evidencias/${uuid(id)}/contenido"
+        val connection = URL(base + path).openConnection() as HttpURLConnection
+        try {
+            connection.instanceFollowRedirects = false
+            connection.useCaches = false
+            connection.connectTimeout = 10000
+            connection.readTimeout = 30000
+            connection.setRequestProperty("Authorization", "Bearer ${grant.accessToken}")
+            connection.setRequestProperty("Cache-Control","no-store")
+            if (connection.responseCode == 401) throw AuthHttpError(401)
+            if (connection.responseCode != 200) throw httpProblem(connection.responseCode,null)
+            val mime = connection.contentType?.substringBefore(';')
+            val kind = when(mime) {
+                "image/jpeg", "image/png" -> EvidenceKind.PHOTO
+                "application/pdf" -> EvidenceKind.PDF
+                "video/mp4" -> EvidenceKind.VIDEO
+                else -> throw EvidenceProblem(EvidenceError.FORMAT)
+            }
+            val limit = policy.maxBytes[kind] ?: throw EvidenceProblem(EvidenceError.FORMAT)
+            var total = 0L
+            connection.inputStream.use { input -> target.outputStream().use { output ->
+                val buffer = ByteArray(65536)
+                while(true) { val count=input.read(buffer); if(count<0) break
+                    total+=count
+                    if(total>limit) throw EvidenceProblem(EvidenceError.SIZE)
+                    output.write(buffer,0,count)
+                }
+            } }
+            require(total>0 && (connection.contentLengthLong<0 || total==connection.contentLengthLong))
+            requireNotNull(mime)
+        } finally { connection.disconnect() }
     }
 
     fun transport(store: EvidenceStore, configuration: EvidenceConfiguration): EvidenceTransport = object : EvidenceTransport {

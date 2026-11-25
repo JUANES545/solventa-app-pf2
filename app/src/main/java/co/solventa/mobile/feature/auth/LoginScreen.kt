@@ -68,6 +68,7 @@ fun LoginScreen(
     biometricMessage: Int? = null,
     biometricEnabled: Boolean = false,
     extraContent: (@Composable () -> Unit)? = null,
+    onRecoverPassword: ((String) -> Unit)? = null,
 ) {
     // Credentials are transient UI state, never saved across activity recreation.
     var email by remember(initialEmail) { mutableStateOf(initialEmail) }
@@ -179,6 +180,12 @@ fun LoginScreen(
                     val message = authErrorMessage(it)
                     AuthErrorNotice(stringResource(message))
                 }
+                onRecoverPassword?.let { recover ->
+                    TextButton(onClick = { focusManager.clearFocus(); recover(email.trim()) }, enabled = !loading,
+                        modifier = Modifier.heightIn(min = SolventaLayout.controlHeight)) {
+                        Text(stringResource(R.string.recovery_link))
+                    }
+                }
     }
 }
 
@@ -237,6 +244,7 @@ internal fun authErrorMessage(error: AuthError) = when (error) {
     AuthError.STORAGE -> R.string.auth_storage
     AuthError.UNAVAILABLE -> R.string.auth_unavailable
     AuthError.LOGOUT_REMOTE -> R.string.auth_logout_remote
+    AuthError.RECOVERY_LINK -> R.string.recovery_invalid
 }
 
 @Preview(widthDp = 390, heightDp = 844, showBackground = true)

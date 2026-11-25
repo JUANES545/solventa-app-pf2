@@ -68,6 +68,8 @@ internal fun SolventaApp(
     requestNotificationPermission: () -> Unit = {},
     policies: PolicyViewModel? = null,
     identity: IdentityViewModel? = null,
+    travel: co.solventa.mobile.feature.travel.TravelApi? = null,
+    policyActions: co.solventa.mobile.feature.policy.PolicyActionsApi? = null,
 ) {
     SolventaTheme(darkTheme) {
         CompositionLocalProvider(LocalAccessBackgroundState provides rememberAccessBackgroundState()) {
@@ -78,6 +80,25 @@ internal fun SolventaApp(
             val state by auth.state.collectAsState()
             val user = state.user
             var accountOpen by rememberSaveable(user?.id) { mutableStateOf(false) }
+            var travelOpen by rememberSaveable(user?.id) { mutableStateOf(false) }
+            val context = androidx.compose.ui.platform.LocalContext.current
+            var registrationOptIn by rememberSaveable { mutableStateOf(false) }
+            LaunchedEffect(state.screen, state.registeredId) {
+                if (state.screen == AccessScreen.REGISTER) registrationOptIn = false
+                if (state.screen == AccessScreen.REGISTERED && registrationOptIn && travel != null) {
+                    state.registeredId?.let { id ->
+                        context.getSharedPreferences("travel-$id",0).edit().putBoolean("registration-opt-in",true).apply()
+                    }
+                    registrationOptIn = false
+                }
+            }
+            LaunchedEffect(user?.id, travel) {
+                if (user != null && travel != null && context.getSharedPreferences("travel-${user.id}",0)
+                        .getBoolean("registration-opt-in",false)) {
+                    accountOpen = true
+                    travelOpen = true
+                }
+            }
             val evidenceState = evidence?.state?.collectAsState()?.value
             val claimState = claims?.state?.collectAsState()?.value
             val claimStatusState = claimStatus?.state?.collectAsState()?.value
@@ -105,8 +126,23 @@ internal fun SolventaApp(
             LaunchedEffect(user?.id) { assistance?.bindActor(user?.id) }
             LaunchedEffect(notificationState?.navigation, user?.id) {
                 val navigation = notificationState?.navigation
+                if (user != null && navigation != null) {
+                    travelOpen = false
+                    accountOpen = false
+                    identity?.close()
+                    assistance?.close()
+                    claimStatus?.close()
+                    evidence?.close()
+                    claims?.close()
+                    policies?.close()
+                }
                 if (user != null && navigation is NotificationNavigation.Claim) {
                     claimStatus?.show(user.id, navigation.id)
+                    notifications?.consumeNavigation()
+                } else if (user != null && navigation is NotificationNavigation.Policy) {
+                    policies?.show(user.id, navigation.id)
+                    notifications?.consumeNavigation()
+                } else if (user != null && navigation == NotificationNavigation.Payment) {
                     notifications?.consumeNavigation()
                 }
             }
@@ -127,20 +163,32 @@ internal fun SolventaApp(
                         LoginScreen(loading = state.loading || biometricState?.busy == true, error = state.error,
                             onLogin = { email, password -> beforeAccessChange(); auth.login(email, password) },
                             initialEmail = state.email, onCreateAccount = { beforeAccessChange(); auth.showRegistration() },
+                            onRecoverPassword = if (BuildConfig.RECOVERY_LINK_ENTRY.isNotEmpty()) auth::recover else null,
                             biometricEnabled = biometrics != null,
                             biometricMessage = biometricState?.takeIf { it.actorUserId == null }?.message,
                             onBiometricLogin = if (biometricState?.localCredential != null && device != null) {
                                 { beforeAccessChange(); biometrics.login(device, auth::restore) }
                             } else null)
                     }
-                    AccessScreen.REGISTER, AccessScreen.REGISTER_REFERENCE -> RegistrationScreen(
+                    AccessScreen.RECOVER, AccessScreen.RECOVER_CONFIRM -> co.solventa.mobile.feature.auth.RecoveryScreen(
+                        state.screen == AccessScreen.RECOVER_CONFIRM, state.email, state.loading, state.error,
+                        auth::requestLink, auth::changePassword, { auth.recover(state.email) }, auth::showLinkForm, auth::showLogin)
+                    AccessScreen.RECOVERED -> SolventaPage {
+                        Text(stringResource(R.string.recovery_done))
+                        TextButton(onClick = auth::showLogin) { Text(stringResource(R.string.go_to_login)) }
+                    }
+                    AccessScreen.REGISTER, AccessScreen.REGISTER_REFERENCE -> if(state.screen == AccessScreen.REGISTER_REFERENCE &&
+                        BuildConfig.REGISTRATION_API_BASE.isNotEmpty()) {
+                        co.solventa.mobile.feature.auth.CompleteRegistrationScreen(state.loading,state.error,
+                            onPhotoReview != null,auth::showRegistration,auth::completeProfile)
+                    } else RegistrationScreen(
                         loading = state.loading, error = state.error,
                         onRegister = { name, email, password, confirmation ->
                             auth.prepareRegistration(name, email, password, confirmation, withPhotos = onPhotoReview != null)
                         },
                         showTerms = state.screen == AccessScreen.REGISTER_REFERENCE,
                         onContinueTerms = auth::continueRegistration, onTermsBack = auth::showRegistration,
-                        onBack = auth::showLogin)
+                        onBack = auth::showLogin, onFinance = travel?.let { { choice -> registrationOptIn = choice } })
                     AccessScreen.REGISTER_PHOTOS -> SolventaPage {
                         Text(stringResource(R.string.photo_entry))
                         Text(stringResource(R.string.registration_photo_info))
@@ -153,10 +201,13 @@ internal fun SolventaApp(
                         onCancel = { beforeAccessChange(); auth.cancelRegistrationPhotos() })
                     AccessScreen.REGISTERED -> RegistrationSuccessScreen(state.email, onSignIn = auth::showLogin)
                 }
+            } else if (travelOpen && travel != null) {
+                co.solventa.mobile.feature.travel.TravelJourney(user.id,travel,accountOpen) { travelOpen=false }
             } else if (identity != null && identityState?.open == true && identityState.actor == user.id) {
                 IdentityHost(identity)
-            } else if (claimStatus != null && claimStatusState?.open == true && claimStatusState.actor == user.id) {
-                ClaimStatusHost(claimStatus, claimEvidence)
+            } else if (claimStatus != null && claimStatusState?.open == true && claimStatusState.actor == user.id &&
+                evidenceState?.open != true && assistanceState?.open != true) {
+                ClaimStatusHost(claimStatus, claimEvidence, evidence?.let { manager -> { claim -> manager.showClaim(user.id, claim) } })
             } else if (
                 assistance != null &&
                 assistanceState?.open == true &&
@@ -187,7 +238,7 @@ internal fun SolventaApp(
                 }
             } else if (policies != null && policyState?.open == true && policyState.actor == user.id) {
                 PolicyHost(policies, claims?.let { model -> { policy -> model.show(user.id, policy.claimPolicy()) } },
-                    { claims?.resumeDraft(user.id) }, claimState?.busy == true)
+                    { claims?.resumeDraft(user.id) }, claimState?.busy == true, policyActions)
             } else {
                 val notificationsOpen = notifications != null && notificationState?.open == true &&
                     notificationState.actor == user.id
@@ -227,6 +278,7 @@ internal fun SolventaApp(
                         auth.logout()
                     },
                     biometricContent = {
+                        if (travel != null) TextButton(onClick = { travelOpen=true }) { Text(stringResource(R.string.travel_consent)) }
                         if (biometricState != null && biometricState.actorUserId == user.id && device != null) {
                             BiometricAccountSection(biometricState, !state.loading,
                             { biometrics.enroll(it, device) }, biometrics::loadCredentials,
@@ -238,7 +290,8 @@ internal fun SolventaApp(
                             onClaim = claims?.let { { it.show(user.id) } },
                             onClaimStatus = claimStatus?.let { { it.show(user.id) } },
                             onEvidence = evidence?.let { { it.showClaims(user.id) } },
-                            onPolicies = policies?.let { { it.show(user.id) } })
+                            onPolicies = policies?.let { { it.show(user.id) } },
+                            onTravel = travel?.let { { travelOpen=true } })
                     }
                     }
                 }

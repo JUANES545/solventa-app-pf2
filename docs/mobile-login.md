@@ -1,11 +1,10 @@
 # Login móvil con backend
 
-Las variantes normales llaman al BFF de AWS.
-Su base actual es `https://65qgzhody9.execute-api.us-east-2.amazonaws.com/movil/v1`.
-El issuer canónico verificado es
-`https://65qgzhody9.execute-api.us-east-2.amazonaws.com`, sin barra final ni ruta.
-El candidato normal incorpora fotos locales y firma biométrica; su promoción
-requiere desplegar primero los endpoints biométricos del backend.
+Las variantes normales usan el Gateway y el issuer del entorno. La base móvil
+añade `/movil/v1` al Gateway; el issuer se configura por separado. Consulta
+[la configuración de Gradle](android-setup.md).
+El candidato normal incorpora fotos locales. La firma biométrica se ofrece
+solo si `BIOMETRIC_LOGIN_ENABLED=true` para un BFF con esa capacidad habilitada.
 La variante aislada `biometricTest` usa `http://127.0.0.1:18717/movil/v1`,
 issuer exacto `https://identidad.solventa.test` y un applicationId separado:
 `co.solventa.mobile.pf2.biometrictest`. No usa el entorno compartido ni cuentas reales.

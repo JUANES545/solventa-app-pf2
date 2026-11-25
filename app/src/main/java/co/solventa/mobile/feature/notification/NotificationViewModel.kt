@@ -17,6 +17,8 @@ internal enum class NotificationMessage { PERMISSION_DENIED, RESOURCE_UNAVAILABL
 
 internal sealed interface NotificationNavigation {
     data class Claim(val id: String) : NotificationNavigation
+    data class Policy(val id: String) : NotificationNavigation
+    data object Payment : NotificationNavigation
 }
 
 internal data class NotificationUiState(
@@ -28,11 +30,13 @@ internal data class NotificationUiState(
     val permissionGranted: Boolean = false,
     val pushEnabled: Boolean = false,
     val pushPreferencesKnown: Boolean = false,
+    val preferencesError: NotificationError? = null,
     val error: NotificationError? = null,
     val message: NotificationMessage? = null,
     val navigation: NotificationNavigation? = null,
     val undo: NotificationUndo? = null,
     val removedItem: NotificationItem? = null,
+    val paymentNotice: MobileNotification? = null,
 )
 
 @HiltViewModel
@@ -48,9 +52,30 @@ internal class NotificationViewModel @Inject constructor(
     private var generation = 0L
     private var job: Job? = null
     private var pendingTarget: NotificationTarget? = null
+    private var demoJob: Job? = null
+    private var needsBaseline = false
+    private val listening = MutableStateFlow(false)
+    val demoListening = listening.asStateFlow()
+
+    fun startDemoIfPermitted() {
+        if (co.solventa.mobile.BuildConfig.BUILD_TYPE !in setOf("notificationTest","videoTest") || listening.value) return
+        val actor = state.value.actor ?: return
+        if (!presenter.permissionGranted()) return
+        needsBaseline = true
+        listening.value = true
+        demoJob = viewModelScope.launch {
+            while (state.value.actor == actor && presenter.permissionGranted()) {
+                synchronize(actor)
+                kotlinx.coroutines.delay(4_000)
+            }
+            listening.value = false
+        }
+    }
 
     fun bindActor(actor: String?) {
         if (actor == state.value.actor) return
+        demoJob?.cancel()
+        listening.value = false
         generation++
         job?.cancel()
         if (state.value.actor != null) {
@@ -88,7 +113,19 @@ internal class NotificationViewModel @Inject constructor(
         job = viewModelScope.launch {
             try {
                 val notifications = api.notifications(actor).sortedByDescending { it.deliveredAt }
-                val preferences = api.preferences(actor)
+                val preferences = try {
+                    api.preferences(actor)
+                } catch (problem: NotificationProblem) {
+                    if (problem.reason == NotificationError.SESSION) throw problem
+                    val discarded = store.discarded(actor)
+                    val read = store.read(actor)
+                    update(version) { copy(busy = false, loadingNotifications = false,
+                        items = notifications.filterNot { it.id in discarded }.map { NotificationItem(it, it.id in read) },
+                        permissionGranted = presenter.permissionGranted(), pushPreferencesKnown = false,
+                        preferencesError = problem.reason, error = null) }
+                    resolvePending(version)
+                    return@launch
+                }
                 coroutineContext.ensureActive()
                 if (version != generation || actor != state.value.actor) return@launch
                 val pushByKind = preferences
@@ -98,11 +135,13 @@ internal class NotificationViewModel @Inject constructor(
                 val discarded = store.discarded(actor)
                 synchronized(store) {
                     val fresh = store.recordSeen(actor, notifications.mapTo(mutableSetOf()) { it.id })
-                    if (permission) {
+                    val demoVariant = co.solventa.mobile.BuildConfig.BUILD_TYPE in setOf("notificationTest","videoTest")
+                    if (permission && (!demoVariant || listening.value && !needsBaseline)) {
                         notifications
                             .filter { it.id in fresh && it.id !in discarded && pushByKind[it.kind] == true }
                             .forEach(presenter::show)
                     }
+                    if (listening.value) needsBaseline = false
                 }
                 val read = store.read(actor)
                 update(version) {
@@ -113,6 +152,7 @@ internal class NotificationViewModel @Inject constructor(
                         permissionGranted = permission,
                         pushEnabled = NotificationKind.entries.all { pushByKind[it] == true },
                         pushPreferencesKnown = true,
+                        preferencesError = null,
                         error = null,
                     )
                 }
@@ -120,6 +160,11 @@ internal class NotificationViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (problem: NotificationProblem) {
+                if (problem.reason == NotificationError.SESSION) {
+                    listening.value = false
+                    demoJob?.cancel()
+                    presenter.clear()
+                }
                 update(version) { copy(busy = false, loadingNotifications = false, error = problem.reason) }
             } catch (_: SecurityException) {
                 update(version) {
@@ -311,6 +356,23 @@ internal class NotificationViewModel @Inject constructor(
         }
         try {
             store.markRead(actor, authorized.notification.id)
+            if (target.resource.kind == NotificationResourceKind.PAYMENT && co.solventa.mobile.BuildConfig.BUILD_TYPE == "videoTest") {
+                val version = generation
+                mutable.value = state.value.copy(open = true, busy = true, error = null, paymentNotice = null, message = null)
+                job = viewModelScope.launch {
+                    try {
+                        api.confirmedPaymentClaim(actor, target.resource.id)
+                        update(version) { copy(busy = false, paymentNotice = authorized.notification, navigation = NotificationNavigation.Payment) }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (problem: NotificationProblem) {
+                        update(version) { copy(busy = false, error = problem.reason) }
+                    } catch (_: java.io.IOException) {
+                        update(version) { copy(busy = false, error = NotificationError.NETWORK) }
+                    }
+                }
+                return
+            }
             mutable.value = state.value.copy(
                 open = state.value.open || target.resource.kind != NotificationResourceKind.CLAIM,
                 items = state.value.items.map {
@@ -318,15 +380,11 @@ internal class NotificationViewModel @Inject constructor(
                 },
                 navigation = when (target.resource.kind) {
                     NotificationResourceKind.CLAIM -> NotificationNavigation.Claim(target.resource.id)
-                    NotificationResourceKind.PAYMENT,
-                    NotificationResourceKind.POLICY,
-                    -> null
+                    NotificationResourceKind.POLICY -> NotificationNavigation.Policy(target.resource.id)
+                    NotificationResourceKind.PAYMENT -> NotificationNavigation.Payment
                 },
-                message = if (target.resource.kind == NotificationResourceKind.CLAIM) {
-                    null
-                } else {
-                    NotificationMessage.RESOURCE_UNAVAILABLE
-                },
+                paymentNotice = authorized.notification.takeIf { target.resource.kind == NotificationResourceKind.PAYMENT },
+                message = null,
             )
         } catch (problem: NotificationProblem) {
             mutable.value = state.value.copy(error = problem.reason)

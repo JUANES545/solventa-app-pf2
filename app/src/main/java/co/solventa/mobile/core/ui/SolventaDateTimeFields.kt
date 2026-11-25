@@ -38,7 +38,8 @@ internal fun calendarDate(millis: Long): LocalDate = Instant.ofEpochMilli(millis
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SolventaDateField(label: String, value: String, enabled: Boolean, change: (String) -> Unit) {
+internal fun SolventaDateField(label: String, value: String, enabled: Boolean,
+    earliest: LocalDate? = null, latest: LocalDate? = LocalDate.now(), change: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val date = remember(value) {
         try { LocalDate.parse(value) } catch (_: DateTimeParseException) { null }
@@ -51,15 +52,19 @@ internal fun SolventaDateField(label: String, value: String, enabled: Boolean, c
         val today = LocalDate.now()
         val picker = rememberDatePickerState(
             initialSelectedDateMillis = date?.let(::calendarMillis),
-            initialDisplayedMonthMillis = calendarMillis(date ?: today),
-            selectableDates = remember(today) { object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long) = calendarDate(utcTimeMillis) <= today
-                override fun isSelectableYear(year: Int) = year <= today.year
+            initialDisplayedMonthMillis = calendarMillis(date ?: earliest ?: today),
+            selectableDates = remember(earliest, latest) { object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val day = calendarDate(utcTimeMillis)
+                    return (earliest == null || day >= earliest) && (latest == null || day <= latest)
+                }
+                override fun isSelectableYear(year: Int) =
+                    (earliest == null || year >= earliest.year) && (latest == null || year <= latest.year)
             } },
         )
         DatePickerDialog(onDismissRequest = { open = false },
             confirmButton = {
-                TextButton(enabled = enabled && picker.selectedDateMillis?.let { calendarDate(it) <= today } == true, onClick = {
+                TextButton(enabled = enabled && picker.selectedDateMillis?.let { picker.selectableDates.isSelectableDate(it) } == true, onClick = {
                     picker.selectedDateMillis?.let { change(calendarDate(it).toString()) }
                     open = false
                 }) { Text(stringResource(R.string.ui_choose_confirm)) }

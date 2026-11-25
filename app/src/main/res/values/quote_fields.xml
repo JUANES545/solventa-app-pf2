@@ -1,0 +1,23 @@
+<resources>
+    <string name="quote_profile_incomplete">Faltan datos en tu perfil para cotizar. No se ha creado la solicitud.</string>
+    <string name="quote_device">Tipo de dispositivo</string>
+    <string name="quote_model">Marca y modelo</string>
+    <string name="quote_price">Valor de compra (COP)</string>
+    <string name="quote_credit">Tipo de crédito</string>
+    <string name="quote_monthly">Cuota mensual (COP)</string>
+    <string name="quote_airline">Aerolínea</string>
+    <string name="quote_flight">Número de vuelo</string>
+    <string name="quote_departure">Fecha del vuelo</string>
+    <string name="quote_cover">Cobertura del vuelo</string>
+    <string name="quote_delay">Demora o cancelación</string>
+    <string name="quote_connection">Pérdida de conexión</string>
+    <string name="quote_comprehensive">Integral</string>
+    <string name="quote_location">Lugar asegurado</string>
+    <string name="quote_weather">Evento climático</string>
+    <string name="quote_rain">Lluvia intensa</string>
+    <string name="quote_drought">Sequía</string>
+    <string name="quote_start">Inicio de la cobertura</string>
+    <string name="quote_end">Fin de la cobertura</string>
+    <string name="quote_insured">Valor asegurado (hasta 1.000.000.000 COP)</string>
+    <string name="quote_unavailable">No hay seguros disponibles para cotizar.</string>
+</resources>

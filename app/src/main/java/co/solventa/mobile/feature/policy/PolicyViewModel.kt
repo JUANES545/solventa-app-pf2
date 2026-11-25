@@ -24,30 +24,39 @@ internal data class PolicyState(
     val selectedId: String? = null,
     val detail: Policy? = null,
     val error: PolicyError? = null,
+    val cachedAt: Long? = null,
 )
 
 @HiltViewModel
-internal class PolicyViewModel @Inject constructor(private val api: MobilePolicyApi) : ViewModel() {
+internal class PolicyViewModel(private val api: MobilePolicyApi) : ViewModel() {
+    private var wallet: PolicyWallet? = null
+    @Inject constructor(api: MobilePolicyApi, wallet: PolicyWallet) : this(api) { this.wallet = wallet }
     private val mutable = MutableStateFlow(PolicyState())
     val state = mutable.asStateFlow()
     private var generation = 0L
     private var job: Job? = null
 
     fun bindActor(actor: String?) {
-        if (actor != state.value.actor) reset(PolicyState(actor = actor))
+        if (actor != state.value.actor) {
+            val previous = state.value.actor
+            reset(PolicyState(actor = actor))
+            if (previous != null) wallet?.clear()
+        }
     }
 
-    fun show(actor: String) {
-        reset(PolicyState(actor = actor, open = true))
+    fun show(actor: String, selectedId: String? = null) {
+        reset(PolicyState(actor = actor, open = true, selectedId = selectedId))
         refresh()
     }
 
     fun select(policy: Policy) {
         val current = state.value
         if (current.busy || policy !in current.policies) return
-        reset(current.copy(selectedId = policy.id))
+        reset(current.copy(selectedId = policy.id, detail = null, loaded = false))
         refresh()
     }
+
+    fun close() = reset(PolicyState(actor = state.value.actor))
 
     fun back() {
         val current = state.value
@@ -64,19 +73,40 @@ internal class PolicyViewModel @Inject constructor(private val api: MobilePolicy
         val actor = current.actor ?: return
         if (!current.open || current.busy) return
         val version = generation
-        mutable.value = current.copy(busy = true, loaded = false, policies = emptyList(), detail = null, error = null)
+        mutable.value = current.copy(busy = true, error = null)
         job = viewModelScope.launch {
             try {
                 if (current.selectedId == null) {
                     val policies = withContext(Dispatchers.IO) { api.list(actor) }
-                    update(version) { copy(policies = policies, loaded = true) }
+                    if (version == generation) wallet?.write(actor, policies)
+                    update(version) { copy(policies = policies, loaded = true, cachedAt = null) }
                 } else {
                     val detail = withContext(Dispatchers.IO) { api.detail(actor, current.selectedId) }
-                    update(version) { copy(detail = detail, loaded = true) }
+                    if (version == generation) wallet?.read(actor)?.let { cached ->
+                        wallet?.write(actor, cached.policies.map { if (it.id == detail.id) detail else it })
+                    }
+                    update(version) { copy(detail = detail, loaded = true, cachedAt = null) }
                 }
             } catch (error: Exception) {
                 val reason = policyError(error)
-                update(version) { copy(error = reason) }
+                if (version != generation) return@launch
+                when {
+                    reason == PolicyError.SESSION || reason == PolicyError.UNAVAILABLE -> {
+                        wallet?.clear()
+                        update(version) { copy(error = reason, policies = emptyList(), detail = null, loaded = false, cachedAt = null) }
+                    }
+                    reason == PolicyError.NETWORK && error !is EvidenceHttpProblem &&
+                        error !is co.solventa.mobile.feature.auth.AuthHttpError -> {
+                        val saved = wallet?.read(actor)
+                        val item = saved?.policies?.find { it.id == current.selectedId }
+                        if (saved != null && (current.selectedId == null || item != null)) {
+                            update(version) { copy(policies = saved.policies, detail = item, loaded = true, cachedAt = saved.updated) }
+                        } else update(version) { copy(error = reason) }
+                    }
+                    else -> update(version) {
+                        copy(error = reason, loaded = false, policies = emptyList(), detail = null, cachedAt = null)
+                    }
+                }
             } finally {
                 update(version) { copy(busy = false) }
             }

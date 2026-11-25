@@ -30,12 +30,13 @@ import kotlinx.coroutines.withContext
 private data class Thumbnail(val bitmap: Bitmap? = null, val failed: Boolean = false)
 
 @Composable
-internal fun EvidenceThumbnail(scope: EvidenceScope?, item: EvidenceItem? = null, modifier: Modifier = Modifier) {
-    key(scope, item) { ScopedThumbnail(scope, item, modifier) }
+internal fun EvidenceThumbnail(scope: EvidenceScope?, item: EvidenceItem? = null, modifier: Modifier = Modifier,
+    illustration: Int = R.drawable.ic_claim_status) {
+    key(scope, item) { ScopedThumbnail(scope, item, modifier, illustration) }
 }
 
 @Composable
-private fun ScopedThumbnail(scope: EvidenceScope?, item: EvidenceItem?, modifier: Modifier) {
+private fun ScopedThumbnail(scope: EvidenceScope?, item: EvidenceItem?, modifier: Modifier, illustration: Int) {
     val context = LocalContext.current
     val thumbnail by produceState(Thumbnail(), scope, item) {
         value = Thumbnail()
@@ -44,7 +45,7 @@ private fun ScopedThumbnail(scope: EvidenceScope?, item: EvidenceItem?, modifier
                 try {
                 EvidenceStore(context.noBackupFilesDir).use { store ->
                     val photo = if (item != null) item.takeIf { it.scope == scope }
-                        else store.list(scope).lastOrNull { it.kind != EvidenceKind.VIDEO && it.status != EvidenceStatus.REJECTED }
+                        else store.list(scope).lastOrNull { it.kind == EvidenceKind.PHOTO && it.status != EvidenceStatus.REJECTED }
                     if (photo == null) Thumbnail() else {
                         val file = store.file(photo)
                         Thumbnail(if (photo.kind == EvidenceKind.VIDEO) {
@@ -55,7 +56,7 @@ private fun ScopedThumbnail(scope: EvidenceScope?, item: EvidenceItem?, modifier
                                     retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 640, 480)
                                 else retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                             } finally { retriever.release() }
-                        } else EvidenceMedia(context.cacheDir).image(file, 640))
+                        } else if (photo.kind == EvidenceKind.PDF) pdfPage(file,0).first else EvidenceMedia(context.cacheDir).image(file, 640))
                     }
                 }
             } catch (_: EvidenceProblem) {
@@ -91,7 +92,8 @@ private fun ScopedThumbnail(scope: EvidenceScope?, item: EvidenceItem?, modifier
             item != null -> Text(stringResource(if (item.kind == EvidenceKind.VIDEO)
                 R.string.evidence_kind_video else R.string.evidence_kind_photo),
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            else -> Image(painterResource(R.drawable.claim_vehicle), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+            else -> Image(painterResource(illustration), stringResource(R.string.claim_illustration), Modifier.matchParentSize(),
+                contentScale = if (illustration == R.drawable.ic_claim_status) ContentScale.Inside else ContentScale.Crop)
         }
     }
 }

@@ -21,15 +21,29 @@ import co.solventa.mobile.feature.evidence.EvidenceThumbnail
 import java.time.Instant
 
 @Composable
+internal fun claimDisplayType(type: String) =
+    if (type == "lluvia_acumulada") stringResource(R.string.claim_accumulated_rain) else type
+
+internal fun claimIllustration(type: String): Int {
+    val label = type.trim().lowercase(java.util.Locale.ROOT)
+    return when (label) {
+        "choque", "choque sintetico", "choque sintético", "choque vehicular", "colisión vehicular",
+        "colisión de vehículos", "choque de auto", "accidente de tránsito" -> co.solventa.mobile.R.drawable.wallet_auto_collision
+        "auto", "automotive", "robo de vehículo", "daño vehicular" -> co.solventa.mobile.R.drawable.wallet_auto
+        else -> co.solventa.mobile.R.drawable.ic_claim_status
+    }
+}
+
+@Composable
 internal fun ClaimCard(claim: EvidenceClaim, actor: String?, busy: Boolean, peers: List<EvidenceClaim>, onClick: () -> Unit) {
     Card(onClick = onClick, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("claim-${claim.id}"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         shape = MaterialTheme.shapes.large) {
         SolventaRefreshing(busy) {
             Column {
-                EvidenceThumbnail(actor?.let { EvidenceScope(it, claim.id) })
+                EvidenceThumbnail(actor?.let { EvidenceScope(it, claim.id) }, illustration = claimIllustration(claim.type))
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(claim.type, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(claimDisplayType(claim.type), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                     Text(operationalDate(Instant.parse(claim.date)), style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     val twins = peers.filter { it.type == claim.type && it.date == claim.date }

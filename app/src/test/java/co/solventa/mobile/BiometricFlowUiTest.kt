@@ -354,7 +354,7 @@ class BiometricFlowUiTest {
         assertEquals(1, primaryLogins)
         assertEquals(0, biometricLogins)
         assertEquals("password", grant?.accessToken)
-        compose.onNodeWithText("Cerrar sesión").performScrollTo().performClick()
+        compose.onNodeWithText("Cerrar sesión").performClick()
         await { auth.state.value.user == null && !auth.state.value.loading }
         assertNull(grant)
         assertNotNull(local)
@@ -412,7 +412,7 @@ class BiometricFlowUiTest {
         await { local != null && !biometrics.state.value.busy }
         assertEquals(user.id, local?.userId)
         assertTrue(active)
-        compose.onNodeWithText("Cerrar sesión").performScrollTo().performClick()
+        compose.onNodeWithText("Cerrar sesión").performClick()
         await { auth.state.value.user == null && biometrics.state.value.actorUserId == null && !auth.state.value.loading }
         assertNull(grant)
         assertNotNull(local)

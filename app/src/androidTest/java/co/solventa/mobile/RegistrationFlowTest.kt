@@ -105,7 +105,7 @@ class RegistrationFlowTest {
         compose.onNodeWithContentDescription("Contraseña").performImeAction()
         compose.waitUntil(5_000) { auth.state.value.user != null }
         compose.onNodeWithContentDescription("Mi cuenta").assertIsDisplayed().performClick()
-        compose.onNodeWithText("Cerrar sesión").performScrollTo().performClick()
+        compose.onNodeWithText("Cerrar sesión").performClick()
         compose.waitUntil(5_000) { auth.state.value.user == null && !auth.state.value.loading }
         assertTrue(api.revoked)
         assertNull(store.grant)
